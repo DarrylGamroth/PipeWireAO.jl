@@ -13,6 +13,23 @@ const FILTER_PORT_MAP_BUFFERS = LibPipeWire.PW_FILTER_PORT_FLAG_MAP_BUFFERS
 "Let the application allocate buffers for a filter port."
 const FILTER_PORT_ALLOC_BUFFERS = LibPipeWire.PW_FILTER_PORT_FLAG_ALLOC_BUFFERS
 
+"Link property that enables graph-independent latest-buffer ownership."
+const BUFFER_LATEST_LINK_PROPERTY = "link.buffer-latest"
+"Input-port property that selects the latest-buffer receiver wait policy."
+const BUFFER_LATEST_WAIT_PROPERTY = "port.buffer-latest.wait"
+"Link property reporting the negotiated latest-buffer receiver wait policy."
+const BUFFER_LATEST_LINK_WAIT_PROPERTY = "link.buffer-latest.wait"
+"Wait continuously on latest-buffer shared state."
+const BUFFER_LATEST_WAIT_BUSY_SPIN = "busy-spin"
+"Wait for advisory latest-buffer eventfd notifications."
+const BUFFER_LATEST_WAIT_EVENTFD = "eventfd"
+"Busy-wait first, then use advisory latest-buffer eventfd notifications."
+const BUFFER_LATEST_WAIT_HYBRID = "hybrid"
+"SPA I/O identifier for graph-independent latest-buffer shared state."
+const BUFFER_LATEST_IO = LibPipeWire.SPA_IO_BuffersLatest
+"SPA I/O identifier for the process-local latest-buffer notification fd."
+const BUFFER_LATEST_NOTIFY_IO = LibPipeWire.SPA_IO_BuffersLatestNotify
+
 "A borrowed I/O area reported by a filter I/O-change callback."
 struct FilterIO
     id::UInt32
@@ -67,6 +84,31 @@ FilterBuffer() = FilterBuffer(
     Ptr{LibPipeWire.pw_buffer}(C_NULL),
     Ptr{Cvoid}(C_NULL),
 )
+
+"""
+    ProgressiveFilterBuffer(port)
+
+Create a reusable, initially inactive progressive-output lease for `port`.
+Call [`begin_progressive!`](@ref) to transfer a dequeued [`FilterBuffer`](@ref)
+into the lease and [`end_progressive!`](@ref) exactly once to release it.
+
+This type deliberately does not implement the ordinary buffer interface. Once
+the buffer is announced, a consumer may observe committed ranges concurrently,
+so whole-payload access is unsafe. The lease has no finalizer; it must be ended
+before the port is disconnected or removed. Exactly one worker may access the
+port while using this lease, and the port must have exactly one latest-buffer
+link.
+"""
+mutable struct ProgressiveFilterBuffer{PortType<:FilterPort}
+    handle::Ptr{LibPipeWire.pw_buffer}
+    port::PortType
+end
+
+ProgressiveFilterBuffer(port::PortType) where {PortType<:FilterPort} =
+    ProgressiveFilterBuffer{PortType}(Ptr{LibPipeWire.pw_buffer}(C_NULL), port)
+
+"Return whether `lease` currently owns an announced progressive buffer."
+progressive_active(lease::ProgressiveFilterBuffer) = lease.handle != C_NULL
 
 "A borrowed data plane belonging to a [`FilterBuffer`](@ref)."
 struct FilterData <: AbstractPipeWireData
@@ -815,6 +857,115 @@ function queue_buffer!(buffer::FilterBuffer, port::FilterPort)
     buffer.handle = C_NULL
     buffer.port_data = C_NULL
     return port.filter
+end
+
+"""
+    begin_progressive!(lease, buffer) -> Filter
+
+Announce the dequeued output `buffer` through a graph-independent
+latest-buffer link and transfer it into the reusable `lease`. The application
+must publish its negotiated progressive active state before this call. On
+success, `buffer` becomes unavailable and `lease` must be passed to
+[`end_progressive!`](@ref) exactly once instead of [`queue_buffer!`](@ref).
+
+After one warm-up call, the successful path has a zero-byte heap-allocation
+contract. Construction, compilation, callback failures, validation failures,
+and native PipeWire errors are outside that contract.
+"""
+function begin_progressive!(lease::ProgressiveFilterBuffer, buffer::FilterBuffer)
+    port = lease.port
+    filter = port.filter
+    _check_callback_error(filter)
+    result = lock(filter.state_lock) do
+        port_data = _require_open(port)
+        port.direction == DIRECTION_OUTPUT || throw(
+            ArgumentError("progressive buffers can only be announced from an output port"),
+        )
+        lease.handle == C_NULL || throw(
+            InvalidStateException("the progressive buffer lease is already active", :active),
+        )
+        buffer.handle == C_NULL && throw(
+            InvalidStateException("the PipeWire filter buffer was already queued", :queued),
+        )
+        buffer.port_data == port_data || throw(
+            ArgumentError("the filter buffer was dequeued from a different port"),
+        )
+        status = LibPipeWire.pw_filter_begin_progressive_buffer(port_data, buffer.handle)
+        if status >= 0
+            lease.handle = buffer.handle
+            buffer.handle = C_NULL
+            buffer.port_data = C_NULL
+        end
+        return status
+    end
+    _check_result(:pw_filter_begin_progressive_buffer, result)
+    return filter
+end
+
+"""
+    end_progressive!(lease) -> Filter
+
+Release an active progressive-output `lease`. The application must first stop
+writing and publish its negotiated terminal state. The allocation is reusable
+only after PipeWireAO has also observed the consumer's return. A failed native
+call leaves the lease active so the caller can diagnose or retry it.
+
+After one warm-up call, the successful path has a zero-byte heap-allocation
+contract. Compilation, callback failures, validation failures, and native
+PipeWire errors are outside that contract.
+"""
+function end_progressive!(lease::ProgressiveFilterBuffer)
+    port = lease.port
+    filter = port.filter
+    _check_callback_error(filter)
+    result = lock(filter.state_lock) do
+        port_data = _require_open(port)
+        lease.handle == C_NULL && throw(
+            InvalidStateException("the progressive buffer lease is inactive", :inactive),
+        )
+        status = LibPipeWire.pw_filter_end_progressive_buffer(port_data, lease.handle)
+        status >= 0 && (lease.handle = C_NULL)
+        return status
+    end
+    _check_result(:pw_filter_end_progressive_buffer, result)
+    return filter
+end
+
+"""
+    unsafe_progressive_buffer_pointer(lease) -> Ptr{LibPipeWire.pw_buffer}
+
+Return the native buffer pointer held by an active progressive lease.
+
+This pointer is an unsafe escape hatch for the application-defined progressive
+protocol. Use it only to form views of storage that the protocol still grants
+to the producer. Do not call the ordinary whole-buffer API, queue the pointer,
+or retain it after [`end_progressive!`](@ref).
+"""
+function unsafe_progressive_buffer_pointer(lease::ProgressiveFilterBuffer)
+    lease.handle == C_NULL && throw(
+        InvalidStateException("the progressive buffer lease is inactive", :inactive),
+    )
+    return lease.handle
+end
+
+"""
+    buffer_latest_fd(port) -> Cint
+
+Return the borrowed advisory notification fd for a connected latest-buffer
+port. PipeWireAO owns the descriptor; callers must not close it. Readability is
+only a hint, so a receiver must always retry [`dequeue_buffer!`](@ref) after
+draining or waiting. Busy-spin ports report `ENODEV`, and ports without
+latest-buffer I/O report `ENOTSUP`, as [`PipeWireError`](@ref)s.
+
+After one warm-up call, the successful path has a zero-byte heap-allocation
+contract. Compilation, callback failures, and native errors are excluded.
+"""
+function buffer_latest_fd(port::FilterPort)
+    _check_callback_error(port.filter)
+    result = lock(port.filter.state_lock) do
+        LibPipeWire.pw_filter_get_buffer_latest_fd(_require_open(port))
+    end
+    return _check_result(:pw_filter_get_buffer_latest_fd, result)
 end
 
 """

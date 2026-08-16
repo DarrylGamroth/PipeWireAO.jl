@@ -700,6 +700,7 @@ end
 include("loop.jl")
 include("spa.jl")
 include("filter.jl")
+include("progressive_filter.jl")
 include("listeners.jl")
 include("examples.jl")
 @testset "managed stream" begin

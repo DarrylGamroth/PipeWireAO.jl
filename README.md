@@ -436,6 +436,55 @@ finally
 end
 ```
 
+## Scheduler-independent latest buffers
+
+PipeWireAO keeps PipeWire's port negotiation and shared `memfd`/DMA-BUF
+infrastructure while allowing a link to exchange buffers independently of the
+graph scheduler. Set `BUFFER_LATEST_LINK_PROPERTY => "true"` on the link. The
+handoff is deliberately lossy: an input claims the newest completed buffer,
+obsolete unclaimed buffers are superseded, and an output drops work instead of
+causing backpressure when every allocation is still claimed.
+Each endpoint must use exactly one latest-buffer link and one worker with
+exclusive access to its port. An input worker may hold at most one dequeued
+buffer at a time.
+
+An input port selects `BUFFER_LATEST_WAIT_BUSY_SPIN`,
+`BUFFER_LATEST_WAIT_EVENTFD`, or `BUFFER_LATEST_WAIT_HYBRID` with
+`BUFFER_LATEST_WAIT_PROPERTY`. `buffer_latest_fd(port)` returns PipeWireAO's
+borrowed advisory eventfd for the latter policies. Do not close it, and always
+retry `dequeue_buffer!` after a wakeup because notifications can coalesce or be
+stale. Busy-waiting can simply retry `dequeue_buffer!` without requesting an
+fd.
+
+Progressive output uses a separate reusable lease so that ordinary whole-buffer
+access is unavailable after publication:
+
+```julia
+buffer = FilterBuffer()
+lease = ProgressiveFilterBuffer(output)
+
+dequeue_buffer!(buffer, output) || return
+# Prepare the payload and publish the application's negotiated Active state.
+begin_progressive!(lease, buffer)
+try
+    native = unsafe_progressive_buffer_pointer(lease)
+    # Write only ranges still owned by the producer, publishing committed
+    # ranges with the memory ordering required by the application protocol.
+finally
+    # Stop writing and publish the application's terminal state first.
+    end_progressive!(lease)
+end
+```
+
+`begin_progressive!`, `end_progressive!`, and `buffer_latest_fd` allocate zero
+heap bytes on their successful steady-state paths after warm-up. Setup,
+compilation, validation and native error paths are outside that contract. The
+progressive range/commit metadata is application-defined and must be negotiated
+before use; PipeWireAO manages buffer ownership but does not invent that
+protocol. Rust remains strongly recommended for a strict real-time execution
+path. Julia is suitable for graph setup, control, analysis, and carefully
+pinned workers that are warmed, allocation-free, and do not invoke the GC.
+
 The generated `PipeWireAO.LibPipeWire` module remains available for client APIs
 that do not yet have a managed wrapper. `SPA.Pointer` is intentionally borrowed
 and does not keep its pointee alive; preserve the owner for every native use of
