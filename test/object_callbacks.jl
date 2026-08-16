@@ -1,7 +1,7 @@
-using PipeWire
+using PipeWireAO
 using Test
 
-const LPW = PipeWire.LibPipeWire
+const LPW = PipeWireAO.LibPipeWire
 
 function callback_test_proxy(core::CoreConnection)
     callbacks = (
@@ -11,7 +11,7 @@ function callback_test_proxy(core::CoreConnection)
         on_error=nothing,
         on_bound_properties=nothing,
     )
-    listener = Ref(PipeWire._zero_hook())
+    listener = Ref(PipeWireAO._zero_hook())
     events = Ref{LPW.pw_proxy_events}()
     proxy = Proxy(
         Ptr{LPW.pw_proxy}(C_NULL),
@@ -28,7 +28,7 @@ function callback_test_proxy(core::CoreConnection)
         false,
         true,
     )
-    events[] = PipeWire._proxy_events(proxy)
+    events[] = PipeWireAO._proxy_events(proxy)
     return proxy
 end
 
@@ -37,13 +37,13 @@ function callback_test_object(::Type{Node}, core, callbacks)
     object = Node(
         callback_test_proxy(core),
         ReentrantLock(),
-        Ref(PipeWire._zero_hook()),
+        Ref(PipeWireAO._zero_hook()),
         events,
         callbacks,
         Ref{Any}(nothing),
         true,
     )
-    events[] = PipeWire._node_events(object)
+    events[] = PipeWireAO._node_events(object)
     return object
 end
 
@@ -52,13 +52,13 @@ function callback_test_object(::Type{Port}, core, callbacks)
     object = Port(
         callback_test_proxy(core),
         ReentrantLock(),
-        Ref(PipeWire._zero_hook()),
+        Ref(PipeWireAO._zero_hook()),
         events,
         callbacks,
         Ref{Any}(nothing),
         true,
     )
-    events[] = PipeWire._port_events(object)
+    events[] = PipeWireAO._port_events(object)
     return object
 end
 
@@ -67,13 +67,13 @@ function callback_test_object(::Type{Device}, core, callbacks)
     object = Device(
         callback_test_proxy(core),
         ReentrantLock(),
-        Ref(PipeWire._zero_hook()),
+        Ref(PipeWireAO._zero_hook()),
         events,
         callbacks,
         Ref{Any}(nothing),
         true,
     )
-    events[] = PipeWire._device_events(object)
+    events[] = PipeWireAO._device_events(object)
     return object
 end
 
@@ -82,40 +82,40 @@ function callback_test_object(::Type{Link}, core, callbacks)
     object = Link(
         callback_test_proxy(core),
         ReentrantLock(),
-        Ref(PipeWire._zero_hook()),
+        Ref(PipeWireAO._zero_hook()),
         events,
         callbacks,
         Ref{Any}(nothing),
         true,
     )
-    events[] = PipeWire._link_events(object)
+    events[] = PipeWireAO._link_events(object)
     return object
 end
 
 function callback_test_listener(object::Node, callbacks)
-    listener = PipeWire._new_listener(object, LPW.pw_node_events, callbacks)
-    listener.events[] = PipeWire._listener_node_events(listener)
+    listener = PipeWireAO._new_listener(object, LPW.pw_node_events, callbacks)
+    listener.events[] = PipeWireAO._listener_node_events(listener)
     listener.active = true
     return listener
 end
 
 function callback_test_listener(object::Port, callbacks)
-    listener = PipeWire._new_listener(object, LPW.pw_port_events, callbacks)
-    listener.events[] = PipeWire._listener_port_events(listener)
+    listener = PipeWireAO._new_listener(object, LPW.pw_port_events, callbacks)
+    listener.events[] = PipeWireAO._listener_port_events(listener)
     listener.active = true
     return listener
 end
 
 function callback_test_listener(object::Device, callbacks)
-    listener = PipeWire._new_listener(object, LPW.pw_device_events, callbacks)
-    listener.events[] = PipeWire._listener_device_events(listener)
+    listener = PipeWireAO._new_listener(object, LPW.pw_device_events, callbacks)
+    listener.events[] = PipeWireAO._listener_device_events(listener)
     listener.active = true
     return listener
 end
 
 function callback_test_listener(object::Link, callbacks)
-    listener = PipeWire._new_listener(object, LPW.pw_link_events, callbacks)
-    listener.events[] = PipeWire._listener_link_events(listener)
+    listener = PipeWireAO._new_listener(object, LPW.pw_link_events, callbacks)
+    listener.events[] = PipeWireAO._listener_link_events(listener)
     listener.active = true
     return listener
 end
@@ -135,7 +135,7 @@ function invoke_object_param(object::T, param::Pod) where {T}
         UInt32(72),
         UInt32(73),
         UInt32(74),
-        PipeWire._pod_pointer(param),
+        PipeWireAO._pod_pointer(param),
     )
     return nothing
 end
@@ -155,7 +155,7 @@ function invoke_listener_param(listener::T, param::Pod) where {T<:ManagedListene
         UInt32(82),
         UInt32(83),
         UInt32(84),
-        PipeWire._pod_pointer(param),
+        PipeWireAO._pod_pointer(param),
     )
     return nothing
 end
@@ -204,7 +204,7 @@ end
             UInt64(56),
             LPW.PW_LINK_STATE_ERROR,
             pointer(link_error),
-            PipeWire._pod_pointer(link_format),
+            PipeWireAO._pod_pointer(link_format),
             C_NULL,
         ),
     )
@@ -259,12 +259,12 @@ end
     end
 
     @test only(port_infos).id == 31
-    @test only(port_infos).direction == PipeWire.DIRECTION_INPUT
+    @test only(port_infos).direction == PipeWireAO.DIRECTION_INPUT
     @test only(only(port_infos).params) == ParamInfo(UInt32(21), UInt32(22), UInt32(23), Int32(24))
     @test only(device_infos).id == 41
     @test only(only(device_infos).params).id == 21
     @test only(link_infos).id == 51
-    @test only(link_infos).state == PipeWire.LINK_STATE_ERROR
+    @test only(link_infos).state == PipeWireAO.LINK_STATE_ERROR
     @test only(link_infos).error == "test link error"
     @test pod_value(Int32, something(only(link_infos).format)) == 43
     for events in (node_params, port_params, device_params)
@@ -327,21 +327,21 @@ end
     @test pod_value(Int64, something(only(listener_port_params)[5])) == 75
     @test pod_value(Int64, something(only(listener_node_params)[5])) == 75
 
-    @test_throws InvalidStateException subscribe_params!(port, [PipeWire.SPA.PARAM_PROPS])
-    @test_throws InvalidStateException subscribe_params!(device, [PipeWire.SPA.PARAM_PROPS])
+    @test_throws InvalidStateException subscribe_params!(port, [PipeWireAO.SPA.PARAM_PROPS])
+    @test_throws InvalidStateException subscribe_params!(device, [PipeWireAO.SPA.PARAM_PROPS])
     @test_throws InvalidStateException enum_params!(
         port,
-        PipeWire.SPA.PARAM_PROPS;
+        PipeWireAO.SPA.PARAM_PROPS;
         count=1,
     )
     @test_throws InvalidStateException enum_params!(
         device,
-        PipeWire.SPA.PARAM_PROPS;
+        PipeWireAO.SPA.PARAM_PROPS;
         count=1,
     )
     @test_throws InvalidStateException set_param!(
         device,
-        PipeWire.SPA.PARAM_FORMAT,
+        PipeWireAO.SPA.PARAM_FORMAT,
         Pod(audio_format_param()),
     )
 
@@ -362,7 +362,7 @@ end
     @test malformed_port.callback_error[] isa ArgumentError
     @test_throws ArgumentError subscribe_params!(
         malformed_port,
-        [PipeWire.SPA.PARAM_PROPS],
+        [PipeWireAO.SPA.PARAM_PROPS],
     )
 
     malformed_node = callback_test_object(

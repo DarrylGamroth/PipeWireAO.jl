@@ -29,13 +29,13 @@ struct SourceFailure end
 (::SourceFailure)(::EventSource, ::UInt64) = error("loop source callback failed")
 
 function invoke_idle_source(source::T) where {T<:IdleSource}
-    callback = PipeWire._idle_source_callback(source)
+    callback = PipeWireAO._idle_source_callback(source)
     ccall(callback, Cvoid, (Ref{T},), source)
     return nothing
 end
 
 @testset "managed thread loop" begin
-    loop = ThreadLoop("PipeWire.jl managed-loop test")
+    loop = ThreadLoop("PipeWireAO.jl managed-loop test")
     @test isopen(loop)
     @test !isrunning(loop)
     @test !in_thread(loop)
@@ -84,7 +84,7 @@ end
     close(main_event)
     close(main_loop)
 
-    loop = ThreadLoop("PipeWire.jl source test")
+    loop = ThreadLoop("PipeWireAO.jl source test")
     event_count = Threads.Atomic{Int}(0)
     event = EventSource(loop, EventCounter(event_count))
     idle_count = Ref(0)
@@ -128,7 +128,7 @@ end
 end
 
 @testset "typed loop channel" begin
-    loop = ThreadLoop("PipeWire.jl loop-channel test")
+    loop = ThreadLoop("PipeWireAO.jl loop-channel test")
     total = Threads.Atomic{Int}(0)
     channel = LoopChannel{Int}(loop, IntegerCollector(total); capacity=4)
     @test isopen(channel)
@@ -146,7 +146,7 @@ end
     close(channel)
     close(loop)
 
-    other_loop = ThreadLoop("PipeWire.jl loop-channel argument test")
+    other_loop = ThreadLoop("PipeWireAO.jl loop-channel argument test")
     @test_throws ArgumentError LoopChannel{Int}(other_loop, IntegerCollector(total); capacity=0)
     close(other_loop)
 end

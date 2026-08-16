@@ -1,5 +1,5 @@
 using Clang.Generators
-using PipeWire_jll
+using PipeWireAO_jll
 
 const EXPORTED_INLINE_APIS = [
     "PW_API_CLIENT_IMPL",
@@ -16,9 +16,9 @@ const EXPORTED_INLINE_APIS = [
 ]
 
 cd(@__DIR__) do
-    include_root = joinpath(PipeWire_jll.artifact_dir, "include")
-    pipewire_include = joinpath(include_root, "pipewire-0.3")
-    spa_include = joinpath(include_root, "spa-0.2")
+    include_root = joinpath(PipeWireAO_jll.artifact_dir, "include")
+    pipewire_include = joinpath(include_root, "pipewire-ao-0.3")
+    spa_include = joinpath(include_root, "spa-ao-0.2")
     headers = [
         joinpath(pipewire_include, "pipewire", "pipewire.h"),
         joinpath(pipewire_include, "pipewire", "impl-module.h"),

@@ -3,7 +3,7 @@
 
 An owned SPA POD value. The constructor copies `data` and validates the POD
 header. `Pod` values keep format parameters alive while they are passed to
-PipeWire.
+PipeWireAO.
 """
 struct Pod
     data::Vector{UInt8}
@@ -29,7 +29,7 @@ Base.sizeof(pod::Pod) = length(pod.data)
 "SPA POD value types that need wrappers to preserve their wire-level meaning."
 module SPA
 
-using ..PipeWire: Pod
+using ..PipeWireAO: Pod
 using ..LibPipeWire
 
 export Array,

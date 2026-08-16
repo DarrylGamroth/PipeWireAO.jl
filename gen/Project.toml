@@ -1,6 +1,6 @@
 [deps]
 Clang = "40e3b903-d033-50b4-a0cc-940c62c95e31"
-PipeWire_jll = "d49d6a9a-8fe4-5035-9ec1-b8a5ddb3e747"
+PipeWireAO_jll = "cde84cf6-9a21-5ce0-b5e3-1526e778c30b"
 
 [compat]
 Clang = "0.19"

@@ -1,5 +1,5 @@
 """
-    ThreadLoop([name="PipeWire.jl"]; properties=nothing)
+    ThreadLoop([name="PipeWireAO.jl"]; properties=nothing)
 
 Create an owning PipeWire loop that runs on a native thread. Call [`start!`](@ref)
 before expecting events and [`stop!`](@ref) before closing it. PipeWire objects
@@ -17,7 +17,7 @@ mutable struct ThreadLoop <: AbstractPipeWireLoop
 end
 
 function ThreadLoop(
-    name::AbstractString="PipeWire.jl";
+    name::AbstractString="PipeWireAO.jl";
     properties=nothing,
 )
     name_string = _validate_c_string(String(name), "thread-loop name")

@@ -1,4 +1,4 @@
-using PipeWire
+using PipeWireAO
 using Test
 
 include("aqua.jl")
@@ -60,14 +60,14 @@ end
 
 function invoke_stream_extended_callbacks(
     stream::T,
-    control::Ptr{PipeWire.LibPipeWire.pw_stream_control},
-    command::Ptr{PipeWire.LibPipeWire.spa_command},
+    control::Ptr{PipeWireAO.LibPipeWire.pw_stream_control},
+    command::Ptr{PipeWireAO.LibPipeWire.spa_command},
 ) where {T<:Stream}
     events = getfield(stream, :events)[]
     ccall(
         events.control_info,
         Cvoid,
-        (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.pw_stream_control}),
+        (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.pw_stream_control}),
         stream,
         UInt32(3),
         control,
@@ -84,7 +84,7 @@ function invoke_stream_extended_callbacks(
     ccall(
         events.command,
         Cvoid,
-        (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_command}),
+        (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_command}),
         stream,
         command,
     )
@@ -95,7 +95,7 @@ end
 function invoke_stream_remaining_callbacks(stream::T, param::Pod) where {T<:Stream}
     events = getfield(stream, :events)[]
     detail = "primary stream state"
-    buffer = Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x3456))
+    buffer = Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x3456))
     GC.@preserve stream detail param begin
         ccall(
             events.state_changed,
@@ -109,22 +109,22 @@ function invoke_stream_remaining_callbacks(stream::T, param::Pod) where {T<:Stre
         ccall(
             events.param_changed,
             Cvoid,
-            (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.spa_pod}),
+            (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
             stream,
             UInt32(10),
-            PipeWire._pod_pointer(param),
+            PipeWireAO._pod_pointer(param),
         )
         ccall(
             events.add_buffer,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             stream,
             buffer,
         )
         ccall(
             events.remove_buffer,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             stream,
             buffer,
         )
@@ -140,7 +140,7 @@ function invoke_proxy_extended_callbacks(proxy::T) where {T<:Proxy}
     ccall(
         events.bound_props,
         Cvoid,
-        (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.spa_dict}),
+        (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_dict}),
         proxy,
         UInt32(22),
         C_NULL,
@@ -189,7 +189,7 @@ function invoke_core_scalar_callbacks(core::T) where {T<:CoreConnection}
             (Ref{T}, UInt32, UInt32, Cint, UInt32),
             core,
             UInt32(16),
-            PipeWire.LibPipeWire.SPA_DATA_MemFd,
+            PipeWireAO.LibPipeWire.SPA_DATA_MemFd,
             Cint(17),
             UInt32(18),
         )
@@ -207,7 +207,7 @@ function invoke_core_bound_properties(core::T, dictionary) where {T<:CoreConnect
     ccall(
         core.events[].bound_props,
         Cvoid,
-        (Ref{T}, UInt32, UInt32, Ptr{PipeWire.LibPipeWire.spa_dict}),
+        (Ref{T}, UInt32, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_dict}),
         core,
         UInt32(19),
         UInt32(20),
@@ -220,20 +220,20 @@ function invoke_profile_callback(profiler::T, profile::Pod) where {T<:Profiler}
     GC.@preserve profiler profile ccall(
         getfield(profiler, :events)[].profile,
         Cvoid,
-        (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_pod}),
+        (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
         profiler,
-        PipeWire._pod_pointer(profile),
+        PipeWireAO._pod_pointer(profile),
     )
     return nothing
 end
 
 @testset "Clang.jl-generated C bindings" begin
-    raw_version = PipeWire.LibPipeWire.pw_get_library_version()
+    raw_version = PipeWireAO.LibPipeWire.pw_get_library_version()
     @test raw_version != C_NULL
     @test VersionNumber(unsafe_string(raw_version)) == library_version()
-    @test isbitstype(PipeWire.LibPipeWire.spa_hook)
-    @test isbitstype(PipeWire.LibPipeWire.pw_core_events)
-    @test isbitstype(PipeWire.LibPipeWire.pw_registry_events)
+    @test isbitstype(PipeWireAO.LibPipeWire.spa_hook)
+    @test isbitstype(PipeWireAO.LibPipeWire.pw_core_events)
+    @test isbitstype(PipeWireAO.LibPipeWire.pw_registry_events)
 end
 
 @testset "core protocol" begin
@@ -268,13 +268,13 @@ end
     @test bound_event[] == (UInt32(14), UInt32(15))
     @test memory_event[] == CoreMemory(
         UInt32(16),
-        PipeWire.LibPipeWire.SPA_DATA_MemFd,
+        PipeWireAO.LibPipeWire.SPA_DATA_MemFd,
         Cint(17),
         UInt32(18),
     )
     @test removed_memory[] == 16
 
-    PipeWire._with_properties_dict(Dict("object.path" => "test.core.bound")) do dictionary
+    PipeWireAO._with_properties_dict(Dict("object.path" => "test.core.bound")) do dictionary
         GC.@preserve core invoke_core_bound_properties(core, dictionary)
     end
     @test bound_properties[] == (
@@ -284,12 +284,12 @@ end
     )
 
     initial_properties = core_properties(core)
-    @test update_properties!(core, Dict("application.name" => "PipeWire.jl protocol test")) ===
+    @test update_properties!(core, Dict("application.name" => "PipeWireAO.jl protocol test")) ===
           core
     updated_properties = core_properties(core)
-    @test updated_properties["application.name"] == "PipeWire.jl protocol test"
+    @test updated_properties["application.name"] == "PipeWireAO.jl protocol test"
     updated_properties["application.name"] = "snapshot only"
-    @test core_properties(core)["application.name"] == "PipeWire.jl protocol test"
+    @test core_properties(core)["application.name"] == "PipeWireAO.jl protocol test"
     @test initial_properties isa Dict{String,String}
 
     sequence = sync!(core, 41)
@@ -346,12 +346,12 @@ end
 
 @testset "managed core and registry" begin
     loop = MainLoop()
-    context = Context(loop; properties=Dict("application.name" => "PipeWire.jl context"))
+    context = Context(loop; properties=Dict("application.name" => "PipeWireAO.jl context"))
     @test isopen(context)
     @test isconcretetype(typeof(context))
     @test all(isconcretetype, fieldtypes(typeof(context)))
     @test main_loop(context) === loop
-    @test context_properties(context)["application.name"] == "PipeWire.jl context"
+    @test context_properties(context)["application.name"] == "PipeWireAO.jl context"
     @test update_properties!(context, Dict("pipewire.jl.context" => "updated")) === context
     @test context_properties(context)["pipewire.jl.context"] == "updated"
     @test_throws InvalidStateException close(loop)
@@ -423,12 +423,12 @@ end
 
     scoped_name = with_registry(
         self=true,
-        context_properties=Dict("application.name" => "PipeWire.jl scoped context"),
-        core_properties=Dict("application.name" => "PipeWire.jl scoped core"),
+        context_properties=Dict("application.name" => "PipeWireAO.jl scoped context"),
+        core_properties=Dict("application.name" => "PipeWireAO.jl scoped core"),
     ) do scoped_registry
         context_properties(scoped_registry.core.context)["application.name"]
     end
-    @test scoped_name == "PipeWire.jl scoped context"
+    @test scoped_name == "PipeWireAO.jl scoped context"
 end
 
 @testset "properties" begin
@@ -439,10 +439,10 @@ end
     @test get(properties, "missing", "fallback") == "fallback"
     @test haskey(properties, "node.name")
 
-    properties["application.name"] = "PipeWire.jl tests"
+    properties["application.name"] = "PipeWireAO.jl tests"
     delete!(properties, "media.type")
     @test Dict(properties) == Dict(
-        "application.name" => "PipeWire.jl tests",
+        "application.name" => "PipeWireAO.jl tests",
         "node.name" => "julia-test",
     )
 
@@ -654,7 +654,7 @@ end
     roundtrip(registry)
     @test !isempty(permission_events)
     @test first(permission_events)[1] == 0
-    @test update_properties!(client, Dict("application.name" => "PipeWire.jl client test")) ===
+    @test update_properties!(client, Dict("application.name" => "PipeWireAO.jl client test")) ===
           client
     @test update_permissions!(client, Permission[]) === client
     close(factory_listener)
@@ -669,29 +669,29 @@ end
 
     node_error = "node failed"
     node_native = Ref(
-        PipeWire.LibPipeWire.pw_node_info(
+        PipeWireAO.LibPipeWire.pw_node_info(
             UInt32(42),
             UInt32(8),
             UInt32(9),
             UInt64(31),
             UInt32(2),
             UInt32(3),
-            PipeWire.LibPipeWire.PW_NODE_STATE_ERROR,
+            PipeWireAO.LibPipeWire.PW_NODE_STATE_ERROR,
             pointer(node_error),
             C_NULL,
             C_NULL,
             UInt32(0),
         ),
     )
-    info = GC.@preserve node_error node_native PipeWire._copy_node_info(
-        Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.pw_node_info}, node_native),
+    info = GC.@preserve node_error node_native PipeWireAO._copy_node_info(
+        Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.pw_node_info}, node_native),
     )
     @test info.id == 42
     @test info.max_input_ports == 8
     @test info.max_output_ports == 9
     @test info.n_input_ports == 2
     @test info.n_output_ports == 3
-    @test info.state == PipeWire.NODE_STATE_ERROR
+    @test info.state == PipeWireAO.NODE_STATE_ERROR
     @test info.error == "node failed"
     @test isempty(info.properties)
     @test isempty(info.params)
@@ -704,7 +704,7 @@ include("listeners.jl")
 include("examples.jl")
 @testset "managed stream" begin
     context = Context()
-    connection_properties = Properties(Dict("application.name" => "PipeWire.jl tests"))
+    connection_properties = Properties(Dict("application.name" => "PipeWireAO.jl tests"))
     core = CoreConnection(context; self=true, properties=connection_properties)
     @test isopen(connection_properties)
 
@@ -713,8 +713,8 @@ include("examples.jl")
     control_changes = Tuple{UInt32,Union{Nothing,StreamControl}}[]
     io_changes = StreamIO[]
     param_changes = Tuple{UInt32,Union{Nothing,Pod}}[]
-    added_buffers = Ptr{PipeWire.LibPipeWire.pw_buffer}[]
-    removed_buffers = Ptr{PipeWire.LibPipeWire.pw_buffer}[]
+    added_buffers = Ptr{PipeWireAO.LibPipeWire.pw_buffer}[]
+    removed_buffers = Ptr{PipeWireAO.LibPipeWire.pw_buffer}[]
     commands = Pod[]
     drained_count = Ref(0)
     trigger_count = Ref(0)
@@ -761,7 +761,7 @@ include("examples.jl")
     )
     @test callback_allocations(stream) == 0
     @test process_count[] == 2
-    @test stream_state(stream) == PipeWire.LibPipeWire.PW_STREAM_STATE_UNCONNECTED
+    @test stream_state(stream) == PipeWireAO.LibPipeWire.PW_STREAM_STATE_UNCONNECTED
     @test stream_name(stream) == "julia-test"
     @test stream_properties(stream)["media.type"] == "Audio"
     @test update_properties!(stream, Dict("media.role" => "Test")) === stream
@@ -782,7 +782,7 @@ include("examples.jl")
     control_name = "Volume"
     control_values = Float32[0.25, 0.5]
     native_control = Ref(
-        PipeWire.LibPipeWire.pw_stream_control(
+        PipeWireAO.LibPipeWire.pw_stream_control(
             pointer(control_name),
             UInt32(0),
             0.5f0,
@@ -797,8 +797,8 @@ include("examples.jl")
     GC.@preserve stream control_name control_values native_control command begin
         invoke_stream_extended_callbacks(
             stream,
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.pw_stream_control}, native_control),
-            Ptr{PipeWire.LibPipeWire.spa_command}(PipeWire._pod_pointer(command)),
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.pw_stream_control}, native_control),
+            Ptr{PipeWireAO.LibPipeWire.spa_command}(PipeWireAO._pod_pointer(command)),
         )
     end
     @test control_changes == [
@@ -819,19 +819,19 @@ include("examples.jl")
     @test state_changes == [(Int32(8), Int32(9), "primary stream state")]
     @test only(param_changes)[1] == 10
     @test pod_value(Int64, something(only(param_changes)[2])) == 11
-    @test added_buffers == [Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x3456))]
+    @test added_buffers == [Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x3456))]
     @test removed_buffers == added_buffers
     @test drained_count[] == 1
     @test_throws InvalidStateException close(core)
     @test_throws ArgumentError connect!(
         stream,
         :output;
-        flags=PipeWire.LibPipeWire.PW_STREAM_FLAG_RT_PROCESS,
+        flags=PipeWireAO.LibPipeWire.PW_STREAM_FLAG_RT_PROCESS,
     )
     @test_throws ArgumentError connect!(
         stream,
         :output;
-        flags=PipeWire.LibPipeWire.PW_STREAM_FLAG_RT_TRIGGER_DONE,
+        flags=PipeWireAO.LibPipeWire.PW_STREAM_FLAG_RT_TRIGGER_DONE,
     )
     @test_throws ArgumentError connect!(stream, :sideways)
     @test dequeue_buffer(stream) === nothing
@@ -841,7 +841,7 @@ include("examples.jl")
 
     format = audio_format()
     @test sizeof(format) == 168
-    @test pod_type(format) == PipeWire.LibPipeWire.SPA_TYPE_Object
+    @test pod_type(format) == PipeWireAO.LibPipeWire.SPA_TYPE_Object
     @test_throws ArgumentError audio_format(channels=2, position=[Audio.MONO])
     connect!(
         stream,
@@ -849,10 +849,10 @@ include("examples.jl")
         flags=STREAM_AUTOCONNECT | STREAM_MAP_BUFFERS | STREAM_INACTIVE | STREAM_TRIGGER,
         params=[format],
     )
-    @test stream_state(stream) == PipeWire.LibPipeWire.PW_STREAM_STATE_CONNECTING
+    @test stream_state(stream) == PipeWireAO.LibPipeWire.PW_STREAM_STATE_CONNECTING
     @test state_changes[end] == (
-        PipeWire.LibPipeWire.PW_STREAM_STATE_UNCONNECTED,
-        PipeWire.LibPipeWire.PW_STREAM_STATE_CONNECTING,
+        PipeWireAO.LibPipeWire.PW_STREAM_STATE_UNCONNECTED,
+        PipeWireAO.LibPipeWire.PW_STREAM_STATE_CONNECTING,
         nothing,
     )
     @test set_active!(stream) === stream
@@ -864,7 +864,7 @@ include("examples.jl")
 
     storage = collect(UInt8(1):UInt8(16))
     chunk = Ref(
-        PipeWire.LibPipeWire.spa_chunk(
+        PipeWireAO.LibPipeWire.spa_chunk(
             UInt32(2),
             UInt32(4),
             Int32(2),
@@ -872,7 +872,7 @@ include("examples.jl")
         ),
     )
     header = Ref(
-        PipeWire.LibPipeWire.spa_meta_header(
+        PipeWireAO.LibPipeWire.spa_meta_header(
             UInt32(5),
             UInt32(6),
             Int64(7),
@@ -881,85 +881,85 @@ include("examples.jl")
         ),
     )
     crop = Ref(
-        PipeWire.LibPipeWire.spa_meta_region(
-            PipeWire.LibPipeWire.spa_region(
-                PipeWire.LibPipeWire.spa_point(Int32(10), Int32(11)),
-                PipeWire.LibPipeWire.spa_rectangle(UInt32(12), UInt32(13)),
+        PipeWireAO.LibPipeWire.spa_meta_region(
+            PipeWireAO.LibPipeWire.spa_region(
+                PipeWireAO.LibPipeWire.spa_point(Int32(10), Int32(11)),
+                PipeWireAO.LibPipeWire.spa_rectangle(UInt32(12), UInt32(13)),
             ),
         ),
     )
     damage = [
-        PipeWire.LibPipeWire.spa_meta_region(
-            PipeWire.LibPipeWire.spa_region(
-                PipeWire.LibPipeWire.spa_point(Int32(1), Int32(2)),
-                PipeWire.LibPipeWire.spa_rectangle(UInt32(3), UInt32(4)),
+        PipeWireAO.LibPipeWire.spa_meta_region(
+            PipeWireAO.LibPipeWire.spa_region(
+                PipeWireAO.LibPipeWire.spa_point(Int32(1), Int32(2)),
+                PipeWireAO.LibPipeWire.spa_rectangle(UInt32(3), UInt32(4)),
             ),
         ),
-        PipeWire.LibPipeWire.spa_meta_region(
-            PipeWire.LibPipeWire.spa_region(
-                PipeWire.LibPipeWire.spa_point(Int32(0), Int32(0)),
-                PipeWire.LibPipeWire.spa_rectangle(UInt32(0), UInt32(0)),
+        PipeWireAO.LibPipeWire.spa_meta_region(
+            PipeWireAO.LibPipeWire.spa_region(
+                PipeWireAO.LibPipeWire.spa_point(Int32(0), Int32(0)),
+                PipeWireAO.LibPipeWire.spa_rectangle(UInt32(0), UInt32(0)),
             ),
         ),
     ]
-    transform = Ref(PipeWire.LibPipeWire.spa_meta_videotransform(UInt32(2)))
+    transform = Ref(PipeWireAO.LibPipeWire.spa_meta_videotransform(UInt32(2)))
     timeline = Ref(
-        PipeWire.LibPipeWire.spa_meta_sync_timeline(
+        PipeWireAO.LibPipeWire.spa_meta_sync_timeline(
             UInt32(1),
             UInt32(0),
             UInt64(20),
             UInt64(21),
         ),
     )
-    metas = PipeWire.LibPipeWire.spa_meta[
-        PipeWire.LibPipeWire.spa_meta(
-            PipeWire.LibPipeWire.SPA_META_Header,
-            UInt32(sizeof(PipeWire.LibPipeWire.spa_meta_header)),
+    metas = PipeWireAO.LibPipeWire.spa_meta[
+        PipeWireAO.LibPipeWire.spa_meta(
+            PipeWireAO.LibPipeWire.SPA_META_Header,
+            UInt32(sizeof(PipeWireAO.LibPipeWire.spa_meta_header)),
             Base.unsafe_convert(Ptr{Cvoid}, header),
         ),
-        PipeWire.LibPipeWire.spa_meta(
-            PipeWire.LibPipeWire.SPA_META_VideoCrop,
-            UInt32(sizeof(PipeWire.LibPipeWire.spa_meta_region)),
+        PipeWireAO.LibPipeWire.spa_meta(
+            PipeWireAO.LibPipeWire.SPA_META_VideoCrop,
+            UInt32(sizeof(PipeWireAO.LibPipeWire.spa_meta_region)),
             Base.unsafe_convert(Ptr{Cvoid}, crop),
         ),
-        PipeWire.LibPipeWire.spa_meta(
-            PipeWire.LibPipeWire.SPA_META_VideoDamage,
-            UInt32(sizeof(PipeWire.LibPipeWire.spa_meta_region) * length(damage)),
+        PipeWireAO.LibPipeWire.spa_meta(
+            PipeWireAO.LibPipeWire.SPA_META_VideoDamage,
+            UInt32(sizeof(PipeWireAO.LibPipeWire.spa_meta_region) * length(damage)),
             Ptr{Cvoid}(pointer(damage)),
         ),
-        PipeWire.LibPipeWire.spa_meta(
-            PipeWire.LibPipeWire.SPA_META_VideoTransform,
-            UInt32(sizeof(PipeWire.LibPipeWire.spa_meta_videotransform)),
+        PipeWireAO.LibPipeWire.spa_meta(
+            PipeWireAO.LibPipeWire.SPA_META_VideoTransform,
+            UInt32(sizeof(PipeWireAO.LibPipeWire.spa_meta_videotransform)),
             Base.unsafe_convert(Ptr{Cvoid}, transform),
         ),
-        PipeWire.LibPipeWire.spa_meta(
-            PipeWire.LibPipeWire.SPA_META_SyncTimeline,
-            UInt32(sizeof(PipeWire.LibPipeWire.spa_meta_sync_timeline)),
+        PipeWireAO.LibPipeWire.spa_meta(
+            PipeWireAO.LibPipeWire.SPA_META_SyncTimeline,
+            UInt32(sizeof(PipeWireAO.LibPipeWire.spa_meta_sync_timeline)),
             Base.unsafe_convert(Ptr{Cvoid}, timeline),
         ),
     ]
     native_data = Ref(
-        PipeWire.LibPipeWire.spa_data(
-            PipeWire.LibPipeWire.SPA_DATA_MemPtr,
+        PipeWireAO.LibPipeWire.spa_data(
+            PipeWireAO.LibPipeWire.SPA_DATA_MemPtr,
             UInt32(0),
             Int64(-1),
             UInt32(0),
             UInt32(length(storage)),
             pointer(storage),
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_chunk}, chunk),
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_chunk}, chunk),
         ),
     )
     spa_buffer = Ref(
-        PipeWire.LibPipeWire.spa_buffer(
+        PipeWireAO.LibPipeWire.spa_buffer(
             UInt32(length(metas)),
             UInt32(1),
             pointer(metas),
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_data}, native_data),
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_data}, native_data),
         ),
     )
     native_buffer = Ref(
-        PipeWire.LibPipeWire.pw_buffer(
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_buffer}, spa_buffer),
+        PipeWireAO.LibPipeWire.pw_buffer(
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_buffer}, spa_buffer),
             C_NULL,
             UInt64(0),
             UInt64(0),
@@ -968,7 +968,7 @@ include("examples.jl")
     )
     GC.@preserve storage chunk header crop damage transform timeline metas native_data spa_buffer native_buffer begin
         borrowed = StreamBuffer(
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.pw_buffer}, native_buffer),
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.pw_buffer}, native_buffer),
         )
         data = buffer_data(borrowed)
         @test buffer_info(borrowed) == StreamBufferInfo(C_NULL, 0, 0, 0)
@@ -976,11 +976,11 @@ include("examples.jl")
         @test buffer_info(borrowed).size == 15
         @test metadata_count(borrowed) == 5
         @test metadata_type(buffer_metadata(borrowed, 1)) ==
-              PipeWire.LibPipeWire.SPA_META_Header
-        @test metadata_size(buffer_metadata(borrowed, PipeWire.LibPipeWire.SPA_META_Header)) ==
-              sizeof(PipeWire.LibPipeWire.spa_meta_header)
+              PipeWireAO.LibPipeWire.SPA_META_Header
+        @test metadata_size(buffer_metadata(borrowed, PipeWireAO.LibPipeWire.SPA_META_Header)) ==
+              sizeof(PipeWireAO.LibPipeWire.spa_meta_header)
         @test length(metadata_bytes(buffer_metadata(borrowed, 1))) ==
-              sizeof(PipeWire.LibPipeWire.spa_meta_header)
+              sizeof(PipeWireAO.LibPipeWire.spa_meta_header)
         @test buffer_header(borrowed) == BufferHeader(5, 6, 7, -8, 9)
         replacement_header = BufferHeader(10, 11, 12, -13, 14)
         @test set_buffer_header!(borrowed, replacement_header) === borrowed
@@ -995,7 +995,7 @@ include("examples.jl")
         @test isequal(bitmap, same_bitmap)
         @test hash(bitmap) == hash(same_bitmap)
         @test buffer_metadata(borrowed, UInt32(500)) === nothing
-        @test data_type(data) == PipeWire.LibPipeWire.SPA_DATA_MemPtr
+        @test data_type(data) == PipeWireAO.LibPipeWire.SPA_DATA_MemPtr
         @test data_flags(data) == SPA.DATA_FLAG_NONE
         @test data_fd(data) == -1
         @test data_map_offset(data) == 0
@@ -1016,12 +1016,12 @@ include("examples.jl")
 
         allocated = allocate_buffer!(
             stream,
-            Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.pw_buffer}, native_buffer),
+            Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.pw_buffer}, native_buffer),
             32,
         )
         @test length(allocated) == 1
         @test length(allocated[1]) == 32
-        @test data_type(data) == PipeWire.LibPipeWire.SPA_DATA_MemPtr
+        @test data_type(data) == PipeWireAO.LibPipeWire.SPA_DATA_MemPtr
         @test data_flags(data) == SPA.DATA_FLAG_READWRITE
         @test data_pointer(data) == pointer(allocated[1])
     end
@@ -1032,30 +1032,30 @@ include("examples.jl")
         file_descriptor =
             raw_fd isa Integer ? Cint(raw_fd) : reinterpret(Cint, raw_fd)
         file_chunk = Ref(
-            PipeWire.LibPipeWire.spa_chunk(UInt32(0), UInt32(0), Int32(0), Int32(0)),
+            PipeWireAO.LibPipeWire.spa_chunk(UInt32(0), UInt32(0), Int32(0), Int32(0)),
         )
         file_data = Ref(
-            PipeWire.LibPipeWire.spa_data(
-                PipeWire.LibPipeWire.SPA_DATA_MemFd,
+            PipeWireAO.LibPipeWire.spa_data(
+                PipeWireAO.LibPipeWire.SPA_DATA_MemFd,
                 SPA.DATA_FLAG_READWRITE,
                 Int64(file_descriptor),
                 UInt32(0),
                 UInt32(4096),
                 C_NULL,
-                Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_chunk}, file_chunk),
+                Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_chunk}, file_chunk),
             ),
         )
         file_spa_buffer = Ref(
-            PipeWire.LibPipeWire.spa_buffer(
+            PipeWireAO.LibPipeWire.spa_buffer(
                 UInt32(0),
                 UInt32(1),
                 C_NULL,
-                Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_data}, file_data),
+                Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_data}, file_data),
             ),
         )
         file_buffer = Ref(
-            PipeWire.LibPipeWire.pw_buffer(
-                Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.spa_buffer}, file_spa_buffer),
+            PipeWireAO.LibPipeWire.pw_buffer(
+                Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.spa_buffer}, file_spa_buffer),
                 C_NULL,
                 UInt64(0),
                 UInt64(0),
@@ -1064,7 +1064,7 @@ include("examples.jl")
         )
         GC.@preserve file_chunk file_data file_spa_buffer file_buffer begin
             borrowed = StreamBuffer(
-                Base.unsafe_convert(Ptr{PipeWire.LibPipeWire.pw_buffer}, file_buffer),
+                Base.unsafe_convert(Ptr{PipeWireAO.LibPipeWire.pw_buffer}, file_buffer),
             )
             mapping = map_data(buffer_data(borrowed); writable=true)
             @test isopen(mapping)

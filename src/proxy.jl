@@ -328,7 +328,7 @@ end
 "Return the PipeWire interface type name implemented by a proxy."
 interface_type(proxy::Proxy) = proxy.interface_type
 
-"Return the local proxy ID assigned by PipeWire."
+"Return the local proxy ID assigned by PipeWireAO."
 function proxy_id(proxy::Proxy)
     return lock(proxy.state_lock) do
         LibPipeWire.pw_proxy_get_id(_require_open(proxy))

@@ -1,6 +1,6 @@
 module VideoCapture
 
-using PipeWire
+using PipeWireAO
 
 struct FormatReporter end
 

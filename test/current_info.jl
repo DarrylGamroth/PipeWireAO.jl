@@ -1,4 +1,4 @@
-using PipeWire
+using PipeWireAO
 using Test
 
 function current_info_allocations(tracker)
@@ -7,13 +7,13 @@ function current_info_allocations(tracker)
 end
 
 @testset "maintained current object info" begin
-    node_state = PipeWire._CurrentInfoState{NodeInfo}(
+    node_state = PipeWireAO._CurrentInfoState{NodeInfo}(
         ReentrantLock(),
         Ref{NodeInfo}(),
         false,
     )
     node_tracker = InfoTracker(node_state, nothing)
-    node_callback = PipeWire._CurrentInfoCallback{Nothing,NodeInfo}(node_state)
+    node_callback = PipeWireAO._CurrentInfoCallback{Nothing,NodeInfo}(node_state)
 
     @test isconcretetype(typeof(node_state))
     @test all(isconcretetype, fieldtypes(typeof(node_state)))
@@ -38,7 +38,7 @@ end
         NODE_CHANGE_PROPERTIES | NODE_CHANGE_PARAMS,
         UInt32(100),
         UInt32(101),
-        PipeWire.NODE_STATE_RUNNING,
+        PipeWireAO.NODE_STATE_RUNNING,
         "not part of this delta",
         initial_properties,
         initial_params,
@@ -52,7 +52,7 @@ end
     @test first_node.max_output_ports == 9
     @test first_node.n_input_ports == 0
     @test first_node.n_output_ports == 0
-    @test first_node.state == PipeWire.NODE_STATE_CREATING
+    @test first_node.state == PipeWireAO.NODE_STATE_CREATING
     @test first_node.error === nothing
     @test first_node.properties === initial_properties
     @test first_node.params == [
@@ -67,7 +67,7 @@ end
         NODE_CHANGE_STATE,
         UInt32(0),
         UInt32(0),
-        PipeWire.NODE_STATE_ERROR,
+        PipeWireAO.NODE_STATE_ERROR,
         "node failed",
         Dict{String,String}(),
         ParamInfo[],
@@ -79,11 +79,11 @@ end
     @test second_node.max_output_ports == 9
     @test second_node.change_mask ==
           NODE_CHANGE_PROPERTIES | NODE_CHANGE_PARAMS | NODE_CHANGE_STATE
-    @test second_node.state == PipeWire.NODE_STATE_ERROR
+    @test second_node.state == PipeWireAO.NODE_STATE_ERROR
     @test second_node.error == "node failed"
     @test second_node.properties === initial_properties
     @test second_node.params == first_node.params
-    @test first_node.state == PipeWire.NODE_STATE_CREATING
+    @test first_node.state == PipeWireAO.NODE_STATE_CREATING
 
     updated_params = [
         ParamInfo(UInt32(30), UInt32(1), UInt32(88), Int32(51)),
@@ -97,7 +97,7 @@ end
         NODE_CHANGE_PARAMS,
         UInt32(0),
         UInt32(0),
-        PipeWire.NODE_STATE_CREATING,
+        PipeWireAO.NODE_STATE_CREATING,
         nothing,
         Dict{String,String}(),
         updated_params,
@@ -117,7 +117,7 @@ end
         NODE_CHANGE_PROPERTIES,
         UInt32(0),
         UInt32(0),
-        PipeWire.NODE_STATE_CREATING,
+        PipeWireAO.NODE_STATE_CREATING,
         nothing,
         Dict{String,String}(),
         ParamInfo[],
@@ -126,39 +126,39 @@ end
     @test isempty(current_info(node_tracker).properties)
 
     port_properties = Dict("port.name" => "input")
-    port = PipeWire._merge_info(
+    port = PipeWireAO._merge_info(
         nothing,
         PortInfo(
             UInt32(11),
-            PipeWire.DIRECTION_INPUT,
+            PipeWireAO.DIRECTION_INPUT,
             PORT_CHANGE_PROPERTIES,
             port_properties,
             ParamInfo[],
         ),
     )
-    port = PipeWire._merge_info(
+    port = PipeWireAO._merge_info(
         port,
         PortInfo(
             UInt32(99),
-            PipeWire.DIRECTION_OUTPUT,
+            PipeWireAO.DIRECTION_OUTPUT,
             PORT_CHANGE_PARAMS,
             Dict{String,String}(),
             [ParamInfo(UInt32(1), UInt32(2), UInt32(0), Int32(9))],
         ),
     )
     @test port.id == 11
-    @test port.direction == PipeWire.DIRECTION_INPUT
+    @test port.direction == PipeWireAO.DIRECTION_INPUT
     @test port.change_mask == PORT_CHANGE_PROPERTIES | PORT_CHANGE_PARAMS
     @test port.properties === port_properties
     @test only(port.params).user == 1
     @test only(port.params).sequence == 0
 
     device_properties = Dict("device.name" => "test")
-    device = PipeWire._merge_info(
+    device = PipeWireAO._merge_info(
         nothing,
         DeviceInfo(UInt32(12), DEVICE_CHANGE_PROPERTIES, device_properties, ParamInfo[]),
     )
-    device = PipeWire._merge_info(
+    device = PipeWireAO._merge_info(
         device,
         DeviceInfo(UInt32(98), UInt64(0), Dict{String,String}(), ParamInfo[]),
     )
@@ -167,7 +167,7 @@ end
 
     format = Pod(Int32(44))
     link_properties = Dict("link.feedback" => "true")
-    link = PipeWire._merge_info(
+    link = PipeWireAO._merge_info(
         nothing,
         LinkInfo(
             UInt32(13),
@@ -176,7 +176,7 @@ end
             UInt32(3),
             UInt32(4),
             LINK_CHANGE_STATE | LINK_CHANGE_FORMAT | LINK_CHANGE_PROPERTIES,
-            PipeWire.LINK_STATE_ACTIVE,
+            PipeWireAO.LINK_STATE_ACTIVE,
             nothing,
             format,
             link_properties,
@@ -189,23 +189,23 @@ end
         UInt32(93),
         UInt32(94),
         LINK_CHANGE_STATE,
-        PipeWire.LINK_STATE_ERROR,
+        PipeWireAO.LINK_STATE_ERROR,
         "link failed",
         nothing,
         Dict{String,String}(),
     )
-    link = PipeWire._merge_info(link, state_only_link)
+    link = PipeWireAO._merge_info(link, state_only_link)
     @test link.id == 13
     @test link.output_node_id == 1
     @test link.output_port_id == 2
     @test link.input_node_id == 3
     @test link.input_port_id == 4
-    @test link.state == PipeWire.LINK_STATE_ERROR
+    @test link.state == PipeWireAO.LINK_STATE_ERROR
     @test link.error == "link failed"
     @test link.format === format
     @test link.properties === link_properties
 
-    cleared_link = PipeWire._merge_info(
+    cleared_link = PipeWireAO._merge_info(
         link,
         LinkInfo(
             UInt32(13),
@@ -214,7 +214,7 @@ end
             UInt32(3),
             UInt32(4),
             LINK_CHANGE_FORMAT | LINK_CHANGE_PROPERTIES,
-            PipeWire.LINK_STATE_INIT,
+            PipeWireAO.LINK_STATE_INIT,
             nothing,
             nothing,
             Dict{String,String}(),
@@ -271,16 +271,16 @@ end
         bound_node = bind(registry, node_global, Node)
         roundtrip(bound_node)
         @test proxy_id(bound_node) != typemax(UInt32)
-        @test subscribe_params!(bound_node, [PipeWire.SPA.PARAM_PROPS]) === bound_node
-        @test enum_params!(bound_node, PipeWire.SPA.PARAM_PROPS; count=1) === bound_node
+        @test subscribe_params!(bound_node, [PipeWireAO.SPA.PARAM_PROPS]) === bound_node
+        @test enum_params!(bound_node, PipeWireAO.SPA.PARAM_PROPS; count=1) === bound_node
         @test set_param!(
             bound_node,
-            PipeWire.SPA.PARAM_FORMAT,
+            PipeWireAO.SPA.PARAM_FORMAT,
             Pod(audio_format_param()),
         ) === bound_node
         @test send_command!(
             bound_node,
-            node_command(PipeWire.SPA.NODE_COMMAND_SUSPEND),
+            node_command(PipeWireAO.SPA.NODE_COMMAND_SUSPEND),
         ) === bound_node
 
         close(tracker)

@@ -1,8 +1,8 @@
 [general]
-library_name = "libpipewire"
+library_name = "libpipewire_ao"
 output_file_path = "../src/generated/LibPipeWire.jl"
 module_name = "LibPipeWire"
-jll_pkg_name = "PipeWire_jll"
+jll_pkg_name = "PipeWireAO_jll"
 export_symbol_prefixes = []
 prologue_file_path = "prologue.jl"
 epilogue_file_path = ""

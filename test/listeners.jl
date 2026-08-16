@@ -1,4 +1,4 @@
-using PipeWire
+using PipeWireAO
 using Test
 
 struct ListenerInfoCounter
@@ -77,7 +77,7 @@ function invoke_listener_core_events(listener::T) where {T<:ManagedListener}
         ccall(
             events.bound_props,
             Cvoid,
-            (Ref{T}, UInt32, UInt32, Ptr{PipeWire.LibPipeWire.spa_dict}),
+            (Ref{T}, UInt32, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_dict}),
             listener,
             UInt32(46),
             UInt32(47),
@@ -99,13 +99,13 @@ end
 
 function invoke_listener_stream_events(
     listener::T,
-    control::Ptr{PipeWire.LibPipeWire.pw_stream_control},
+    control::Ptr{PipeWireAO.LibPipeWire.pw_stream_control},
     param::Pod,
     command::Pod,
 ) where {T<:ManagedListener}
     events = getfield(listener, :events)[]
     detail = "listener stream state"
-    buffer = Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x5678))
+    buffer = Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x5678))
     GC.@preserve listener detail param command begin
         ccall(
             events.state_changed,
@@ -119,7 +119,7 @@ function invoke_listener_stream_events(
         ccall(
             events.control_info,
             Cvoid,
-            (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.pw_stream_control}),
+            (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.pw_stream_control}),
             listener,
             UInt32(3),
             control,
@@ -136,22 +136,22 @@ function invoke_listener_stream_events(
         ccall(
             events.param_changed,
             Cvoid,
-            (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.spa_pod}),
+            (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
             listener,
             UInt32(5),
-            PipeWire._pod_pointer(param),
+            PipeWireAO._pod_pointer(param),
         )
         ccall(
             events.add_buffer,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             listener,
             buffer,
         )
         ccall(
             events.remove_buffer,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             listener,
             buffer,
         )
@@ -159,9 +159,9 @@ function invoke_listener_stream_events(
         ccall(
             events.command,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_command}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_command}),
             listener,
-            Ptr{PipeWire.LibPipeWire.spa_command}(PipeWire._pod_pointer(command)),
+            Ptr{PipeWireAO.LibPipeWire.spa_command}(PipeWireAO._pod_pointer(command)),
         )
         ccall(events.trigger_done, Cvoid, (Ref{T},), listener)
     end
@@ -172,7 +172,7 @@ function invoke_listener_filter_process(listener::T) where {T<:ManagedListener}
     ccall(
         getfield(listener, :events)[].process,
         Cvoid,
-        (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_io_position}),
+        (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_io_position}),
         listener,
         C_NULL,
     )
@@ -191,7 +191,7 @@ function invoke_listener_filter_events(
 ) where {T<:ManagedListener}
     events = getfield(listener, :events)[]
     detail = "listener filter state"
-    buffer = Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x9abc))
+    buffer = Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x9abc))
     GC.@preserve listener detail param command begin
         ccall(
             events.state_changed,
@@ -215,16 +215,16 @@ function invoke_listener_filter_events(
         ccall(
             events.param_changed,
             Cvoid,
-            (Ref{T}, Ptr{Cvoid}, UInt32, Ptr{PipeWire.LibPipeWire.spa_pod}),
+            (Ref{T}, Ptr{Cvoid}, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
             listener,
             C_NULL,
             UInt32(9),
-            PipeWire._pod_pointer(param),
+            PipeWireAO._pod_pointer(param),
         )
         ccall(
             events.add_buffer,
             Cvoid,
-            (Ref{T}, Ptr{Cvoid}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{Cvoid}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             listener,
             C_NULL,
             buffer,
@@ -232,7 +232,7 @@ function invoke_listener_filter_events(
         ccall(
             events.remove_buffer,
             Cvoid,
-            (Ref{T}, Ptr{Cvoid}, Ptr{PipeWire.LibPipeWire.pw_buffer}),
+            (Ref{T}, Ptr{Cvoid}, Ptr{PipeWireAO.LibPipeWire.pw_buffer}),
             listener,
             C_NULL,
             buffer,
@@ -241,9 +241,9 @@ function invoke_listener_filter_events(
         ccall(
             events.command,
             Cvoid,
-            (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_command}),
+            (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_command}),
             listener,
-            Ptr{PipeWire.LibPipeWire.spa_command}(PipeWire._pod_pointer(command)),
+            Ptr{PipeWireAO.LibPipeWire.spa_command}(PipeWireAO._pod_pointer(command)),
         )
     end
     return nothing
@@ -294,7 +294,7 @@ function invoke_listener_proxy_events(listener::T) where {T<:ManagedListener}
         ccall(
             events.bound_props,
             Cvoid,
-            (Ref{T}, UInt32, Ptr{PipeWire.LibPipeWire.spa_dict}),
+            (Ref{T}, UInt32, Ptr{PipeWireAO.LibPipeWire.spa_dict}),
             listener,
             UInt32(64),
             C_NULL,
@@ -307,9 +307,9 @@ function invoke_listener_profile(listener::T, profile::Pod) where {T<:ManagedLis
     GC.@preserve listener profile ccall(
         getfield(listener, :events)[].profile,
         Cvoid,
-        (Ref{T}, Ptr{PipeWire.LibPipeWire.spa_pod}),
+        (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
         listener,
-        PipeWire._pod_pointer(profile),
+        PipeWireAO._pod_pointer(profile),
     )
     return nothing
 end
@@ -489,8 +489,8 @@ end
     stream_controls = Tuple{UInt32,Union{Nothing,StreamControl}}[]
     stream_ios = StreamIO[]
     stream_params = Tuple{UInt32,Union{Nothing,Pod}}[]
-    stream_added_buffers = Ptr{PipeWire.LibPipeWire.pw_buffer}[]
-    stream_removed_buffers = Ptr{PipeWire.LibPipeWire.pw_buffer}[]
+    stream_added_buffers = Ptr{PipeWireAO.LibPipeWire.pw_buffer}[]
+    stream_removed_buffers = Ptr{PipeWireAO.LibPipeWire.pw_buffer}[]
     stream_commands = Pod[]
     stream_drained = Ref(0)
     stream_triggered = Ref(0)
@@ -518,7 +518,7 @@ end
     control_name = "Listener Volume"
     control_values = Float32[0.25, 0.75]
     native_control = Ref(
-        PipeWire.LibPipeWire.pw_stream_control(
+        PipeWireAO.LibPipeWire.pw_stream_control(
             pointer(control_name),
             UInt32(0),
             0.5f0,
@@ -535,7 +535,7 @@ end
         invoke_listener_stream_events(
             stream_listener,
             Base.unsafe_convert(
-                Ptr{PipeWire.LibPipeWire.pw_stream_control},
+                Ptr{PipeWireAO.LibPipeWire.pw_stream_control},
                 native_control,
             ),
             stream_param,
@@ -561,7 +561,7 @@ end
     @test length(stream_params) == 1
     @test stream_params[1][1] == 5
     @test pod_value(Int32, something(stream_params[1][2])) == 41
-    @test stream_added_buffers == [Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x5678))]
+    @test stream_added_buffers == [Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x5678))]
     @test stream_removed_buffers == stream_added_buffers
     @test stream_drained[] == 1
     @test pod_value(Int32, only(stream_commands)) == 42
@@ -576,8 +576,8 @@ end
     filter_states = Tuple{Int32,Int32,Union{Nothing,String}}[]
     filter_ios = Tuple{Any,FilterIO}[]
     filter_params = Tuple{Any,UInt32,Union{Nothing,Pod}}[]
-    filter_added_buffers = Tuple{Any,Ptr{PipeWire.LibPipeWire.pw_buffer}}[]
-    filter_removed_buffers = Tuple{Any,Ptr{PipeWire.LibPipeWire.pw_buffer}}[]
+    filter_added_buffers = Tuple{Any,Ptr{PipeWireAO.LibPipeWire.pw_buffer}}[]
+    filter_removed_buffers = Tuple{Any,Ptr{PipeWireAO.LibPipeWire.pw_buffer}}[]
     filter_commands = Pod[]
     filter_drained = Ref(0)
     filter = Filter(core, "listener filter")
@@ -611,7 +611,7 @@ end
     @test filter_params[1][2] == 9
     @test pod_value(Int64, something(filter_params[1][3])) == 51
     @test filter_added_buffers == [
-        (nothing, Ptr{PipeWire.LibPipeWire.pw_buffer}(UInt(0x9abc))),
+        (nothing, Ptr{PipeWireAO.LibPipeWire.pw_buffer}(UInt(0x9abc))),
     ]
     @test filter_removed_buffers == filter_added_buffers
     @test filter_drained[] == 1

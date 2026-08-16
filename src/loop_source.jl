@@ -373,7 +373,7 @@ function Base.close(source::AbstractLoopSource)
     return nothing
 end
 
-"Wake an event source. Calls from any thread are supported by PipeWire."
+"Wake an event source. Calls from any thread are supported by PipeWireAO."
 function signal!(source::EventSource)
     _check_source_callback_error(source)
     result = _signal_event(source.loop, source)

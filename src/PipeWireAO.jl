@@ -1,4 +1,4 @@
-module PipeWire
+module PipeWireAO
 
 export CoreConnection,
     AudioInfoRaw,
@@ -254,4 +254,4 @@ Return the version of the loaded PipeWire client library.
 """
 library_version() = VersionNumber(unsafe_string(LibPipeWire.pw_get_library_version()))
 
-end # module PipeWire
+end # module PipeWireAO

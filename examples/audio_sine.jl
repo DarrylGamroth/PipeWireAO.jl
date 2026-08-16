@@ -1,6 +1,6 @@
 module AudioSine
 
-using PipeWire
+using PipeWireAO
 
 mutable struct SineProcess
     buffer::StreamBuffer

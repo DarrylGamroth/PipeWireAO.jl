@@ -1,4 +1,4 @@
-using PipeWire
+using PipeWireAO
 using Test
 
 function pod_value_allocations(::Type{T}, pod) where {T}
@@ -79,37 +79,37 @@ end
     @test parameter.object.type == SPA.OBJECT_PROPS
 
     readme = read(joinpath(@__DIR__, "..", "README.md"), String)
-    @test !occursin("PipeWire.LibPipeWire.SPA_", readme)
+    @test !occursin("PipeWireAO.LibPipeWire.SPA_", readme)
     examples = (
         joinpath(@__DIR__, "..", "examples", "audio_sine.jl"),
         joinpath(@__DIR__, "..", "examples", "video_capture.jl"),
     )
-    @test all(path -> !occursin("PipeWire.LibPipeWire", read(path, String)), examples)
+    @test all(path -> !occursin("PipeWireAO.LibPipeWire", read(path, String)), examples)
 end
 
 
 @testset "scalar SPA POD values" begin
     scalar_values = (
-        (Nothing, nothing, PipeWire.LibPipeWire.SPA_TYPE_None),
-        (Bool, true, PipeWire.LibPipeWire.SPA_TYPE_Bool),
-        (Bool, false, PipeWire.LibPipeWire.SPA_TYPE_Bool),
-        (SPA.Id, SPA.Id(17), PipeWire.LibPipeWire.SPA_TYPE_Id),
-        (Int32, Int32(-123), PipeWire.LibPipeWire.SPA_TYPE_Int),
-        (Int64, Int64(1) << 40, PipeWire.LibPipeWire.SPA_TYPE_Long),
-        (Float32, 1.25f0, PipeWire.LibPipeWire.SPA_TYPE_Float),
-        (Float64, -2.5, PipeWire.LibPipeWire.SPA_TYPE_Double),
-        (String, "PipeWire ✓", PipeWire.LibPipeWire.SPA_TYPE_String),
-        (SPA.Bytes, SPA.Bytes(UInt8[0x00, 0x7f, 0xff]), PipeWire.LibPipeWire.SPA_TYPE_Bytes),
-        (SPA.Fd, SPA.Fd(-1), PipeWire.LibPipeWire.SPA_TYPE_Fd),
+        (Nothing, nothing, PipeWireAO.LibPipeWire.SPA_TYPE_None),
+        (Bool, true, PipeWireAO.LibPipeWire.SPA_TYPE_Bool),
+        (Bool, false, PipeWireAO.LibPipeWire.SPA_TYPE_Bool),
+        (SPA.Id, SPA.Id(17), PipeWireAO.LibPipeWire.SPA_TYPE_Id),
+        (Int32, Int32(-123), PipeWireAO.LibPipeWire.SPA_TYPE_Int),
+        (Int64, Int64(1) << 40, PipeWireAO.LibPipeWire.SPA_TYPE_Long),
+        (Float32, 1.25f0, PipeWireAO.LibPipeWire.SPA_TYPE_Float),
+        (Float64, -2.5, PipeWireAO.LibPipeWire.SPA_TYPE_Double),
+        (String, "PipeWire ✓", PipeWireAO.LibPipeWire.SPA_TYPE_String),
+        (SPA.Bytes, SPA.Bytes(UInt8[0x00, 0x7f, 0xff]), PipeWireAO.LibPipeWire.SPA_TYPE_Bytes),
+        (SPA.Fd, SPA.Fd(-1), PipeWireAO.LibPipeWire.SPA_TYPE_Fd),
         (
             SPA.Rectangle,
             SPA.Rectangle(1_920, 1_080),
-            PipeWire.LibPipeWire.SPA_TYPE_Rectangle,
+            PipeWireAO.LibPipeWire.SPA_TYPE_Rectangle,
         ),
         (
             SPA.Fraction,
             SPA.Fraction(30_000, 1_001),
-            PipeWire.LibPipeWire.SPA_TYPE_Fraction,
+            PipeWireAO.LibPipeWire.SPA_TYPE_Fraction,
         ),
     )
 
@@ -148,16 +148,16 @@ end
     @test_throws ArgumentError SPA.Fraction(1, -1)
     @test_throws ArgumentError Pod("embedded\0null")
 
-    malformed_string = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_String),
+    malformed_string = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_String),
         UInt8[0x61],
     )
-    embedded_null = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_String),
+    embedded_null = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_String),
         UInt8[0x61, 0x00, 0x62, 0x00],
     )
-    malformed_bool = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Bool),
+    malformed_bool = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Bool),
         UInt8[0x01],
     )
     @test_throws ArgumentError pod_value(String, malformed_string)
@@ -181,7 +181,7 @@ end
 
     for array in arrays
         pod = Pod(array)
-        @test pod_type(pod) == PipeWire.LibPipeWire.SPA_TYPE_Array
+        @test pod_type(pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Array
         @test pod_value(typeof(array), pod) == array
         @test pod_value(pod) == array
         @test isconcretetype(typeof(array))
@@ -204,7 +204,7 @@ end
     value = SPA.Struct(children)
     children[1] = Pod(Int32(99))
     pod = Pod(value)
-    @test pod_type(pod) == PipeWire.LibPipeWire.SPA_TYPE_Struct
+    @test pod_type(pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Struct
     decoded = @inferred pod_value(SPA.Struct, pod)
     @test decoded == value
     @test pod_value(pod) == value
@@ -215,34 +215,34 @@ end
     @test pod_value(decoded.values[3]) == SPA.Array(Int64[8, 9])
 
     partial_array_body = UInt8[]
-    PipeWire._append_bits!(partial_array_body, UInt32(sizeof(Int32)))
-    PipeWire._append_bits!(partial_array_body, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Int))
+    PipeWireAO._append_bits!(partial_array_body, UInt32(sizeof(Int32)))
+    PipeWireAO._append_bits!(partial_array_body, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Int))
     append!(partial_array_body, UInt8[1, 2, 3])
-    partial_array = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Array),
+    partial_array = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Array),
         partial_array_body,
     )
-    missing_array_header = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Array),
+    missing_array_header = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Array),
         UInt8[],
     )
     @test_throws ArgumentError pod_value(SPA.Array{Int32}, partial_array)
     @test_throws ArgumentError pod_value(SPA.Array, missing_array_header)
 
-    unpadded_struct = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Struct),
+    unpadded_struct = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Struct),
         Pod(Int32(1)).data,
     )
-    partial_struct = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Struct),
+    partial_struct = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Struct),
         UInt8[0x01],
     )
     @test_throws ArgumentError pod_value(SPA.Struct, unpadded_struct)
     @test_throws ArgumentError pod_value(SPA.Struct, partial_struct)
 
     oversized_header = UInt8[]
-    PipeWire._append_bits!(oversized_header, UInt32(1 << 20))
-    PipeWire._append_bits!(oversized_header, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Bytes))
+    PipeWireAO._append_bits!(oversized_header, UInt32(1 << 20))
+    PipeWireAO._append_bits!(oversized_header, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Bytes))
     @test_throws ArgumentError Pod(oversized_header)
 end
 
@@ -276,7 +276,7 @@ end
 
     for choice in choices
         pod = Pod(choice)
-        @test pod_type(pod) == PipeWire.LibPipeWire.SPA_TYPE_Choice
+        @test pod_type(pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Choice
         @test pod_value(typeof(choice), pod) == choice
         @test pod_value(pod) == choice
         @test isconcretetype(typeof(choice))
@@ -306,29 +306,29 @@ end
     @test_throws ArgumentError Pod(SPA.Choice(SPA.CHOICE_NONE, ["not fixed-size"]))
 
     unknown_kind_body = UInt8[]
-    PipeWire._append_bits!(unknown_kind_body, UInt32(99))
-    PipeWire._append_bits!(unknown_kind_body, UInt32(0))
-    PipeWire._append_bits!(unknown_kind_body, UInt32(sizeof(Int32)))
-    PipeWire._append_bits!(unknown_kind_body, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Int))
-    PipeWire._append_bits!(unknown_kind_body, Int32(1))
-    unknown_kind = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Choice),
+    PipeWireAO._append_bits!(unknown_kind_body, UInt32(99))
+    PipeWireAO._append_bits!(unknown_kind_body, UInt32(0))
+    PipeWireAO._append_bits!(unknown_kind_body, UInt32(sizeof(Int32)))
+    PipeWireAO._append_bits!(unknown_kind_body, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Int))
+    PipeWireAO._append_bits!(unknown_kind_body, Int32(1))
+    unknown_kind = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Choice),
         unknown_kind_body,
     )
 
     partial_choice_body = UInt8[]
-    PipeWire._append_bits!(partial_choice_body, UInt32(SPA.CHOICE_NONE))
-    PipeWire._append_bits!(partial_choice_body, UInt32(0))
-    PipeWire._append_bits!(partial_choice_body, UInt32(sizeof(Int32)))
-    PipeWire._append_bits!(partial_choice_body, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Int))
+    PipeWireAO._append_bits!(partial_choice_body, UInt32(SPA.CHOICE_NONE))
+    PipeWireAO._append_bits!(partial_choice_body, UInt32(0))
+    PipeWireAO._append_bits!(partial_choice_body, UInt32(sizeof(Int32)))
+    PipeWireAO._append_bits!(partial_choice_body, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Int))
     append!(partial_choice_body, UInt8[1, 2, 3])
-    partial_choice = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Choice),
+    partial_choice = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Choice),
         partial_choice_body,
     )
 
-    missing_choice_header = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Choice),
+    missing_choice_header = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Choice),
         UInt8[],
     )
     @test_throws ArgumentError pod_value(SPA.Choice, unknown_kind)
@@ -349,7 +349,7 @@ end
         ),
     )
     pod = Pod(object)
-    @test pod_type(pod) == PipeWire.LibPipeWire.SPA_TYPE_Object
+    @test pod_type(pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Object
     decoded = @inferred pod_value(SPA.Object, pod)
     @test decoded == object
     @test pod_value(pod) == object
@@ -375,16 +375,16 @@ end
     @test pod_value(Int32, copied.properties[1].value) == 2
 
     format = pod_value(SPA.Object, audio_format())
-    @test format.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format
-    @test format.id == PipeWire.LibPipeWire.SPA_PARAM_EnumFormat
+    @test format.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format
+    @test format.id == PipeWireAO.LibPipeWire.SPA_PARAM_EnumFormat
     @test length(format.properties) == 6
     @test map(property -> property.key, format.properties) == UInt32[
-        PipeWire.LibPipeWire.SPA_FORMAT_mediaType,
-        PipeWire.LibPipeWire.SPA_FORMAT_mediaSubtype,
-        PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_format,
-        PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_rate,
-        PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_channels,
-        PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_position,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_mediaType,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_mediaSubtype,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_format,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_rate,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_channels,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_position,
     ]
 
     @test_throws ArgumentError SPA.Property(-1, Int32(1))
@@ -392,28 +392,28 @@ end
     @test_throws ArgumentError SPA.Object(-1, 1, SPA.Property[])
     @test_throws ArgumentError SPA.Object(1, -1, SPA.Property[])
 
-    missing_object_header = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Object),
+    missing_object_header = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Object),
         UInt8[],
     )
     partial_property_body = UInt8[]
-    PipeWire._append_bits!(partial_property_body, UInt32(1))
-    PipeWire._append_bits!(partial_property_body, UInt32(2))
+    PipeWireAO._append_bits!(partial_property_body, UInt32(1))
+    PipeWireAO._append_bits!(partial_property_body, UInt32(2))
     push!(partial_property_body, 0x01)
-    partial_property = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Object),
+    partial_property = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Object),
         partial_property_body,
     )
     truncated_value_body = UInt8[]
-    PipeWire._append_bits!(truncated_value_body, UInt32(1))
-    PipeWire._append_bits!(truncated_value_body, UInt32(2))
-    PipeWire._append_bits!(truncated_value_body, UInt32(3))
-    PipeWire._append_bits!(truncated_value_body, UInt32(0))
-    PipeWire._append_bits!(truncated_value_body, UInt32(8))
-    PipeWire._append_bits!(truncated_value_body, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Long))
-    PipeWire._append_bits!(truncated_value_body, Int32(1))
-    truncated_value = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Object),
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(1))
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(2))
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(3))
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(0))
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(8))
+    PipeWireAO._append_bits!(truncated_value_body, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Long))
+    PipeWireAO._append_bits!(truncated_value_body, Int32(1))
+    truncated_value = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Object),
         truncated_value_body,
     )
     @test_throws ArgumentError pod_value(SPA.Object, missing_object_header)
@@ -429,7 +429,7 @@ end
         SPA.Control(256, 4, SPA.Object(1, 2, SPA.Property(3, Int32(4)))),
     )
     pod = Pod(sequence)
-    @test pod_type(pod) == PipeWire.LibPipeWire.SPA_TYPE_Sequence
+    @test pod_type(pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Sequence
     decoded = @inferred pod_value(SPA.Sequence, pod)
     @test decoded == sequence
     @test pod_value(pod) == sequence
@@ -452,35 +452,35 @@ end
     @test_throws ArgumentError SPA.Control(1, -1, Int32(1))
     @test_throws ArgumentError SPA.Sequence(-1, SPA.Control[])
 
-    missing_sequence_header = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Sequence),
+    missing_sequence_header = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Sequence),
         UInt8[],
     )
     nonzero_padding_body = UInt8[]
-    PipeWire._append_bits!(nonzero_padding_body, UInt32(1))
-    PipeWire._append_bits!(nonzero_padding_body, UInt32(1))
-    nonzero_padding = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Sequence),
+    PipeWireAO._append_bits!(nonzero_padding_body, UInt32(1))
+    PipeWireAO._append_bits!(nonzero_padding_body, UInt32(1))
+    nonzero_padding = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Sequence),
         nonzero_padding_body,
     )
     partial_control_body = UInt8[]
-    PipeWire._append_bits!(partial_control_body, UInt32(1))
-    PipeWire._append_bits!(partial_control_body, UInt32(0))
+    PipeWireAO._append_bits!(partial_control_body, UInt32(1))
+    PipeWireAO._append_bits!(partial_control_body, UInt32(0))
     push!(partial_control_body, 0x01)
-    partial_control = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Sequence),
+    partial_control = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Sequence),
         partial_control_body,
     )
     truncated_control_body = UInt8[]
-    PipeWire._append_bits!(truncated_control_body, UInt32(1))
-    PipeWire._append_bits!(truncated_control_body, UInt32(0))
-    PipeWire._append_bits!(truncated_control_body, UInt32(0))
-    PipeWire._append_bits!(truncated_control_body, UInt32(2))
-    PipeWire._append_bits!(truncated_control_body, UInt32(8))
-    PipeWire._append_bits!(truncated_control_body, UInt32(PipeWire.LibPipeWire.SPA_TYPE_Long))
-    PipeWire._append_bits!(truncated_control_body, Int32(1))
-    truncated_control = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Sequence),
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(1))
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(0))
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(0))
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(2))
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(8))
+    PipeWireAO._append_bits!(truncated_control_body, UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Long))
+    PipeWireAO._append_bits!(truncated_control_body, Int32(1))
+    truncated_control = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Sequence),
         truncated_control_body,
     )
     @test_throws ArgumentError pod_value(SPA.Sequence, missing_sequence_header)
@@ -495,19 +495,19 @@ end
 
     format = @inferred video_format()
     object = pod_value(SPA.Object, format)
-    @test object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format
-    @test object.id == PipeWire.LibPipeWire.SPA_PARAM_EnumFormat
+    @test object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format
+    @test object.id == PipeWireAO.LibPipeWire.SPA_PARAM_EnumFormat
     @test map(property -> property.key, object.properties) == UInt32[
-        PipeWire.LibPipeWire.SPA_FORMAT_mediaType,
-        PipeWire.LibPipeWire.SPA_FORMAT_mediaSubtype,
-        PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_format,
-        PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_size,
-        PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_framerate,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_mediaType,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_mediaSubtype,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_format,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_size,
+        PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_framerate,
     ]
     @test pod_value(SPA.Id, object.properties[1].value) ==
-          SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_TYPE_video)
+          SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_TYPE_video)
     @test pod_value(SPA.Id, object.properties[2].value) ==
-          SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_SUBTYPE_raw)
+          SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_SUBTYPE_raw)
     @test pod_value(SPA.Id, object.properties[3].value) == SPA.Id(UInt32(Video.RGBA))
     @test pod_value(SPA.Rectangle, object.properties[4].value) == SPA.Rectangle(640, 480)
     @test pod_value(SPA.Fraction, object.properties[5].value) == SPA.Fraction(30, 1)
@@ -536,20 +536,20 @@ end
     @test complete.id == 4
     @test length(complete.properties) == 17
     property_by_key = Dict(property.key => property for property in complete.properties)
-    @test pod_value(SPA.Id, property_by_key[PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_format].value) ==
+    @test pod_value(SPA.Id, property_by_key[PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_format].value) ==
           SPA.Id(UInt32(Video.NV12))
-    @test pod_value(Int64, property_by_key[PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_modifier].value) == 0
-    @test property_by_key[PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_modifier].flags ==
+    @test pod_value(Int64, property_by_key[PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_modifier].value) == 0
+    @test property_by_key[PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_modifier].flags ==
           SPA.PROPERTY_MANDATORY
-    @test pod_value(Int32, property_by_key[PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_views].value) == 2
+    @test pod_value(Int32, property_by_key[PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_views].value) == 2
     @test pod_value(
         SPA.Fraction,
-        property_by_key[PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_pixelAspectRatio].value,
+        property_by_key[PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_pixelAspectRatio].value,
     ) == SPA.Fraction(1, 1)
 
     no_rate = pod_value(SPA.Object, video_format(framerate=nothing))
     @test all(
-        property -> property.key != PipeWire.LibPipeWire.SPA_FORMAT_VIDEO_framerate,
+        property -> property.key != PipeWireAO.LibPipeWire.SPA_FORMAT_VIDEO_framerate,
         no_rate.properties,
     )
 
@@ -578,24 +578,24 @@ end
 
     unpositioned = Pod(
         SPA.Object(
-            PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format,
-            PipeWire.LibPipeWire.SPA_PARAM_Format,
+            PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format,
+            PipeWireAO.LibPipeWire.SPA_PARAM_Format,
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_mediaType,
-                SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_TYPE_audio),
+                PipeWireAO.LibPipeWire.SPA_FORMAT_mediaType,
+                SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_TYPE_audio),
             ),
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_mediaSubtype,
-                SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_SUBTYPE_raw),
+                PipeWireAO.LibPipeWire.SPA_FORMAT_mediaSubtype,
+                SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_SUBTYPE_raw),
             ),
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_format,
+                PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_format,
                 SPA.Id(UInt32(Audio.F32)),
             ),
-            SPA.Property(PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_rate, Int32(48_000)),
-            SPA.Property(PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_channels, Int32(2)),
+            SPA.Property(PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_rate, Int32(48_000)),
+            SPA.Property(PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_channels, Int32(2)),
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_position,
+                PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_position,
                 SPA.Array(SPA.Id[SPA.Id(UInt32(Audio.MONO))]),
             ),
         ),
@@ -649,18 +649,18 @@ end
 
     unfixed_audio = Pod(
         SPA.Object(
-            PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format,
-            PipeWire.LibPipeWire.SPA_PARAM_EnumFormat,
+            PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format,
+            PipeWireAO.LibPipeWire.SPA_PARAM_EnumFormat,
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_mediaType,
-                SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_TYPE_audio),
+                PipeWireAO.LibPipeWire.SPA_FORMAT_mediaType,
+                SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_TYPE_audio),
             ),
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_mediaSubtype,
-                SPA.Id(PipeWire.LibPipeWire.SPA_MEDIA_SUBTYPE_raw),
+                PipeWireAO.LibPipeWire.SPA_FORMAT_mediaSubtype,
+                SPA.Id(PipeWireAO.LibPipeWire.SPA_MEDIA_SUBTYPE_raw),
             ),
             SPA.Property(
-                PipeWire.LibPipeWire.SPA_FORMAT_AUDIO_rate,
+                PipeWireAO.LibPipeWire.SPA_FORMAT_AUDIO_rate,
                 SPA.Choice(SPA.CHOICE_ENUM, Int32[48_000, 44_100]),
             ),
         ),
@@ -673,7 +673,7 @@ end
     bitmap = SPA.Bitmap(source)
     source[1] = 0x00
     bitmap_pod = Pod(bitmap)
-    @test pod_type(bitmap_pod) == PipeWire.LibPipeWire.SPA_TYPE_Bitmap
+    @test pod_type(bitmap_pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Bitmap
     @test pod_value(SPA.Bitmap, bitmap_pod) == SPA.Bitmap(UInt8[0xaa, 0x55])
     @test pod_value(bitmap_pod) == bitmap
     @test isconcretetype(SPA.Bitmap)
@@ -685,7 +685,7 @@ end
     pointer_pod = GC.@preserve storage Pod(pointer)
     decoded = @inferred pod_value(SPA.Pointer{Int32}, pointer_pod)
     @test decoded == pointer
-    @test pod_type(pointer_pod) == PipeWire.LibPipeWire.SPA_TYPE_Pointer
+    @test pod_type(pointer_pod) == PipeWireAO.LibPipeWire.SPA_TYPE_Pointer
     @test pod_value(pointer_pod) == SPA.Pointer(7, Ptr{Cvoid}(pointer.value))
     @test isconcretetype(typeof(pointer))
     @test all(isconcretetype, fieldtypes(typeof(pointer)))
@@ -694,17 +694,17 @@ end
     @test_throws ArgumentError SPA.Pointer(-1, pointer.value)
 
     nonzero_padding_body = UInt8[]
-    PipeWire._append_bits!(nonzero_padding_body, UInt32(7))
-    PipeWire._append_bits!(nonzero_padding_body, UInt32(1))
-    PipeWire._append_bits!(nonzero_padding_body, UInt(pointer.value))
-    nonzero_padding = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Pointer),
+    PipeWireAO._append_bits!(nonzero_padding_body, UInt32(7))
+    PipeWireAO._append_bits!(nonzero_padding_body, UInt32(1))
+    PipeWireAO._append_bits!(nonzero_padding_body, UInt(pointer.value))
+    nonzero_padding = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Pointer),
         nonzero_padding_body,
     )
     @test_throws ArgumentError pod_value(SPA.Pointer{Int32}, nonzero_padding)
 
-    empty_bitmap = PipeWire._pod_from_body(
-        UInt32(PipeWire.LibPipeWire.SPA_TYPE_Bitmap),
+    empty_bitmap = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Bitmap),
         UInt8[],
     )
     @test_throws ArgumentError pod_value(SPA.Bitmap, empty_bitmap)
@@ -716,23 +716,23 @@ end
         size=4096,
         stride=256,
         align=16,
-        data_types=Int32(1 << PipeWire.LibPipeWire.SPA_DATA_MemPtr),
-        metadata_types=Int32(1 << PipeWire.LibPipeWire.SPA_META_Header),
+        data_types=Int32(1 << PipeWireAO.LibPipeWire.SPA_DATA_MemPtr),
+        metadata_types=Int32(1 << PipeWireAO.LibPipeWire.SPA_META_Header),
     )
     @test buffers isa SPA.Parameter
     @test all(isconcretetype, fieldtypes(typeof(buffers)))
-    @test buffers.object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_ParamBuffers
-    @test buffers.object.id == PipeWire.LibPipeWire.SPA_PARAM_Buffers
+    @test buffers.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_ParamBuffers
+    @test buffers.object.id == PipeWireAO.LibPipeWire.SPA_PARAM_Buffers
     @test pod_value(SPA.Parameter, Pod(buffers)) == buffers
 
-    metadata = metadata_param(PipeWire.LibPipeWire.SPA_META_Header; size=64)
-    io = io_param(PipeWire.LibPipeWire.SPA_IO_Buffers; size=32)
+    metadata = metadata_param(PipeWireAO.LibPipeWire.SPA_META_Header; size=64)
+    io = io_param(PipeWireAO.LibPipeWire.SPA_IO_Buffers; size=32)
     @test pod_value(SPA.Parameter, Pod(metadata)) == metadata
     @test pod_value(SPA.Parameter, Pod(io)) == io
     @test_throws ArgumentError buffers_param(size=big(typemax(Int32)) + 1)
 
     latency = latency_param(
-        PipeWire.LibPipeWire.SPA_DIRECTION_OUTPUT;
+        PipeWireAO.LibPipeWire.SPA_DIRECTION_OUTPUT;
         min_quantum=0.5,
         max_quantum=2,
         min_rate=64,
@@ -742,42 +742,42 @@ end
     )
     process_latency = process_latency_param(quantum=1, rate=128, ns=500)
     tag = tag_param(
-        PipeWire.LibPipeWire.SPA_DIRECTION_INPUT,
+        PipeWireAO.LibPipeWire.SPA_DIRECTION_INPUT,
         ("language" => "en", "role" => "music"),
     )
-    @test latency.object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_ParamLatency
+    @test latency.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_ParamLatency
     @test process_latency.object.type ==
-          PipeWire.LibPipeWire.SPA_TYPE_OBJECT_ParamProcessLatency
-    @test tag.object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_ParamTag
+          PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_ParamProcessLatency
+    @test tag.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_ParamTag
     @test pod_value(SPA.Parameter, Pod(latency)) == latency
     @test pod_value(SPA.Parameter, Pod(process_latency)) == process_latency
     @test pod_value(SPA.Parameter, Pod(tag)) == tag
     @test_throws ArgumentError latency_param(
-        PipeWire.LibPipeWire.SPA_DIRECTION_INPUT;
+        PipeWireAO.LibPipeWire.SPA_DIRECTION_INPUT;
         min_quantum=Inf,
     )
 
-    command = node_command(PipeWire.LibPipeWire.SPA_NODE_COMMAND_Start)
-    event = node_event(PipeWire.LibPipeWire.SPA_NODE_EVENT_RequestProcess)
+    command = node_command(PipeWireAO.LibPipeWire.SPA_NODE_COMMAND_Start)
+    event = node_event(PipeWireAO.LibPipeWire.SPA_NODE_EVENT_RequestProcess)
     @test command isa SPA.Command
     @test event isa SPA.Event
     @test all(isconcretetype, fieldtypes(typeof(command)))
     @test all(isconcretetype, fieldtypes(typeof(event)))
     @test pod_value(SPA.Command, Pod(command)) == command
     @test pod_value(SPA.Event, Pod(event)) == event
-    @test device_command(1).object.type == PipeWire.LibPipeWire.SPA_TYPE_COMMAND_Device
-    @test device_event(1).object.type == PipeWire.LibPipeWire.SPA_TYPE_EVENT_Device
+    @test device_command(1).object.type == PipeWireAO.LibPipeWire.SPA_TYPE_COMMAND_Device
+    @test device_event(1).object.type == PipeWireAO.LibPipeWire.SPA_TYPE_EVENT_Device
     @test_throws ArgumentError SPA.Command(
-        SPA.Object(PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format, 0),
+        SPA.Object(PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format, 0),
     )
     @test_throws ArgumentError SPA.Event(
-        SPA.Object(PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format, 0),
+        SPA.Object(PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format, 0),
     )
 
     typed_audio = audio_format_param(rate=48_000, channels=2)
     typed_video = video_format_param(size=SPA.Rectangle(1920, 1080))
     @test typed_audio isa SPA.Parameter
     @test typed_video isa SPA.Parameter
-    @test typed_audio.object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format
-    @test typed_video.object.type == PipeWire.LibPipeWire.SPA_TYPE_OBJECT_Format
+    @test typed_audio.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format
+    @test typed_video.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format
 end
