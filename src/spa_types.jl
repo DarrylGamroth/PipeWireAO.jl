@@ -49,7 +49,12 @@ export Array,
     Fraction,
     Id,
     Object,
+    PAGE_SIZE_HUGE_1GB,
+    PAGE_SIZE_HUGE_2MB,
+    PAGE_SIZE_HUGE_DEFAULT,
+    PAGE_SIZE_NORMAL,
     Parameter,
+    PageSizeHint,
     PROPERTY_DONT_FIXATE,
     PROPERTY_DROP,
     PROPERTY_HARDWARE,
@@ -63,6 +68,14 @@ export Array,
     Struct
 
 include("spa_ids.jl")
+
+"A best-effort preference for the backing page size of shared buffer memory."
+@enum PageSizeHint::UInt32 begin
+    PAGE_SIZE_NORMAL = LibPipeWire.SPA_BUFFER_PAGE_SIZE_NORMAL
+    PAGE_SIZE_HUGE_DEFAULT = LibPipeWire.SPA_BUFFER_PAGE_SIZE_HUGE_DEFAULT
+    PAGE_SIZE_HUGE_2MB = LibPipeWire.SPA_BUFFER_PAGE_SIZE_HUGE_2MB
+    PAGE_SIZE_HUGE_1GB = LibPipeWire.SPA_BUFFER_PAGE_SIZE_HUGE_1GB
+end
 
 "An enumerated SPA POD ID."
 struct Id
@@ -491,6 +504,56 @@ end
 end
 
 end # module Audio
+
+"""
+Native element representations and contiguous layouts used by
+[`ndarray_format`](@ref).
+
+Shapes are always expressed in logical axis order. `ROW_MAJOR` makes the last
+axis contiguous; `COLUMN_MAJOR` makes the first axis contiguous and therefore
+matches ordinary Julia arrays.
+"""
+module NdArray
+
+using ..LibPipeWire
+
+@enum ElementType::UInt32 begin
+    UNKNOWN = LibPipeWire.SPA_ELEMENT_TYPE_UNKNOWN
+    BOOL8 = LibPipeWire.SPA_ELEMENT_TYPE_BOOL8
+    I8 = LibPipeWire.SPA_ELEMENT_TYPE_I8
+    U8 = LibPipeWire.SPA_ELEMENT_TYPE_U8
+    I16_LE = LibPipeWire.SPA_ELEMENT_TYPE_I16_LE
+    U16_LE = LibPipeWire.SPA_ELEMENT_TYPE_U16_LE
+    I32_LE = LibPipeWire.SPA_ELEMENT_TYPE_I32_LE
+    U32_LE = LibPipeWire.SPA_ELEMENT_TYPE_U32_LE
+    I64_LE = LibPipeWire.SPA_ELEMENT_TYPE_I64_LE
+    U64_LE = LibPipeWire.SPA_ELEMENT_TYPE_U64_LE
+    I128_LE = LibPipeWire.SPA_ELEMENT_TYPE_I128_LE
+    U128_LE = LibPipeWire.SPA_ELEMENT_TYPE_U128_LE
+    F8_E4M3FN = LibPipeWire.SPA_ELEMENT_TYPE_F8_E4M3FN
+    F8_E4M3FNUZ = LibPipeWire.SPA_ELEMENT_TYPE_F8_E4M3FNUZ
+    F8_E5M2 = LibPipeWire.SPA_ELEMENT_TYPE_F8_E5M2
+    F8_E5M2FNUZ = LibPipeWire.SPA_ELEMENT_TYPE_F8_E5M2FNUZ
+    F16_LE = LibPipeWire.SPA_ELEMENT_TYPE_F16_LE
+    BF16_LE = LibPipeWire.SPA_ELEMENT_TYPE_BF16_LE
+    F32_LE = LibPipeWire.SPA_ELEMENT_TYPE_F32_LE
+    F64_LE = LibPipeWire.SPA_ELEMENT_TYPE_F64_LE
+    F128_LE = LibPipeWire.SPA_ELEMENT_TYPE_F128_LE
+    COMPLEX_F16_LE = LibPipeWire.SPA_ELEMENT_TYPE_COMPLEX_F16_LE
+    COMPLEX_BF16_LE = LibPipeWire.SPA_ELEMENT_TYPE_COMPLEX_BF16_LE
+    COMPLEX_F32_LE = LibPipeWire.SPA_ELEMENT_TYPE_COMPLEX_F32_LE
+    COMPLEX_F64_LE = LibPipeWire.SPA_ELEMENT_TYPE_COMPLEX_F64_LE
+    COMPLEX_F128_LE = LibPipeWire.SPA_ELEMENT_TYPE_COMPLEX_F128_LE
+    START_CUSTOM = LibPipeWire.SPA_ELEMENT_TYPE_START_CUSTOM
+end
+
+@enum Layout::UInt32 begin
+    LAYOUT_UNKNOWN = LibPipeWire.SPA_NDARRAY_LAYOUT_UNKNOWN
+    ROW_MAJOR = LibPipeWire.SPA_NDARRAY_LAYOUT_ROW_MAJOR
+    COLUMN_MAJOR = LibPipeWire.SPA_NDARRAY_LAYOUT_COLUMN_MAJOR
+end
+
+end # module NdArray
 
 """
 Raw video pixel formats used by [`video_format`](@ref).

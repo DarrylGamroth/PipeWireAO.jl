@@ -132,6 +132,7 @@ end
     MEDIA_SUBTYPE_JPEG = LibPipeWire.SPA_MEDIA_SUBTYPE_jpeg
     MEDIA_SUBTYPE_MIDI = LibPipeWire.SPA_MEDIA_SUBTYPE_midi
     MEDIA_SUBTYPE_CONTROL = LibPipeWire.SPA_MEDIA_SUBTYPE_control
+    MEDIA_SUBTYPE_NDARRAY = LibPipeWire.SPA_MEDIA_SUBTYPE_ndarray
 end
 
 # Property keys in SPA format objects.
@@ -176,6 +177,10 @@ end
     FORMAT_VIDEO_H265_ALIGNMENT = LibPipeWire.SPA_FORMAT_VIDEO_H265_alignment
     FORMAT_VIDEO_DEVICE_ID = LibPipeWire.SPA_FORMAT_VIDEO_deviceId
     FORMAT_CONTROL_TYPES = LibPipeWire.SPA_FORMAT_CONTROL_types
+    FORMAT_NDARRAY_ELEMENT_TYPE = LibPipeWire.SPA_FORMAT_NDARRAY_elementType
+    FORMAT_NDARRAY_SHAPE = LibPipeWire.SPA_FORMAT_NDARRAY_shape
+    FORMAT_NDARRAY_LAYOUT = LibPipeWire.SPA_FORMAT_NDARRAY_layout
+    FORMAT_NDARRAY_RATE = LibPipeWire.SPA_FORMAT_NDARRAY_rate
 end
 
 # Property keys in SPA properties objects.
@@ -249,6 +254,9 @@ const DATA_FLAG_WRITABLE = UInt32(1 << 1)
 const DATA_FLAG_DYNAMIC = UInt32(1 << 2)
 const DATA_FLAG_READWRITE = DATA_FLAG_READABLE | DATA_FLAG_WRITABLE
 const DATA_FLAG_MAPPABLE = UInt32(1 << 3)
+const DATA_FLAG_HUGE_PAGES = UInt32(1 << 4)
+const DATA_FLAG_HUGE_2MB = UInt32(1 << 5)
+const DATA_FLAG_HUGE_1GB = UInt32(1 << 6)
 
 # Metadata types attached to SPA buffers.
 @_spa_ids begin
@@ -262,6 +270,7 @@ const DATA_FLAG_MAPPABLE = UInt32(1 << 3)
     META_BUSY = LibPipeWire.SPA_META_Busy
     META_VIDEO_TRANSFORM = LibPipeWire.SPA_META_VideoTransform
     META_SYNC_TIMELINE = LibPipeWire.SPA_META_SyncTimeline
+    META_PROGRESSIVE = LibPipeWire.SPA_META_Progressive
 end
 
 # Flags stored in `spa_meta_header.flags`.
@@ -313,6 +322,7 @@ end
     BUFFERS_ALIGN = LibPipeWire.SPA_PARAM_BUFFERS_align
     BUFFERS_DATA_TYPES = LibPipeWire.SPA_PARAM_BUFFERS_dataType
     BUFFERS_META_TYPES = LibPipeWire.SPA_PARAM_BUFFERS_metaType
+    BUFFERS_PAGE_SIZE_HINT = LibPipeWire.SPA_PARAM_BUFFERS_pageSizeHint
 end
 
 # Property keys in SPA buffer-metadata parameters.

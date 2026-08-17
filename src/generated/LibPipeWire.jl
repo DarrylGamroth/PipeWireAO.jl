@@ -3821,6 +3821,7 @@ end
 | SPA\\_META\\_Busy           | don't write to buffer when count > 0                                                                          |
 | SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
 | SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
+| SPA\\_META\\_Progressive    | struct [`spa_meta_progressive`](@ref)                                                                         |
 | \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
 const spa_meta_type = UInt32
@@ -3834,7 +3835,8 @@ const SPA_META_Control = 6 % UInt32
 const SPA_META_Busy = 7 % UInt32
 const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
-const _SPA_META_LAST = 10 % UInt32
+const SPA_META_Progressive = 10 % UInt32
+const _SPA_META_LAST = 11 % UInt32
 const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_features = 65536 % UInt32
 
@@ -4004,6 +4006,56 @@ struct spa_meta_sync_timeline
     padding::UInt32
     acquire_point::UInt64
     release_point::UInt64
+end
+
+const spa_meta_progressive_state = UInt32
+const SPA_META_PROGRESSIVE_STATE_PREPARED = 0 % UInt32
+const SPA_META_PROGRESSIVE_STATE_ACTIVE = 1 % UInt32
+const SPA_META_PROGRESSIVE_STATE_COMPLETE = 2 % UInt32
+const SPA_META_PROGRESSIVE_STATE_ABORTED = 3 % UInt32
+
+"""
+    spa_meta_progressive
+
+Progressive payload publication state shared by producer and consumer.
+
+All fields other than snapshot are immutable while a producer or consumer lease is active. The producer release-stores snapshot after making each new payload prefix immutable; the consumer acquire-loads it before reading that prefix.
+"""
+struct spa_meta_progressive
+    data::NTuple{48, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_meta_progressive}, f::Symbol)
+    f === :version && return Ptr{UInt32}(x + 0)
+    f === :abi_size && return Ptr{UInt32}(x + 4)
+    f === :data_index && return Ptr{UInt32}(x + 8)
+    f === :payload_offset && return Ptr{UInt32}(x + 12)
+    f === :payload_size && return Ptr{UInt32}(x + 16)
+    f === :commit_granularity && return Ptr{UInt32}(x + 20)
+    f === :terminal_flags && return Ptr{UInt32}(x + 24)
+    f === :reserved0 && return Ptr{UInt32}(x + 28)
+    f === :snapshot && return Ptr{UInt64}(x + 32)
+    f === :reserved1 && return Ptr{UInt64}(x + 40)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_meta_progressive, f::Symbol)
+    r = Ref{spa_meta_progressive}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_meta_progressive}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_meta_progressive}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_meta_progressive, private::Bool = false)
+    (:version, :abi_size, :data_index, :payload_offset, :payload_size, :commit_granularity, :terminal_flags, :reserved0, :snapshot, :reserved1, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 """
@@ -4366,15 +4418,19 @@ end
 
 Flags passed to pw_mempool_alloc()
 
-| Enumerator                           | Note                       |
-| :----------------------------------- | :------------------------- |
-| PW\\_MEMBLOCK\\_FLAG\\_READABLE      | memory is readable         |
-| PW\\_MEMBLOCK\\_FLAG\\_WRITABLE      | memory is writable         |
-| PW\\_MEMBLOCK\\_FLAG\\_SEAL          | seal the fd                |
-| PW\\_MEMBLOCK\\_FLAG\\_MAP           | mmap the fd                |
-| PW\\_MEMBLOCK\\_FLAG\\_DONT\\_CLOSE  | don't close fd             |
-| PW\\_MEMBLOCK\\_FLAG\\_DONT\\_NOTIFY | don't notify events        |
-| PW\\_MEMBLOCK\\_FLAG\\_UNMAPPABLE    | the fd can not be mmapped  |
+| Enumerator                                 | Note                                            |
+| :----------------------------------------- | :---------------------------------------------- |
+| PW\\_MEMBLOCK\\_FLAG\\_READABLE            | memory is readable                              |
+| PW\\_MEMBLOCK\\_FLAG\\_WRITABLE            | memory is writable                              |
+| PW\\_MEMBLOCK\\_FLAG\\_SEAL                | seal the fd                                     |
+| PW\\_MEMBLOCK\\_FLAG\\_MAP                 | mmap the fd                                     |
+| PW\\_MEMBLOCK\\_FLAG\\_DONT\\_CLOSE        | don't close fd                                  |
+| PW\\_MEMBLOCK\\_FLAG\\_DONT\\_NOTIFY       | don't notify events                             |
+| PW\\_MEMBLOCK\\_FLAG\\_UNMAPPABLE          | the fd can not be mmapped                       |
+| PW\\_MEMBLOCK\\_FLAG\\_HUGE\\_PAGES\\_HINT | prefer Linux hugetlb memfd, fall back normally  |
+| PW\\_MEMBLOCK\\_FLAG\\_HUGE\\_2MB\\_HINT   | prefer 2 MiB hugetlb pages                      |
+| PW\\_MEMBLOCK\\_FLAG\\_HUGE\\_1GB\\_HINT   | prefer 1 GiB hugetlb pages                      |
+| PW\\_MEMBLOCK\\_FLAG\\_HUGE\\_PAGES        | allocation is backed by huge pages              |
 """
 const pw_memblock_flags = UInt32
 const PW_MEMBLOCK_FLAG_NONE = 0 % UInt32
@@ -4385,6 +4441,10 @@ const PW_MEMBLOCK_FLAG_MAP = 8 % UInt32
 const PW_MEMBLOCK_FLAG_DONT_CLOSE = 16 % UInt32
 const PW_MEMBLOCK_FLAG_DONT_NOTIFY = 32 % UInt32
 const PW_MEMBLOCK_FLAG_UNMAPPABLE = 64 % UInt32
+const PW_MEMBLOCK_FLAG_HUGE_PAGES_HINT = 128 % UInt32
+const PW_MEMBLOCK_FLAG_HUGE_2MB_HINT = 256 % UInt32
+const PW_MEMBLOCK_FLAG_HUGE_1GB_HINT = 512 % UInt32
+const PW_MEMBLOCK_FLAG_HUGE_PAGES = 1024 % UInt32
 const PW_MEMBLOCK_FLAG_READWRITE = 3 % UInt32
 
 """
@@ -4442,16 +4502,17 @@ end
 
 Memory block structure
 
-| Field | Note                                                               |
-| :---- | :----------------------------------------------------------------- |
-| pool  | owner pool                                                         |
-| id    | unique id                                                          |
-| ref   | refcount                                                           |
-| flags | flags for the memory block on of enum [`pw_memblock_flags`](@ref)  |
-| type  | type of the fd, one of enum [`spa_data_type`](@ref)                |
-| fd    | fd                                                                 |
-| size  | size of memory                                                     |
-| map   | optional map when PW\\_MEMBLOCK\\_FLAG\\_MAP was given             |
+| Field       | Note                                                               |
+| :---------- | :----------------------------------------------------------------- |
+| pool        | owner pool                                                         |
+| id          | unique id                                                          |
+| ref         | refcount                                                           |
+| flags       | flags for the memory block on of enum [`pw_memblock_flags`](@ref)  |
+| type        | type of the fd, one of enum [`spa_data_type`](@ref)                |
+| fd          | fd                                                                 |
+| size        | size of memory                                                     |
+| page\\_size | actual backing page size                                           |
+| map         | optional map when PW\\_MEMBLOCK\\_FLAG\\_MAP was given             |
 """
 struct pw_memblock
     pool::Ptr{pw_mempool}
@@ -4461,6 +4522,7 @@ struct pw_memblock
     type::UInt32
     fd::Cint
     size::UInt32
+    page_size::UInt32
     map::Ptr{pw_memmap}
 end
 
@@ -6464,6 +6526,76 @@ struct spa_ringbuffer
 end
 
 """
+    spa_ringbuffer_shared_index
+
+A single-writer index isolated from independently written cache lines.
+"""
+struct spa_ringbuffer_shared_index
+    data::NTuple{64, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_ringbuffer_shared_index}, f::Symbol)
+    f === :value && return Ptr{UInt32}(x + 0)
+    f === :padding && return Ptr{NTuple{60, UInt8}}(x + 4)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_ringbuffer_shared_index, f::Symbol)
+    r = Ref{spa_ringbuffer_shared_index}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_ringbuffer_shared_index}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_ringbuffer_shared_index}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_ringbuffer_shared_index, private::Bool = false)
+    (:value, :padding, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+"""
+    spa_ringbuffer_shared
+
+Ringbuffer indices suitable for cross-core shared memory.
+
+The consumer alone writes readindex and the producer alone writes writeindex. Each index occupies its own cache line so that independent progress does not introduce false sharing. The compact [`spa_ringbuffer`](@ref) is retained for ABI compatibility and layouts that do not need this isolation.
+"""
+struct spa_ringbuffer_shared
+    data::NTuple{128, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_ringbuffer_shared}, f::Symbol)
+    f === :readindex && return Ptr{spa_ringbuffer_shared_index}(x + 0)
+    f === :writeindex && return Ptr{spa_ringbuffer_shared_index}(x + 64)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_ringbuffer_shared, f::Symbol)
+    r = Ref{spa_ringbuffer_shared}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_ringbuffer_shared}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_ringbuffer_shared}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_ringbuffer_shared, private::Bool = false)
+    (:readindex, :writeindex, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+"""
     spa_io_type
 
 Different IO area types
@@ -6836,17 +6968,70 @@ struct spa_io_async_buffers
 end
 
 """
-    spa_io_buffers_latest
+    spa_io_buffers_latest_ready
 
 | Field      | Note                                              |
 | :--------- | :------------------------------------------------ |
 | superseded | output-owned count of unclaimed buffers replaced  |
 """
+struct spa_io_buffers_latest_ready
+    data::NTuple{64, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_io_buffers_latest_ready}, f::Symbol)
+    f === :id && return Ptr{UInt32}(x + 0)
+    f === :superseded && return Ptr{UInt32}(x + 4)
+    f === :padding && return Ptr{NTuple{56, UInt8}}(x + 8)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_io_buffers_latest_ready, f::Symbol)
+    r = Ref{spa_io_buffers_latest_ready}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest_ready}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_io_buffers_latest_ready}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_io_buffers_latest_ready, private::Bool = false)
+    (:id, :superseded, :padding, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
 struct spa_io_buffers_latest
-    ready_id::UInt32
-    superseded::UInt32
-    recycle::spa_ringbuffer
-    recycle_ids::NTuple{64, UInt32}
+    data::NTuple{448, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_io_buffers_latest}, f::Symbol)
+    f === :ready && return Ptr{spa_io_buffers_latest_ready}(x + 0)
+    f === :recycle && return Ptr{spa_ringbuffer_shared}(x + 64)
+    f === :recycle_ids && return Ptr{NTuple{64, UInt32}}(x + 192)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_io_buffers_latest, f::Symbol)
+    r = Ref{spa_io_buffers_latest}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_io_buffers_latest}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_io_buffers_latest, private::Bool = false)
+    (:ready, :recycle, :recycle_ids, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 """
@@ -8385,15 +8570,16 @@ end
 
 properties for SPA\\_TYPE\\_OBJECT\\_ParamBuffers
 
-| Enumerator                       | Note                                                                            |
-| :------------------------------- | :------------------------------------------------------------------------------ |
-| SPA\\_PARAM\\_BUFFERS\\_buffers  | number of buffers (Int)                                                         |
-| SPA\\_PARAM\\_BUFFERS\\_blocks   | number of data blocks per buffer (Int)                                          |
-| SPA\\_PARAM\\_BUFFERS\\_size     | size of a data block memory (Int)                                               |
-| SPA\\_PARAM\\_BUFFERS\\_stride   | stride of data block memory (Int)                                               |
-| SPA\\_PARAM\\_BUFFERS\\_align    | alignment of data block memory (Int)                                            |
-| SPA\\_PARAM\\_BUFFERS\\_dataType | possible memory types (flags choice Int, mask of enum [`spa_data_type`](@ref))  |
-| SPA\\_PARAM\\_BUFFERS\\_metaType | required meta data types (Int, mask of enum [`spa_meta_type`](@ref))            |
+| Enumerator                           | Note                                                                            |
+| :----------------------------------- | :------------------------------------------------------------------------------ |
+| SPA\\_PARAM\\_BUFFERS\\_buffers      | number of buffers (Int)                                                         |
+| SPA\\_PARAM\\_BUFFERS\\_blocks       | number of data blocks per buffer (Int)                                          |
+| SPA\\_PARAM\\_BUFFERS\\_size         | size of a data block memory (Int)                                               |
+| SPA\\_PARAM\\_BUFFERS\\_stride       | stride of data block memory (Int)                                               |
+| SPA\\_PARAM\\_BUFFERS\\_align        | alignment of data block memory (Int)                                            |
+| SPA\\_PARAM\\_BUFFERS\\_dataType     | possible memory types (flags choice Int, mask of enum [`spa_data_type`](@ref))  |
+| SPA\\_PARAM\\_BUFFERS\\_metaType     | required meta data types (Int, mask of enum [`spa_meta_type`](@ref))            |
+| SPA\\_PARAM\\_BUFFERS\\_pageSizeHint | preferred backing page size (Id enum [`spa_buffer_page_size_hint`](@ref))       |
 """
 const spa_param_buffers = UInt32
 const SPA_PARAM_BUFFERS_START = 0 % UInt32
@@ -8404,6 +8590,25 @@ const SPA_PARAM_BUFFERS_stride = 4 % UInt32
 const SPA_PARAM_BUFFERS_align = 5 % UInt32
 const SPA_PARAM_BUFFERS_dataType = 6 % UInt32
 const SPA_PARAM_BUFFERS_metaType = 7 % UInt32
+const SPA_PARAM_BUFFERS_pageSizeHint = 8 % UInt32
+
+"""
+    spa_buffer_page_size_hint
+
+Best-effort backing page size for host-allocated shared memory.
+
+| Enumerator                                  | Note                           |
+| :------------------------------------------ | :----------------------------- |
+| SPA\\_BUFFER\\_PAGE\\_SIZE\\_NORMAL         | ordinary system pages          |
+| SPA\\_BUFFER\\_PAGE\\_SIZE\\_HUGE\\_DEFAULT | system default huge-page size  |
+| SPA\\_BUFFER\\_PAGE\\_SIZE\\_HUGE\\_2MB     | 2 MiB huge pages               |
+| SPA\\_BUFFER\\_PAGE\\_SIZE\\_HUGE\\_1GB     | 1 GiB huge pages               |
+"""
+const spa_buffer_page_size_hint = UInt32
+const SPA_BUFFER_PAGE_SIZE_NORMAL = 0 % UInt32
+const SPA_BUFFER_PAGE_SIZE_HUGE_DEFAULT = 1 % UInt32
+const SPA_BUFFER_PAGE_SIZE_HUGE_2MB = 2 % UInt32
+const SPA_BUFFER_PAGE_SIZE_HUGE_1GB = 3 % UInt32
 
 """
     spa_param_meta
@@ -8839,6 +9044,7 @@ media subtype for SPA\\_TYPE\\_OBJECT\\_Format
 | SPA\\_MEDIA\\_SUBTYPE\\_midi                |                                                                              |
 | SPA\\_MEDIA\\_SUBTYPE\\_START\\_Application |                                                                              |
 | SPA\\_MEDIA\\_SUBTYPE\\_control             | control stream, data contains [`spa_pod_sequence`](@ref) with control info.  |
+| SPA\\_MEDIA\\_SUBTYPE\\_ndarray             | packed N-dimensional typed elements                                          |
 """
 const spa_media_subtype = UInt32
 const SPA_MEDIA_SUBTYPE_unknown = 0 % UInt32
@@ -8890,6 +9096,86 @@ const SPA_MEDIA_SUBTYPE_START_Stream = 327680 % UInt32
 const SPA_MEDIA_SUBTYPE_midi = 327681 % UInt32
 const SPA_MEDIA_SUBTYPE_START_Application = 393216 % UInt32
 const SPA_MEDIA_SUBTYPE_control = 393217 % UInt32
+const SPA_MEDIA_SUBTYPE_ndarray = 393218 % UInt32
+
+"""
+    spa_element_type
+
+Scalar representation of ndarray elements.
+
+Multi-byte values are little-endian. Complex elements contain the real component followed by the imaginary component. The core set is append-only; application-defined fixed-width scalar types start at START\\_CUSTOM.
+
+| Enumerator                                 | Note                                     |
+| :----------------------------------------- | :--------------------------------------- |
+| SPA\\_ELEMENT\\_TYPE\\_BOOL8               | Boolean byte; only 0 and 1 are valid     |
+| SPA\\_ELEMENT\\_TYPE\\_I8                  | signed 8-bit integer                     |
+| SPA\\_ELEMENT\\_TYPE\\_U8                  | unsigned 8-bit integer                   |
+| SPA\\_ELEMENT\\_TYPE\\_I16\\_LE            | signed 16-bit integer, little-endian     |
+| SPA\\_ELEMENT\\_TYPE\\_U16\\_LE            | unsigned 16-bit integer, little-endian   |
+| SPA\\_ELEMENT\\_TYPE\\_I32\\_LE            | signed 32-bit integer, little-endian     |
+| SPA\\_ELEMENT\\_TYPE\\_U32\\_LE            | unsigned 32-bit integer, little-endian   |
+| SPA\\_ELEMENT\\_TYPE\\_I64\\_LE            | signed 64-bit integer, little-endian     |
+| SPA\\_ELEMENT\\_TYPE\\_U64\\_LE            | unsigned 64-bit integer, little-endian   |
+| SPA\\_ELEMENT\\_TYPE\\_I128\\_LE           | signed 128-bit integer, little-endian    |
+| SPA\\_ELEMENT\\_TYPE\\_U128\\_LE           | unsigned 128-bit integer, little-endian  |
+| SPA\\_ELEMENT\\_TYPE\\_F8\\_E4M3FN         | 8-bit E4M3 finite-numbers format         |
+| SPA\\_ELEMENT\\_TYPE\\_F8\\_E4M3FNUZ       | 8-bit E4M3 finite, unsigned-zero format  |
+| SPA\\_ELEMENT\\_TYPE\\_F8\\_E5M2           | 8-bit E5M2 format                        |
+| SPA\\_ELEMENT\\_TYPE\\_F8\\_E5M2FNUZ       | 8-bit E5M2 finite, unsigned-zero format  |
+| SPA\\_ELEMENT\\_TYPE\\_F16\\_LE            | IEEE 754 binary16, little-endian         |
+| SPA\\_ELEMENT\\_TYPE\\_BF16\\_LE           | bfloat16, little-endian                  |
+| SPA\\_ELEMENT\\_TYPE\\_F32\\_LE            | IEEE 754 binary32, little-endian         |
+| SPA\\_ELEMENT\\_TYPE\\_F64\\_LE            | IEEE 754 binary64, little-endian         |
+| SPA\\_ELEMENT\\_TYPE\\_F128\\_LE           | IEEE 754 binary128, little-endian        |
+| SPA\\_ELEMENT\\_TYPE\\_COMPLEX\\_F16\\_LE  | two IEEE binary16 components             |
+| SPA\\_ELEMENT\\_TYPE\\_COMPLEX\\_BF16\\_LE | two bfloat16 components                  |
+| SPA\\_ELEMENT\\_TYPE\\_COMPLEX\\_F32\\_LE  | two IEEE binary32 components             |
+| SPA\\_ELEMENT\\_TYPE\\_COMPLEX\\_F64\\_LE  | two IEEE binary64 components             |
+| SPA\\_ELEMENT\\_TYPE\\_COMPLEX\\_F128\\_LE | two IEEE binary128 components            |
+"""
+const spa_element_type = UInt32
+const SPA_ELEMENT_TYPE_UNKNOWN = 0 % UInt32
+const SPA_ELEMENT_TYPE_BOOL8 = 1 % UInt32
+const SPA_ELEMENT_TYPE_I8 = 2 % UInt32
+const SPA_ELEMENT_TYPE_U8 = 3 % UInt32
+const SPA_ELEMENT_TYPE_I16_LE = 4 % UInt32
+const SPA_ELEMENT_TYPE_U16_LE = 5 % UInt32
+const SPA_ELEMENT_TYPE_I32_LE = 6 % UInt32
+const SPA_ELEMENT_TYPE_U32_LE = 7 % UInt32
+const SPA_ELEMENT_TYPE_I64_LE = 8 % UInt32
+const SPA_ELEMENT_TYPE_U64_LE = 9 % UInt32
+const SPA_ELEMENT_TYPE_I128_LE = 10 % UInt32
+const SPA_ELEMENT_TYPE_U128_LE = 11 % UInt32
+const SPA_ELEMENT_TYPE_F8_E4M3FN = 12 % UInt32
+const SPA_ELEMENT_TYPE_F8_E4M3FNUZ = 13 % UInt32
+const SPA_ELEMENT_TYPE_F8_E5M2 = 14 % UInt32
+const SPA_ELEMENT_TYPE_F8_E5M2FNUZ = 15 % UInt32
+const SPA_ELEMENT_TYPE_F16_LE = 16 % UInt32
+const SPA_ELEMENT_TYPE_BF16_LE = 17 % UInt32
+const SPA_ELEMENT_TYPE_F32_LE = 18 % UInt32
+const SPA_ELEMENT_TYPE_F64_LE = 19 % UInt32
+const SPA_ELEMENT_TYPE_F128_LE = 20 % UInt32
+const SPA_ELEMENT_TYPE_COMPLEX_F16_LE = 21 % UInt32
+const SPA_ELEMENT_TYPE_COMPLEX_BF16_LE = 22 % UInt32
+const SPA_ELEMENT_TYPE_COMPLEX_F32_LE = 23 % UInt32
+const SPA_ELEMENT_TYPE_COMPLEX_F64_LE = 24 % UInt32
+const SPA_ELEMENT_TYPE_COMPLEX_F128_LE = 25 % UInt32
+const SPA_ELEMENT_TYPE_START_CUSTOM = 65536 % UInt32
+
+"""
+    spa_ndarray_layout
+
+contiguous storage order of ndarray elements
+
+| Enumerator                              | Note                                  |
+| :-------------------------------------- | :------------------------------------ |
+| SPA\\_NDARRAY\\_LAYOUT\\_ROW\\_MAJOR    | the last logical axis is contiguous   |
+| SPA\\_NDARRAY\\_LAYOUT\\_COLUMN\\_MAJOR | the first logical axis is contiguous  |
+"""
+const spa_ndarray_layout = UInt32
+const SPA_NDARRAY_LAYOUT_UNKNOWN = 0 % UInt32
+const SPA_NDARRAY_LAYOUT_ROW_MAJOR = 1 % UInt32
+const SPA_NDARRAY_LAYOUT_COLUMN_MAJOR = 2 % UInt32
 
 """
     spa_format
@@ -8938,6 +9224,10 @@ properties for audio SPA\\_TYPE\\_OBJECT\\_Format
 | SPA\\_FORMAT\\_VIDEO\\_H265\\_alignment    | (Id enum spa\\_h265\\_alignment)                                              |
 | SPA\\_FORMAT\\_VIDEO\\_deviceId            | dev\\_t identifier (Bytes)                                                    |
 | SPA\\_FORMAT\\_CONTROL\\_types             | possible control types (flags choice Int, mask of enum spa\\_control\\_type)  |
+| SPA\\_FORMAT\\_NDARRAY\\_elementType       | element type (Id enum [`spa_element_type`](@ref))                             |
+| SPA\\_FORMAT\\_NDARRAY\\_shape             | positive logical dimensions (Array of Int)                                    |
+| SPA\\_FORMAT\\_NDARRAY\\_layout            | storage order (Id enum [`spa_ndarray_layout`](@ref))                          |
+| SPA\\_FORMAT\\_NDARRAY\\_rate              | optional sample rate (Fraction)                                               |
 """
 const spa_format = UInt32
 const SPA_FORMAT_START = 0 % UInt32
@@ -8987,6 +9277,11 @@ const SPA_FORMAT_START_Binary = 262144 % UInt32
 const SPA_FORMAT_START_Stream = 327680 % UInt32
 const SPA_FORMAT_START_Application = 393216 % UInt32
 const SPA_FORMAT_CONTROL_types = 393217 % UInt32
+const SPA_FORMAT_START_NdArray = 397312 % UInt32
+const SPA_FORMAT_NDARRAY_elementType = 397313 % UInt32
+const SPA_FORMAT_NDARRAY_shape = 397314 % UInt32
+const SPA_FORMAT_NDARRAY_layout = 397315 % UInt32
+const SPA_FORMAT_NDARRAY_rate = 397316 % UInt32
 
 const spa_audio_format = UInt32
 const SPA_AUDIO_FORMAT_UNKNOWN = 0 % UInt32

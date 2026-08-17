@@ -577,11 +577,15 @@ end
 """
     buffers_param(; buffers=nothing, blocks=nothing, size=nothing,
                     stride=nothing, align=nothing, data_types=nothing,
-                    metadata_types=nothing, id=SPA_PARAM_Buffers)
+                    metadata_types=nothing, page_size_hint=nothing,
+                    id=SPA_PARAM_Buffers)
 
 Build a typed SPA buffer-layout parameter. Integer fields use their native
 `Int32` representation; callers may also supply `SPA.Choice` values for
 negotiation.
+
+`page_size_hint` is advisory. PipeWireAO falls back to ordinary pages when the
+requested huge-page allocation is unavailable.
 """
 function buffers_param(;
     buffers=nothing,
@@ -591,6 +595,7 @@ function buffers_param(;
     align=nothing,
     data_types=nothing,
     metadata_types=nothing,
+    page_size_hint::Union{Nothing,SPA.PageSizeHint}=nothing,
     id::Integer=LibPipeWire.SPA_PARAM_Buffers,
 )
     properties = SPA.Property[]
@@ -609,6 +614,11 @@ function buffers_param(;
     )
         _parameter_property!(properties, key, _parameter_int(value, description))
     end
+    _parameter_property!(
+        properties,
+        LibPipeWire.SPA_PARAM_BUFFERS_pageSizeHint,
+        page_size_hint === nothing ? nothing : SPA.Id(UInt32(page_size_hint)),
+    )
     return SPA.Parameter(LibPipeWire.SPA_TYPE_OBJECT_ParamBuffers, id, properties)
 end
 
@@ -1065,11 +1075,290 @@ function video_format(;
     return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
 end
 
+"A validated fixed-rank native ndarray format."
+struct NdArrayFormat{N}
+    element_type::NdArray.ElementType
+    shape::NTuple{N,Int32}
+    layout::NdArray.Layout
+    rate::Union{Nothing,SPA.Fraction}
+
+    function NdArrayFormat{N}(
+        element_type::NdArray.ElementType,
+        shape::NTuple{N,Int32},
+        layout::NdArray.Layout,
+        rate::Union{Nothing,SPA.Fraction},
+        ::Val{:validated},
+    ) where {N}
+        return new{N}(element_type, shape, layout, rate)
+    end
+end
+
+function _ndarray_element_size(element_type::NdArray.ElementType)
+    element_type in (
+        NdArray.BOOL8,
+        NdArray.I8,
+        NdArray.U8,
+        NdArray.F8_E4M3FN,
+        NdArray.F8_E4M3FNUZ,
+        NdArray.F8_E5M2,
+        NdArray.F8_E5M2FNUZ,
+    ) && return 1
+    element_type in (
+        NdArray.I16_LE,
+        NdArray.U16_LE,
+        NdArray.F16_LE,
+        NdArray.BF16_LE,
+    ) && return 2
+    element_type in (
+        NdArray.I32_LE,
+        NdArray.U32_LE,
+        NdArray.F32_LE,
+        NdArray.COMPLEX_F16_LE,
+        NdArray.COMPLEX_BF16_LE,
+    ) && return 4
+    element_type in (
+        NdArray.I64_LE,
+        NdArray.U64_LE,
+        NdArray.F64_LE,
+        NdArray.COMPLEX_F32_LE,
+    ) && return 8
+    element_type in (
+        NdArray.I128_LE,
+        NdArray.U128_LE,
+        NdArray.F128_LE,
+        NdArray.COMPLEX_F64_LE,
+    ) && return 16
+    element_type == NdArray.COMPLEX_F128_LE && return 32
+    throw(ArgumentError("unsupported ndarray element type $element_type"))
+end
+
+function _checked_ndarray_size(element_type::NdArray.ElementType, shape)
+    count = 1
+    try
+        for dimension in shape
+            count = Base.checked_mul(count, Int(dimension))
+        end
+        return count, Base.checked_mul(count, _ndarray_element_size(element_type))
+    catch error
+        error isa OverflowError || rethrow()
+        throw(ArgumentError("ndarray payload size overflows Int"))
+    end
+end
+
+"""
+    NdArrayFormat(element_type, shape; layout, rate=nothing)
+
+Describe a packed native ndarray. `shape` is in logical axis order and every
+dimension must be positive. Version 1 supports contiguous `ROW_MAJOR` and
+`COLUMN_MAJOR` storage only.
+"""
+function NdArrayFormat(
+    element_type::NdArray.ElementType,
+    shape;
+    layout::NdArray.Layout,
+    rate::Union{Nothing,SPA.Fraction}=nothing,
+)
+    dimensions = Tuple(shape)
+    isempty(dimensions) && throw(ArgumentError("an ndarray must have at least one axis"))
+    converted = ntuple(length(dimensions)) do axis
+        dimension = dimensions[axis]
+        dimension isa Integer || throw(
+            ArgumentError("ndarray dimension $axis is not an integer"),
+        )
+        0 < dimension <= typemax(Int32) || throw(
+            ArgumentError("ndarray dimension $axis must fit a positive Int32"),
+        )
+        Int32(dimension)
+    end
+    layout in (NdArray.ROW_MAJOR, NdArray.COLUMN_MAJOR) ||
+        throw(ArgumentError("unsupported ndarray layout $layout"))
+    rate === nothing || (rate.num > 0 && rate.denom > 0) ||
+        throw(ArgumentError("ndarray rate must be a positive fraction"))
+    _checked_ndarray_size(element_type, converted)
+    return NdArrayFormat{length(converted)}(
+        element_type,
+        converted,
+        layout,
+        rate,
+        Val(:validated),
+    )
+end
+
+"A rank-one ndarray profile with canonical row-major layout."
+struct VectorFormat
+    element_type::NdArray.ElementType
+    length::Int32
+    rate::Union{Nothing,SPA.Fraction}
+
+    function VectorFormat(
+        element_type::NdArray.ElementType,
+        length::Integer;
+        rate::Union{Nothing,SPA.Fraction}=nothing,
+    )
+        format = NdArrayFormat(element_type, (length,); layout=NdArray.ROW_MAJOR, rate)
+        return new(format.element_type, only(format.shape), format.rate)
+    end
+end
+
+"A rank-two ndarray profile whose shape is `(rows, columns)`."
+struct MatrixFormat
+    element_type::NdArray.ElementType
+    rows::Int32
+    columns::Int32
+    layout::NdArray.Layout
+    rate::Union{Nothing,SPA.Fraction}
+
+    function MatrixFormat(
+        element_type::NdArray.ElementType,
+        rows::Integer,
+        columns::Integer;
+        layout::NdArray.Layout=NdArray.COLUMN_MAJOR,
+        rate::Union{Nothing,SPA.Fraction}=nothing,
+    )
+        format = NdArrayFormat(element_type, (rows, columns); layout, rate)
+        return new(
+            format.element_type,
+            format.shape[1],
+            format.shape[2],
+            format.layout,
+            format.rate,
+        )
+    end
+end
+
+NdArrayFormat(format::VectorFormat) = NdArrayFormat(
+    format.element_type,
+    (format.length,);
+    layout=NdArray.ROW_MAJOR,
+    rate=format.rate,
+)
+NdArrayFormat(format::MatrixFormat) = NdArrayFormat(
+    format.element_type,
+    (format.rows, format.columns);
+    layout=format.layout,
+    rate=format.rate,
+)
+
+element_count(format::NdArrayFormat) = first(_checked_ndarray_size(format.element_type, format.shape))
+element_count(format::Union{VectorFormat,MatrixFormat}) = element_count(NdArrayFormat(format))
+payload_size(format::NdArrayFormat) = last(_checked_ndarray_size(format.element_type, format.shape))
+payload_size(format::Union{VectorFormat,MatrixFormat}) = payload_size(NdArrayFormat(format))
+
+function _ndarray_property(object::SPA.Object, key::UInt32; required::Bool=true)
+    matching = filter(property -> property.key == key, object.properties)
+    length(matching) <= 1 || throw(ArgumentError("duplicate ndarray property $key"))
+    isempty(matching) && required && throw(ArgumentError("missing ndarray property $key"))
+    return isempty(matching) ? nothing : only(matching)
+end
+
+"Parse a fixed native ndarray format parameter. Application properties are ignored."
+function NdArrayFormat(parameter::SPA.Parameter)
+    object = parameter.object
+    object.type == LibPipeWire.SPA_TYPE_OBJECT_Format ||
+        throw(ArgumentError("the SPA parameter is not a format object"))
+    media_type = pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_MEDIA_TYPE).value)
+    media_type.value == SPA.MEDIA_TYPE_APPLICATION ||
+        throw(ArgumentError("the format media type is not application"))
+    media_subtype = pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_MEDIA_SUBTYPE).value)
+    media_subtype.value == SPA.MEDIA_SUBTYPE_NDARRAY ||
+        throw(ArgumentError("the format media subtype is not ndarray"))
+    element_type = NdArray.ElementType(
+        pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_NDARRAY_ELEMENT_TYPE).value).value,
+    )
+    shape = pod_value(
+        SPA.Array{Int32},
+        _ndarray_property(object, SPA.FORMAT_NDARRAY_SHAPE).value,
+    ).values
+    layout = NdArray.Layout(
+        pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_NDARRAY_LAYOUT).value).value,
+    )
+    rate_property = _ndarray_property(object, SPA.FORMAT_NDARRAY_RATE; required=false)
+    rate = rate_property === nothing ? nothing : pod_value(SPA.Fraction, rate_property.value)
+    return NdArrayFormat(element_type, shape; layout, rate)
+end
+
+NdArrayFormat(pod::Pod) = NdArrayFormat(pod_value(SPA.Parameter, pod))
+
+function VectorFormat(format::NdArrayFormat{1})
+    format.layout == NdArray.ROW_MAJOR || throw(
+        ArgumentError("a vector must use the canonical row-major layout"),
+    )
+    return VectorFormat(format.element_type, only(format.shape); rate=format.rate)
+end
+VectorFormat(parameter::SPA.Parameter) = VectorFormat(NdArrayFormat(parameter))
+VectorFormat(pod::Pod) = VectorFormat(NdArrayFormat(pod))
+
+MatrixFormat(format::NdArrayFormat{2}) = MatrixFormat(
+    format.element_type,
+    format.shape[1],
+    format.shape[2];
+    layout=format.layout,
+    rate=format.rate,
+)
+MatrixFormat(parameter::SPA.Parameter) = MatrixFormat(NdArrayFormat(parameter))
+MatrixFormat(pod::Pod) = MatrixFormat(NdArrayFormat(pod))
+
+function ndarray_format(format::NdArrayFormat; id::Integer=LibPipeWire.SPA_PARAM_EnumFormat)
+    properties = SPA.Property[
+        SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
+        SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
+        SPA.Property(SPA.FORMAT_NDARRAY_ELEMENT_TYPE, SPA.Id(UInt32(format.element_type))),
+        SPA.Property(SPA.FORMAT_NDARRAY_SHAPE, SPA.Array(collect(format.shape))),
+        SPA.Property(SPA.FORMAT_NDARRAY_LAYOUT, SPA.Id(UInt32(format.layout))),
+    ]
+    format.rate === nothing ||
+        push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, format.rate))
+    return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
+end
+
+ndarray_format(format::Union{VectorFormat,MatrixFormat}; kwargs...) =
+    ndarray_format(NdArrayFormat(format); kwargs...)
+function ndarray_format(
+    element_type::NdArray.ElementType,
+    shape;
+    layout::NdArray.Layout,
+    rate::Union{Nothing,SPA.Fraction}=nothing,
+    id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+)
+    return ndarray_format(NdArrayFormat(element_type, shape; layout, rate); id)
+end
+
+vector_format(format::VectorFormat; kwargs...) = ndarray_format(format; kwargs...)
+function vector_format(
+    element_type::NdArray.ElementType,
+    length::Integer;
+    rate::Union{Nothing,SPA.Fraction}=nothing,
+    id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+)
+    return vector_format(VectorFormat(element_type, length; rate); id)
+end
+
+matrix_format(format::MatrixFormat; kwargs...) = ndarray_format(format; kwargs...)
+function matrix_format(
+    element_type::NdArray.ElementType,
+    rows::Integer,
+    columns::Integer;
+    layout::NdArray.Layout=NdArray.COLUMN_MAJOR,
+    rate::Union{Nothing,SPA.Fraction}=nothing,
+    id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+)
+    return matrix_format(MatrixFormat(element_type, rows, columns; layout, rate); id)
+end
+
 "Build a typed SPA raw-audio format parameter."
 audio_format_param(; kwargs...) = pod_value(SPA.Parameter, audio_format(; kwargs...))
 
 "Build a typed SPA raw-video format parameter."
 video_format_param(; kwargs...) = pod_value(SPA.Parameter, video_format(; kwargs...))
+
+"Build a typed native ndarray format parameter."
+ndarray_format_param(args...; kwargs...) = pod_value(SPA.Parameter, ndarray_format(args...; kwargs...))
+
+"Build a typed native vector format parameter."
+vector_format_param(args...; kwargs...) = pod_value(SPA.Parameter, vector_format(args...; kwargs...))
+
+"Build a typed native matrix format parameter."
+matrix_format_param(args...; kwargs...) = pod_value(SPA.Parameter, matrix_format(args...; kwargs...))
 
 
 """

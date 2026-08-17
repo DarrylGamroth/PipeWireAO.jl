@@ -22,12 +22,17 @@ end
         SPA.DATA_FLAG_DYNAMIC,
         SPA.DATA_FLAG_READWRITE,
         SPA.DATA_FLAG_MAPPABLE,
+        SPA.DATA_FLAG_HUGE_PAGES,
+        SPA.DATA_FLAG_HUGE_2MB,
+        SPA.DATA_FLAG_HUGE_1GB,
         SPA.META_HEADER,
+        SPA.META_PROGRESSIVE,
         SPA.META_HEADER_FLAG_CORRUPTED,
         SPA.META_HEADER_FLAG_GAP,
         SPA.META_TRANSFORM_90,
         SPA.IO_BUFFERS,
         SPA.BUFFERS_COUNT,
+        SPA.BUFFERS_PAGE_SIZE_HINT,
         SPA.META_PARAM_TYPE,
         SPA.IO_PARAM_ID,
         SPA.LATENCY_DIRECTION,
@@ -52,6 +57,9 @@ end
     @test SPA.DATA_FLAG_READWRITE ==
           SPA.DATA_FLAG_READABLE | SPA.DATA_FLAG_WRITABLE
     @test SPA.DATA_FLAG_MAPPABLE == UInt32(1 << 3)
+    @test SPA.DATA_FLAG_HUGE_PAGES == UInt32(1 << 4)
+    @test SPA.DATA_FLAG_HUGE_2MB == UInt32(1 << 5)
+    @test SPA.DATA_FLAG_HUGE_1GB == UInt32(1 << 6)
     @test SPA.META_HEADER_FLAG_DISCONT == UInt32(1 << 0)
     @test SPA.META_HEADER_FLAG_CORRUPTED == UInt32(1 << 1)
     @test SPA.META_HEADER_FLAG_MARKER == UInt32(1 << 2)
@@ -85,6 +93,88 @@ end
         joinpath(@__DIR__, "..", "examples", "video_capture.jl"),
     )
     @test all(path -> !occursin("PipeWireAO.LibPipeWire", read(path, String)), examples)
+end
+
+@testset "native ndarray format" begin
+    element_sizes = (
+        NdArray.BOOL8 => 1,
+        NdArray.I8 => 1,
+        NdArray.U8 => 1,
+        NdArray.I16_LE => 2,
+        NdArray.U16_LE => 2,
+        NdArray.I32_LE => 4,
+        NdArray.U32_LE => 4,
+        NdArray.I64_LE => 8,
+        NdArray.U64_LE => 8,
+        NdArray.I128_LE => 16,
+        NdArray.U128_LE => 16,
+        NdArray.F8_E4M3FN => 1,
+        NdArray.F8_E4M3FNUZ => 1,
+        NdArray.F8_E5M2 => 1,
+        NdArray.F8_E5M2FNUZ => 1,
+        NdArray.F16_LE => 2,
+        NdArray.BF16_LE => 2,
+        NdArray.F32_LE => 4,
+        NdArray.F64_LE => 8,
+        NdArray.F128_LE => 16,
+        NdArray.COMPLEX_F16_LE => 4,
+        NdArray.COMPLEX_BF16_LE => 4,
+        NdArray.COMPLEX_F32_LE => 8,
+        NdArray.COMPLEX_F64_LE => 16,
+        NdArray.COMPLEX_F128_LE => 32,
+    )
+    @test length(instances(NdArray.ElementType)) == 27
+    @test UInt32(NdArray.START_CUSTOM) == 0x0001_0000
+    for (element_type, element_size) in element_sizes
+        format = NdArrayFormat(element_type, (2, 3); layout=NdArray.ROW_MAJOR)
+        @test element_count(format) == 6
+        @test payload_size(format) == 6 * element_size
+    end
+    @test_throws ArgumentError payload_size(
+        NdArrayFormat(NdArray.UNKNOWN, (1,); layout=NdArray.ROW_MAJOR),
+    )
+    @test_throws ArgumentError payload_size(
+        NdArrayFormat(NdArray.START_CUSTOM, (1,); layout=NdArray.ROW_MAJOR),
+    )
+
+    rate = SPA.Fraction(1_000, 1)
+    matrix = MatrixFormat(NdArray.F32_LE, 8, 12; rate)
+    @test matrix.layout == NdArray.COLUMN_MAJOR
+    matrix_pod = matrix_format(matrix)
+    parsed_matrix = @inferred MatrixFormat(matrix_pod)
+    @test parsed_matrix.element_type == matrix.element_type
+    @test parsed_matrix.rows == matrix.rows
+    @test parsed_matrix.columns == matrix.columns
+    @test parsed_matrix.layout == matrix.layout
+    @test parsed_matrix.rate == matrix.rate
+    @test payload_size(parsed_matrix) == 8 * 12 * sizeof(Float32)
+
+    row_major = MatrixFormat(NdArray.F64_LE, 3, 5; layout=NdArray.ROW_MAJOR)
+    @test MatrixFormat(matrix_format_param(row_major)).layout == NdArray.ROW_MAJOR
+    vector = VectorFormat(NdArray.U16_LE, 97)
+    @test VectorFormat(vector_format_param(vector)).length == 97
+    @test VectorFormat(vector_format_param(vector)).element_type == NdArray.U16_LE
+    @test NdArrayFormat(ndarray_format_param(
+        NdArray.COMPLEX_F32_LE,
+        (2, 4, 8);
+        layout=NdArray.COLUMN_MAJOR,
+    )).shape == (2, 4, 8)
+
+    @test_throws ArgumentError NdArrayFormat(
+        NdArray.F32_LE,
+        ();
+        layout=NdArray.ROW_MAJOR,
+    )
+    @test_throws ArgumentError NdArrayFormat(
+        NdArray.F32_LE,
+        (2, 0);
+        layout=NdArray.ROW_MAJOR,
+    )
+    @test_throws ArgumentError NdArrayFormat(
+        NdArray.F32_LE,
+        (typemax(Int32), typemax(Int32), typemax(Int32));
+        layout=NdArray.ROW_MAJOR,
+    )
 end
 
 
@@ -718,12 +808,19 @@ end
         align=16,
         data_types=Int32(1 << PipeWireAO.LibPipeWire.SPA_DATA_MemPtr),
         metadata_types=Int32(1 << PipeWireAO.LibPipeWire.SPA_META_Header),
+        page_size_hint=SPA.PAGE_SIZE_HUGE_2MB,
     )
     @test buffers isa SPA.Parameter
     @test all(isconcretetype, fieldtypes(typeof(buffers)))
     @test buffers.object.type == PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_ParamBuffers
     @test buffers.object.id == PipeWireAO.LibPipeWire.SPA_PARAM_Buffers
     @test pod_value(SPA.Parameter, Pod(buffers)) == buffers
+    page_size_property = only(
+        property for property in buffers.object.properties if
+        property.key == SPA.BUFFERS_PAGE_SIZE_HINT
+    )
+    @test pod_value(SPA.Id, page_size_property.value) ==
+          SPA.Id(UInt32(SPA.PAGE_SIZE_HUGE_2MB))
 
     metadata = metadata_param(PipeWireAO.LibPipeWire.SPA_META_Header; size=64)
     io = io_param(PipeWireAO.LibPipeWire.SPA_IO_Buffers; size=32)

@@ -16,7 +16,11 @@ const EXPORTED_INLINE_APIS = [
 ]
 
 cd(@__DIR__) do
-    include_root = joinpath(PipeWireAO_jll.artifact_dir, "include")
+    include_root = get(
+        ENV,
+        "PIPEWIREAO_INCLUDE_ROOT",
+        joinpath(PipeWireAO_jll.artifact_dir, "include"),
+    )
     pipewire_include = joinpath(include_root, "pipewire-ao-0.3")
     spa_include = joinpath(include_root, "spa-ao-0.2")
     headers = [
