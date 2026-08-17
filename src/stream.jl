@@ -807,6 +807,102 @@ end
 
 const StreamMetadata = BufferMetadata{StreamBuffer}
 
+"Producer lifecycle state carried by a progressive metadata snapshot."
+@enum ProgressiveState::UInt32 begin
+    PROGRESSIVE_PREPARED = LibPipeWire.SPA_META_PROGRESSIVE_STATE_PREPARED
+    PROGRESSIVE_ACTIVE = LibPipeWire.SPA_META_PROGRESSIVE_STATE_ACTIVE
+    PROGRESSIVE_COMPLETE = LibPipeWire.SPA_META_PROGRESSIVE_STATE_COMPLETE
+    PROGRESSIVE_ABORTED = LibPipeWire.SPA_META_PROGRESSIVE_STATE_ABORTED
+end
+
+"One atomic view of the immutable payload prefix and producer lifecycle state."
+struct ProgressiveSnapshot
+    committed_bytes::UInt32
+    state::ProgressiveState
+end
+
+"An acquire-observed progressive snapshot; flags are zero before producer quiescence."
+struct ProgressiveObservation
+    snapshot::ProgressiveSnapshot
+    terminal_flags::UInt32
+end
+
+"A borrowed Version 1 progressive metadata allocation belonging to a buffer."
+struct ProgressiveMetadata{BufferType<:AbstractPipeWireBuffer}
+    metadata::BufferMetadata{BufferType}
+end
+
+"The producer stopped before publishing the complete payload."
+const PROGRESSIVE_FLAG_INCOMPLETE = UInt32(1 << 0)
+"The producer detected an invalid negotiated payload layout."
+const PROGRESSIVE_FLAG_INVALID_LAYOUT = UInt32(1 << 1)
+"Progressive production was cancelled."
+const PROGRESSIVE_FLAG_CANCELLED = UInt32(1 << 2)
+"A device failed while producing the payload."
+const PROGRESSIVE_FLAG_DEVICE_ERROR = UInt32(1 << 3)
+"The producer detected corrupt payload data."
+const PROGRESSIVE_FLAG_CORRUPTED = UInt32(1 << 4)
+"The producer detected a progressive protocol violation."
+const PROGRESSIVE_FLAG_PROTOCOL_ERROR = UInt32(1 << 5)
+
+const _PROGRESSIVE_FLAG_ALL = UInt32((1 << 6) - 1)
+const _PROGRESSIVE_SIZE = UInt32(48)
+const _PROGRESSIVE_FEATURE_VERSION_1 = Int32(1 << 0)
+
+@inline function _progressive_storage_pointer(metadata::ProgressiveMetadata)
+    native = _native_metadata(metadata.metadata)
+    native.type == SPA.META_PROGRESSIVE || throw(
+        InvalidStateException("the metadata entry is not progressive metadata", :wrong_type),
+    )
+    native.size >= _PROGRESSIVE_SIZE || throw(
+        InvalidStateException("the progressive metadata payload is truncated", :truncated),
+    )
+    native.data == C_NULL && throw(
+        InvalidStateException("the progressive metadata payload is unavailable", :unavailable),
+    )
+    pointer = Ptr{LibPipeWire.spa_meta_progressive}(native.data)
+    UInt(pointer) & UInt(7) == 0 || throw(
+        InvalidStateException("the progressive metadata payload is misaligned", :misaligned),
+    )
+    return pointer
+end
+
+@inline function _decode_progressive_snapshot(value::UInt64)
+    committed = Ref{UInt32}()
+    state = Ref{UInt32}()
+    LibPipeWire.spa_meta_progressive_snapshot_decode(value, committed, state) || return nothing
+    return ProgressiveSnapshot(committed[], ProgressiveState(state[]))
+end
+
+@inline function _progressive_observation_pointer(
+    pointer::Ptr{LibPipeWire.spa_meta_progressive},
+)
+    value = LibPipeWire.spa_meta_progressive_load_acquire(pointer)
+    snapshot = _decode_progressive_snapshot(value)
+    snapshot === nothing && return nothing
+
+    terminal_flags = if snapshot.state in (PROGRESSIVE_COMPLETE, PROGRESSIVE_ABORTED)
+        unsafe_load(pointer.terminal_flags)
+    else
+        UInt32(0)
+    end
+    return ProgressiveObservation(snapshot, terminal_flags)
+end
+
+@inline function _checked_progressive_uint32(value::Integer, description::AbstractString)
+    0 <= value <= typemax(UInt32) || throw(
+        ArgumentError("$description is outside UInt32 range"),
+    )
+    return UInt32(value)
+end
+
+@inline function _progressive_snapshot_value(snapshot::ProgressiveSnapshot)
+    return LibPipeWire.spa_meta_progressive_snapshot_encode(
+        snapshot.committed_bytes,
+        UInt32(snapshot.state),
+    )
+end
+
 "An owned snapshot of a SPA buffer chunk."
 struct BufferChunk
     offset::UInt32
@@ -963,18 +1059,221 @@ function buffer_metadata(buffer::AbstractPipeWireBuffer, type::UInt32)
     return nothing
 end
 
-function _native_metadata(metadata::BufferMetadata)
+function _native_metadata_pointer(metadata::BufferMetadata)
     buffer = unsafe_load(_spa_buffer(metadata.buffer))
     1 <= metadata.index <= Int(buffer.n_metas) ||
         throw(InvalidStateException("the metadata entry is unavailable", :unavailable))
     buffer.metas == C_NULL &&
         throw(InvalidStateException("the PipeWire buffer has no metadata array", :no_metadata))
-    return unsafe_load(buffer.metas, metadata.index)
+    return buffer.metas + (metadata.index - 1) * sizeof(LibPipeWire.spa_meta)
 end
+
+_native_metadata(metadata::BufferMetadata) = unsafe_load(_native_metadata_pointer(metadata))
 
 metadata_type(metadata::BufferMetadata) = _native_metadata(metadata).type
 metadata_size(metadata::BufferMetadata) = Int(_native_metadata(metadata).size)
 metadata_pointer(metadata::BufferMetadata) = _native_metadata(metadata).data
+
+"Return borrowed Version 1 progressive metadata, or `nothing` when absent."
+function buffer_progressive(buffer::AbstractPipeWireBuffer)
+    metadata = buffer_metadata(buffer, SPA.META_PROGRESSIVE)
+    metadata === nothing && return nothing
+    progressive = ProgressiveMetadata(metadata)
+    _progressive_storage_pointer(progressive)
+    return progressive
+end
+
+"Return the zero-based native data-plane index described by progressive metadata."
+progressive_data_index(metadata::ProgressiveMetadata) =
+    unsafe_load(_progressive_storage_pointer(metadata).data_index)
+
+"Return the byte offset of the progressive payload in its data plane."
+progressive_payload_offset(metadata::ProgressiveMetadata) =
+    unsafe_load(_progressive_storage_pointer(metadata).payload_offset)
+
+"Return the total byte length of the progressive payload."
+progressive_payload_size(metadata::ProgressiveMetadata) =
+    unsafe_load(_progressive_storage_pointer(metadata).payload_size)
+
+"Return the negotiated byte increment for non-final progressive commits."
+progressive_commit_granularity(metadata::ProgressiveMetadata) =
+    unsafe_load(_progressive_storage_pointer(metadata).commit_granularity)
+
+"Return whether a progressive metadata allocation contains a valid Version 1 state."
+function progressive_valid(metadata::ProgressiveMetadata)
+    return LibPipeWire.spa_meta_progressive_is_valid(
+        _native_metadata_pointer(metadata.metadata),
+    )
+end
+
+"Acquire-load and validate the current progressive snapshot."
+function progressive_snapshot(metadata::ProgressiveMetadata)
+    progressive_valid(metadata) || throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    observation = _progressive_observation_pointer(_progressive_storage_pointer(metadata))
+    observation === nothing && throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    return observation.snapshot
+end
+
+"Acquire-load progressive state and read flags only after producer quiescence."
+function progressive_observation(metadata::ProgressiveMetadata)
+    progressive_valid(metadata) || throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    observation = _progressive_observation_pointer(_progressive_storage_pointer(metadata))
+    observation === nothing && throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    return observation
+end
+
+"""
+    initialize_progressive!(metadata, data_index, payload_offset,
+                            payload_size, commit_granularity)
+
+Initialize a borrowed metadata allocation in `Prepared`. `data_index` is the
+zero-based native SPA data-plane index. Call this before announcing the buffer
+to a consumer.
+"""
+function initialize_progressive!(
+    metadata::ProgressiveMetadata,
+    data_index::Integer,
+    payload_offset::Integer,
+    payload_size::Integer,
+    commit_granularity::Integer,
+)
+    return _initialize_progressive!(
+        metadata,
+        _checked_progressive_uint32(data_index, "progressive data index"),
+        _checked_progressive_uint32(payload_offset, "progressive payload offset"),
+        _checked_progressive_uint32(payload_size, "progressive payload size"),
+        _checked_progressive_uint32(
+            commit_granularity,
+            "progressive commit granularity",
+        ),
+    )
+end
+
+@inline function _initialize_progressive!(
+    metadata::ProgressiveMetadata,
+    data_index::UInt32,
+    payload_offset::UInt32,
+    payload_size::UInt32,
+    commit_granularity::UInt32,
+)
+    pointer = _progressive_storage_pointer(metadata)
+    LibPipeWire.spa_meta_progressive_init(
+        pointer,
+        data_index,
+        payload_offset,
+        payload_size,
+        commit_granularity,
+    ) || throw(ArgumentError("the progressive metadata layout is invalid"))
+    return metadata
+end
+
+"""
+    set_progressive_terminal_flags!(metadata, flags)
+
+Set terminal outcome flags while the producer is in `Prepared` or `Active`.
+Publish `Complete` or `Aborted` afterward so the release-store makes these
+flags visible to consumers.
+"""
+function set_progressive_terminal_flags!(metadata::ProgressiveMetadata, flags::Integer)
+    return _set_progressive_terminal_flags!(
+        metadata,
+        _checked_progressive_uint32(flags, "progressive terminal flags"),
+    )
+end
+
+@inline function _set_progressive_terminal_flags!(
+    metadata::ProgressiveMetadata,
+    flags::UInt32,
+)
+    flags & ~_PROGRESSIVE_FLAG_ALL == 0 || throw(
+        ArgumentError("progressive terminal flags contain reserved bits"),
+    )
+    progressive_valid(metadata) || throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    pointer = _progressive_storage_pointer(metadata)
+    observation = _progressive_observation_pointer(pointer)
+    observation === nothing && throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    observation.snapshot.state in (PROGRESSIVE_PREPARED, PROGRESSIVE_ACTIVE) || throw(
+        InvalidStateException("the progressive producer is already terminal", :terminal),
+    )
+    unsafe_store!(pointer.terminal_flags, flags)
+    return metadata
+end
+
+"""
+    publish_progressive!(metadata, committed, state=PROGRESSIVE_ACTIVE)
+
+Release-publish a monotonic committed byte prefix and lifecycle transition.
+The valid transitions are `Prepared -> Active` and `Active -> Active`,
+`Complete`, or `Aborted`. A `Complete` publication requires the whole payload.
+"""
+function publish_progressive!(
+    metadata::ProgressiveMetadata,
+    committed::Integer,
+    state::ProgressiveState=PROGRESSIVE_ACTIVE,
+)
+    return _publish_progressive!(
+        metadata,
+        _checked_progressive_uint32(committed, "progressive committed prefix"),
+        state,
+    )
+end
+
+@inline function _publish_progressive!(
+    metadata::ProgressiveMetadata,
+    committed::UInt32,
+    state::ProgressiveState,
+)
+    progressive_valid(metadata) || throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    pointer = _progressive_storage_pointer(metadata)
+    observation = _progressive_observation_pointer(pointer)
+    observation === nothing && throw(
+        InvalidStateException("the progressive metadata is malformed", :malformed),
+    )
+    current = observation.snapshot
+    if current.state == PROGRESSIVE_PREPARED
+        state == PROGRESSIVE_ACTIVE || throw(
+            InvalidStateException("progressive metadata must become active first", :prepared),
+        )
+    elseif current.state == PROGRESSIVE_ACTIVE
+        state in (PROGRESSIVE_ACTIVE, PROGRESSIVE_COMPLETE, PROGRESSIVE_ABORTED) || throw(
+            InvalidStateException("the progressive state transition is invalid", :invalid),
+        )
+    else
+        throw(InvalidStateException("the progressive producer is already terminal", :terminal))
+    end
+
+    payload_size = unsafe_load(pointer.payload_size)
+    granularity = unsafe_load(pointer.commit_granularity)
+    current.committed_bytes <= committed <= payload_size || throw(
+        InvalidStateException("the progressive prefix is not monotonic", :nonmonotonic),
+    )
+    (committed == payload_size || committed % granularity == 0) || throw(
+        InvalidStateException("the progressive prefix is not on a commit boundary", :unaligned),
+    )
+    state != PROGRESSIVE_COMPLETE || committed == payload_size || throw(
+        InvalidStateException("a complete progressive payload must be fully committed", :incomplete),
+    )
+
+    LibPipeWire.spa_meta_progressive_store_release(
+        pointer,
+        _progressive_snapshot_value(ProgressiveSnapshot(committed, state)),
+    )
+    return metadata
+end
 
 "Return a borrowed byte view of a metadata payload."
 function metadata_bytes(metadata::BufferMetadata)

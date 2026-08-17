@@ -112,6 +112,49 @@ function pw_proxy_get_object_listeners(proxy)
     @ccall libpipewire_ao.pw_proxy_get_object_listeners(proxy::Ptr{pw_proxy})::Ptr{spa_hook_list}
 end
 
+"""
+    spa_meta
+
+A metadata element.
+
+This structure is available on the buffer structure and contains the type of the metadata and a pointer/size to the actual metadata itself.
+
+| Field | Note                                                |
+| :---- | :-------------------------------------------------- |
+| type  | metadata type, one of enum [`spa_meta_type`](@ref)  |
+| size  | size of metadata                                    |
+| data  | pointer to metadata                                 |
+"""
+struct spa_meta
+    type::UInt32
+    size::UInt32
+    data::Ptr{Cvoid}
+end
+
+"""
+    spa_meta_end(m)
+
+### Prototype
+```c
+void *spa_meta_end(const struct spa_meta *m);
+```
+"""
+function spa_meta_end(m)
+    @ccall libpipewire_ao.spa_meta_end(m::Ptr{spa_meta})::Ptr{Cvoid}
+end
+
+"""
+    spa_meta_first(m)
+
+### Prototype
+```c
+void *spa_meta_first(const struct spa_meta *m);
+```
+"""
+function spa_meta_first(m)
+    @ccall libpipewire_ao.spa_meta_first(m::Ptr{spa_meta})::Ptr{Cvoid}
+end
+
 const spa_log_level = UInt32
 const SPA_LOG_LEVEL_NONE = 0 % UInt32
 const SPA_LOG_LEVEL_ERROR = 1 % UInt32
@@ -3841,25 +3884,6 @@ const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_features = 65536 % UInt32
 
 """
-    spa_meta
-
-A metadata element.
-
-This structure is available on the buffer structure and contains the type of the metadata and a pointer/size to the actual metadata itself.
-
-| Field | Note                                                |
-| :---- | :-------------------------------------------------- |
-| type  | metadata type, one of enum [`spa_meta_type`](@ref)  |
-| size  | size of metadata                                    |
-| data  | pointer to metadata                                 |
-"""
-struct spa_meta
-    type::UInt32
-    size::UInt32
-    data::Ptr{Cvoid}
-end
-
-"""
     spa_meta_header
 
 Describes essential buffer header metadata such as flags and timestamps.
@@ -3890,6 +3914,18 @@ struct spa_meta_region
 end
 
 """
+    spa_meta_region_is_valid(m)
+
+### Prototype
+```c
+bool spa_meta_region_is_valid(const struct spa_meta_region *m);
+```
+"""
+function spa_meta_region_is_valid(m)
+    @ccall libpipewire_ao.spa_meta_region_is_valid(m::Ptr{spa_meta_region})::Bool
+end
+
+"""
     spa_meta_bitmap
 
 Bitmap information
@@ -3908,6 +3944,18 @@ struct spa_meta_bitmap
     size::spa_rectangle
     stride::Int32
     offset::UInt32
+end
+
+"""
+    spa_meta_bitmap_is_valid(m)
+
+### Prototype
+```c
+bool spa_meta_bitmap_is_valid(const struct spa_meta_bitmap *m);
+```
+"""
+function spa_meta_bitmap_is_valid(m)
+    @ccall libpipewire_ao.spa_meta_bitmap_is_valid(m::Ptr{spa_meta_bitmap})::Bool
 end
 
 """
@@ -3931,6 +3979,18 @@ struct spa_meta_cursor
     position::spa_point
     hotspot::spa_point
     bitmap_offset::UInt32
+end
+
+"""
+    spa_meta_cursor_is_valid(m)
+
+### Prototype
+```c
+bool spa_meta_cursor_is_valid(const struct spa_meta_cursor *m);
+```
+"""
+function spa_meta_cursor_is_valid(m)
+    @ccall libpipewire_ao.spa_meta_cursor_is_valid(m::Ptr{spa_meta_cursor})::Bool
 end
 
 """
@@ -4056,6 +4116,82 @@ function Base.propertynames(x::spa_meta_progressive, private::Bool = false)
         else
             ()
         end...)
+end
+
+"""
+    spa_meta_progressive_snapshot_encode(committed, state)
+
+### Prototype
+```c
+uint64_t spa_meta_progressive_snapshot_encode(uint32_t committed, enum spa_meta_progressive_state state);
+```
+"""
+function spa_meta_progressive_snapshot_encode(committed, state)
+    @ccall libpipewire_ao.spa_meta_progressive_snapshot_encode(committed::UInt32, state::spa_meta_progressive_state)::UInt64
+end
+
+"""
+    spa_meta_progressive_snapshot_decode(snapshot, committed, state)
+
+### Prototype
+```c
+bool spa_meta_progressive_snapshot_decode(uint64_t snapshot, uint32_t *committed, enum spa_meta_progressive_state *state);
+```
+"""
+function spa_meta_progressive_snapshot_decode(snapshot, committed, state)
+    @ccall libpipewire_ao.spa_meta_progressive_snapshot_decode(snapshot::UInt64, committed::Ptr{UInt32}, state::Ptr{spa_meta_progressive_state})::Bool
+end
+
+"""
+    spa_meta_progressive_load_acquire(meta)
+
+### Prototype
+```c
+uint64_t spa_meta_progressive_load_acquire( const struct spa_meta_progressive *meta);
+```
+"""
+function spa_meta_progressive_load_acquire(meta)
+    @ccall libpipewire_ao.spa_meta_progressive_load_acquire(meta::Ptr{spa_meta_progressive})::UInt64
+end
+
+"""
+    spa_meta_progressive_store_release(meta, snapshot)
+
+### Prototype
+```c
+void spa_meta_progressive_store_release( struct spa_meta_progressive *meta, uint64_t snapshot);
+```
+"""
+function spa_meta_progressive_store_release(meta, snapshot)
+    @ccall libpipewire_ao.spa_meta_progressive_store_release(meta::Ptr{spa_meta_progressive}, snapshot::UInt64)::Cvoid
+end
+
+"""
+    spa_meta_progressive_init(meta, data_index, payload_offset, payload_size, commit_granularity)
+
+Initialize a reusable Version 1 progressive metadata allocation.
+
+### Prototype
+```c
+bool spa_meta_progressive_init(struct spa_meta_progressive *meta, uint32_t data_index, uint32_t payload_offset, uint32_t payload_size, uint32_t commit_granularity);
+```
+"""
+function spa_meta_progressive_init(meta, data_index, payload_offset, payload_size, commit_granularity)
+    @ccall libpipewire_ao.spa_meta_progressive_init(meta::Ptr{spa_meta_progressive}, data_index::UInt32, payload_offset::UInt32, payload_size::UInt32, commit_granularity::UInt32)::Bool
+end
+
+"""
+    spa_meta_progressive_is_valid(meta)
+
+Validate a mapped Version 1 progressive metadata allocation.
+
+### Prototype
+```c
+bool spa_meta_progressive_is_valid(const struct spa_meta *meta);
+```
+"""
+function spa_meta_progressive_is_valid(meta)
+    @ccall libpipewire_ao.spa_meta_progressive_is_valid(meta::Ptr{spa_meta})::Bool
 end
 
 """

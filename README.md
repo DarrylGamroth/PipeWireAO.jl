@@ -220,6 +220,42 @@ format = video_format(
 )
 ```
 
+Adaptive-optics numerical payloads use the native `ndarray` application
+subtype. Shapes are in logical axis order. Julia matrices default to
+column-major layout, while row-major storage remains explicit and fully
+negotiable.
+
+```julia
+matrix = MatrixFormat(NdArray.F32_LE, 6_400, 1_200)
+format = matrix_format(matrix)
+buffers = buffers_param(
+    size=payload_size(matrix),
+    page_size_hint=SPA.PAGE_SIZE_HUGE_2MB,
+)
+```
+
+The page-size choice is a hint: inspect `SPA.DATA_FLAG_HUGE_PAGES` and the
+size-specific data flags on the allocated buffer to determine what PipeWireAO
+actually obtained.
+
+Progressive endpoints negotiate `progressive_metadata_param()` and then borrow
+each allocation with `buffer_progressive`. Producers initialize it before
+announcement and release-publish only immutable byte prefixes. Consumers must
+call `progressive_valid` before payload access and acquire observations through
+`progressive_observation`. The warmed observation and publication methods have
+a zero-byte heap-allocation contract when called with concrete metadata and
+`UInt32` values.
+
+```julia
+metadata = buffer_progressive(buffer)
+metadata === nothing && error("progressive metadata was not negotiated")
+
+initialize_progressive!(metadata, 0, 0, 4096, 256)
+publish_progressive!(metadata, UInt32(0), PROGRESSIVE_ACTIVE)
+# Write only the unpublished suffix before advancing this prefix.
+publish_progressive!(metadata, UInt32(256), PROGRESSIVE_ACTIVE)
+```
+
 Negotiated format PODs can be converted into concrete owned snapshots. This is
 the usual operation inside `on_param_changed` after PipeWire fixates a stream
 format:

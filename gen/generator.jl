@@ -2,6 +2,7 @@ using Clang.Generators
 using PipeWireAO_jll
 
 const EXPORTED_INLINE_APIS = [
+    "SPA_API_META",
     "PW_API_CLIENT_IMPL",
     "PW_API_CORE_IMPL",
     "PW_API_DEVICE_IMPL",

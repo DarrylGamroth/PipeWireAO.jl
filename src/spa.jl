@@ -644,6 +644,14 @@ function metadata_param(
     return SPA.Parameter(LibPipeWire.SPA_TYPE_OBJECT_ParamMeta, id, properties)
 end
 
+"Request native Version 1 progressive metadata on every negotiated buffer."
+progressive_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
+    SPA.META_PROGRESSIVE;
+    size=_PROGRESSIVE_SIZE,
+    features=_PROGRESSIVE_FEATURE_VERSION_1,
+    id,
+)
+
 "Build a typed SPA I/O-area parameter."
 function io_param(
     type;

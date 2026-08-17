@@ -258,6 +258,9 @@ const DATA_FLAG_HUGE_PAGES = UInt32(1 << 4)
 const DATA_FLAG_HUGE_2MB = UInt32(1 << 5)
 const DATA_FLAG_HUGE_1GB = UInt32(1 << 6)
 
+# Target ABI cache-line size used by shared-memory control structures.
+const CACHE_LINE_SIZE = UInt32(sizeof(LibPipeWire.spa_ringbuffer_shared_index))
+
 # Metadata types attached to SPA buffers.
 @_spa_ids begin
     META_INVALID = LibPipeWire.SPA_META_Invalid
@@ -311,6 +314,8 @@ end
     IO_RATE_MATCH = LibPipeWire.SPA_IO_RateMatch
     IO_MEMORY = LibPipeWire.SPA_IO_Memory
     IO_ASYNC_BUFFERS = LibPipeWire.SPA_IO_AsyncBuffers
+    IO_BUFFERS_LATEST = LibPipeWire.SPA_IO_BuffersLatest
+    IO_BUFFERS_LATEST_NOTIFY = LibPipeWire.SPA_IO_BuffersLatestNotify
 end
 
 # Property keys in SPA buffer-layout parameters.
