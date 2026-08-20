@@ -807,6 +807,95 @@ end
 
 const StreamMetadata = BufferMetadata{StreamBuffer}
 
+"Number of bytes in an opaque PipeWireAO acquisition-domain identifier."
+const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_DOMAIN_SIZE)
+
+"""
+    AcquisitionDomain(bytes)
+
+Construct a nonzero opaque acquisition-domain identifier from exactly
+`ACQUISITION_DOMAIN_SIZE` bytes.
+"""
+struct AcquisitionDomain
+    bytes::NTuple{ACQUISITION_DOMAIN_SIZE,UInt8}
+
+    function AcquisitionDomain(bytes::NTuple{ACQUISITION_DOMAIN_SIZE,UInt8})
+        all(iszero, bytes) && throw(ArgumentError("the acquisition domain must be nonzero"))
+        return new(bytes)
+    end
+end
+
+"""
+    AcquisitionIdentity(domain, generation, sequence)
+
+Represent the indivisible physical-acquisition identity tuple.
+"""
+struct AcquisitionIdentity
+    domain::AcquisitionDomain
+    generation::UInt64
+    sequence::UInt64
+end
+
+"""
+    AcquisitionExposureStart(nanoseconds, uncertainty_nanoseconds)
+
+Represent exposure start in local `CLOCK_MONOTONIC` nanoseconds and its
+inclusive uncertainty bound.
+"""
+struct AcquisitionExposureStart
+    nanoseconds::Int64
+    uncertainty_nanoseconds::UInt64
+end
+
+"A borrowed Version 1 acquisition metadata allocation belonging to a buffer."
+struct AcquisitionMetadata{BufferType<:AbstractPipeWireBuffer}
+    metadata::BufferMetadata{BufferType}
+end
+
+"Acquisition identity is valid."
+const ACQUISITION_FLAG_IDENTITY_VALID =
+    LibPipeWire.SPA_META_ACQUISITION_FLAG_IDENTITY_VALID
+"Exposure start and timestamp uncertainty are valid."
+const ACQUISITION_FLAG_EXPOSURE_START_VALID =
+    LibPipeWire.SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID
+"Exposure duration is valid."
+const ACQUISITION_FLAG_EXPOSURE_DURATION_VALID =
+    LibPipeWire.SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID
+
+const _ACQUISITION_SIZE = Int32(LibPipeWire.SPA_META_ACQUISITION_SIZE)
+const _ACQUISITION_FEATURE_VERSION_1 =
+    Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_VERSION_1)
+
+@inline function _acquisition_storage_pointer(metadata::AcquisitionMetadata)
+    native = _native_metadata(metadata.metadata)
+    native.type == SPA.META_ACQUISITION || throw(
+        InvalidStateException("the metadata entry is not acquisition metadata", :wrong_type),
+    )
+    native.size >= UInt32(_ACQUISITION_SIZE) || throw(
+        InvalidStateException("the acquisition metadata payload is truncated", :truncated),
+    )
+    native.data == C_NULL && throw(
+        InvalidStateException("the acquisition metadata payload is unavailable", :unavailable),
+    )
+    pointer = Ptr{LibPipeWire.spa_meta_acquisition}(native.data)
+    UInt(pointer) & UInt(7) == 0 || throw(
+        InvalidStateException("the acquisition metadata payload is misaligned", :misaligned),
+    )
+    return pointer
+end
+
+@inline function _checked_acquisition_int64(value::Integer, description::AbstractString)
+    typemin(Int64) <= value <= typemax(Int64) ||
+        throw(ArgumentError("$description is outside Int64 range"))
+    return Int64(value)
+end
+
+@inline function _checked_acquisition_uint64(value::Integer, description::AbstractString)
+    0 <= value <= typemax(UInt64) ||
+        throw(ArgumentError("$description is outside UInt64 range"))
+    return UInt64(value)
+end
+
 "Producer lifecycle state carried by a progressive metadata snapshot."
 @enum ProgressiveState::UInt32 begin
     PROGRESSIVE_PREPARED = LibPipeWire.SPA_META_PROGRESSIVE_STATE_PREPARED
@@ -1073,6 +1162,168 @@ _native_metadata(metadata::BufferMetadata) = unsafe_load(_native_metadata_pointe
 metadata_type(metadata::BufferMetadata) = _native_metadata(metadata).type
 metadata_size(metadata::BufferMetadata) = Int(_native_metadata(metadata).size)
 metadata_pointer(metadata::BufferMetadata) = _native_metadata(metadata).data
+
+"""
+    buffer_acquisition(buffer)
+
+Return borrowed Version 1 acquisition metadata, or `nothing` when absent.
+Reject a present allocation that is undersized, unavailable, or misaligned.
+"""
+function buffer_acquisition(buffer::AbstractPipeWireBuffer)
+    metadata = buffer_metadata(buffer, SPA.META_ACQUISITION)
+    metadata === nothing && return nothing
+    acquisition = AcquisitionMetadata(metadata)
+    _acquisition_storage_pointer(acquisition)
+    return acquisition
+end
+
+"""
+    acquisition_valid(metadata)
+
+Return whether acquisition metadata satisfies the native Version 1 contract.
+"""
+function acquisition_valid(metadata::AcquisitionMetadata)
+    return LibPipeWire.spa_meta_acquisition_is_valid(
+        _native_metadata_pointer(metadata.metadata),
+    )
+end
+
+"""
+    acquisition_flags(metadata)
+
+Return the validated acquisition validity flags.
+"""
+function acquisition_flags(metadata::AcquisitionMetadata)
+    acquisition_valid(metadata) || throw(
+        InvalidStateException("the acquisition metadata is malformed", :malformed),
+    )
+    return unsafe_load(_acquisition_storage_pointer(metadata).flags)
+end
+
+"""
+    acquisition_identity(metadata)
+
+Return the complete validated acquisition identity, or `nothing` when absent.
+"""
+function acquisition_identity(metadata::AcquisitionMetadata)
+    flags = acquisition_flags(metadata)
+    flags & ACQUISITION_FLAG_IDENTITY_VALID == 0 && return nothing
+    pointer = _acquisition_storage_pointer(metadata)
+    return AcquisitionIdentity(
+        AcquisitionDomain(unsafe_load(pointer.domain)),
+        unsafe_load(pointer.generation),
+        unsafe_load(pointer.sequence),
+    )
+end
+
+"""
+    acquisition_exposure_start(metadata)
+
+Return validated exposure start and uncertainty, or `nothing` when absent.
+The timestamp uses the local Linux `CLOCK_MONOTONIC` domain.
+"""
+function acquisition_exposure_start(metadata::AcquisitionMetadata)
+    flags = acquisition_flags(metadata)
+    flags & ACQUISITION_FLAG_EXPOSURE_START_VALID == 0 && return nothing
+    pointer = _acquisition_storage_pointer(metadata)
+    return AcquisitionExposureStart(
+        unsafe_load(pointer.exposure_start_nsec),
+        unsafe_load(pointer.timestamp_uncertainty_nsec),
+    )
+end
+
+"""
+    acquisition_exposure_duration(metadata)
+
+Return the validated exposure duration in nanoseconds, or `nothing` when absent.
+"""
+function acquisition_exposure_duration(metadata::AcquisitionMetadata)
+    flags = acquisition_flags(metadata)
+    flags & ACQUISITION_FLAG_EXPOSURE_DURATION_VALID == 0 && return nothing
+    return unsafe_load(_acquisition_storage_pointer(metadata).exposure_duration_nsec)
+end
+
+"""
+    initialize_acquisition!(metadata)
+
+Clear reusable acquisition metadata to its valid, empty Version 1 state.
+"""
+function initialize_acquisition!(metadata::AcquisitionMetadata)
+    LibPipeWire.spa_meta_acquisition_init(_acquisition_storage_pointer(metadata)) ||
+        throw(InvalidStateException("the acquisition metadata cannot be initialized", :invalid))
+    return metadata
+end
+
+"""
+    set_acquisition_identity!(metadata, identity)
+
+Establish the complete acquisition identity tuple.
+"""
+function set_acquisition_identity!(
+    metadata::AcquisitionMetadata,
+    identity::AcquisitionIdentity,
+)
+    domain = Ref(identity.domain.bytes)
+    domain_pointer = Ptr{UInt8}(Base.unsafe_convert(Ptr{typeof(identity.domain.bytes)}, domain))
+    valid = GC.@preserve domain LibPipeWire.spa_meta_acquisition_set_identity(
+        _acquisition_storage_pointer(metadata),
+        domain_pointer,
+        identity.generation,
+        identity.sequence,
+    )
+    valid || throw(ArgumentError("the acquisition identity is invalid"))
+    return metadata
+end
+
+"""
+    set_acquisition_exposure_start!(metadata, nanoseconds, uncertainty_nanoseconds)
+
+Establish exposure start in local `CLOCK_MONOTONIC` nanoseconds and its
+inclusive uncertainty bound.
+"""
+function set_acquisition_exposure_start!(
+    metadata::AcquisitionMetadata,
+    nanoseconds::Integer,
+    uncertainty_nanoseconds::Integer,
+)
+    valid = LibPipeWire.spa_meta_acquisition_set_exposure_start(
+        _acquisition_storage_pointer(metadata),
+        _checked_acquisition_int64(nanoseconds, "exposure start"),
+        _checked_acquisition_uint64(uncertainty_nanoseconds, "timestamp uncertainty"),
+    )
+    valid || throw(ArgumentError("the acquisition exposure start is invalid"))
+    return metadata
+end
+
+"""
+    set_acquisition_exposure_duration!(metadata, nanoseconds)
+
+Establish a positive exposure duration in nanoseconds.
+"""
+function set_acquisition_exposure_duration!(
+    metadata::AcquisitionMetadata,
+    nanoseconds::Integer,
+)
+    valid = LibPipeWire.spa_meta_acquisition_set_exposure_duration(
+        _acquisition_storage_pointer(metadata),
+        _checked_acquisition_uint64(nanoseconds, "exposure duration"),
+    )
+    valid || throw(ArgumentError("the acquisition exposure duration is invalid"))
+    return metadata
+end
+
+"""
+    acquisition_identity_equal(a, b)
+
+Return whether two allocations contain the same complete, valid acquisition
+identity. Return `false` when either allocation is malformed or lacks identity.
+"""
+function acquisition_identity_equal(a::AcquisitionMetadata, b::AcquisitionMetadata)
+    return LibPipeWire.spa_meta_acquisition_identity_equal(
+        _acquisition_storage_pointer(a),
+        _acquisition_storage_pointer(b),
+    )
+end
 
 "Return borrowed Version 1 progressive metadata, or `nothing` when absent."
 function buffer_progressive(buffer::AbstractPipeWireBuffer)

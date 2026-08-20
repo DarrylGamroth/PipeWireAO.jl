@@ -274,6 +274,7 @@ const CACHE_LINE_SIZE = UInt32(sizeof(LibPipeWire.spa_ringbuffer_shared_index))
     META_VIDEO_TRANSFORM = LibPipeWire.SPA_META_VideoTransform
     META_SYNC_TIMELINE = LibPipeWire.SPA_META_SyncTimeline
     META_PROGRESSIVE = LibPipeWire.SPA_META_Progressive
+    META_ACQUISITION = LibPipeWire.SPA_META_Acquisition
 end
 
 # Flags stored in `spa_meta_header.flags`.

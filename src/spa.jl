@@ -652,6 +652,18 @@ progressive_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_
     id,
 )
 
+"""
+    acquisition_metadata_param(; id=LibPipeWire.SPA_PARAM_Meta)
+
+Request native Version 1 acquisition metadata on every negotiated buffer.
+"""
+acquisition_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
+    SPA.META_ACQUISITION;
+    size=_ACQUISITION_SIZE,
+    features=_ACQUISITION_FEATURE_VERSION_1,
+    id,
+)
+
 "Build a typed SPA I/O-area parameter."
 function io_param(
     type;

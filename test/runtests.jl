@@ -699,6 +699,7 @@ end
 
 include("loop.jl")
 include("spa.jl")
+include("acquisition_metadata.jl")
 include("progressive_metadata.jl")
 include("filter.jl")
 include("progressive_filter.jl")
