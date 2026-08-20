@@ -3865,6 +3865,7 @@ end
 | SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
 | SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
 | SPA\\_META\\_Progressive    | struct [`spa_meta_progressive`](@ref)                                                                         |
+| SPA\\_META\\_Acquisition    | struct [`spa_meta_acquisition`](@ref)                                                                         |
 | \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
 const spa_meta_type = UInt32
@@ -3879,7 +3880,8 @@ const SPA_META_Busy = 7 % UInt32
 const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
 const SPA_META_Progressive = 10 % UInt32
-const _SPA_META_LAST = 11 % UInt32
+const SPA_META_Acquisition = 11 % UInt32
+const _SPA_META_LAST = 12 % UInt32
 const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_features = 65536 % UInt32
 
@@ -4068,6 +4070,154 @@ struct spa_meta_sync_timeline
     release_point::UInt64
 end
 
+"""
+    spa_meta_acquisition_constant
+
+Version 1 acquisition metadata ABI.
+"""
+const spa_meta_acquisition_constant = UInt32
+const SPA_META_ACQUISITION_VERSION = 1 % UInt32
+const SPA_META_ACQUISITION_SIZE = 96 % UInt32
+const SPA_META_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
+const SPA_META_FEATURE_ACQUISITION_VERSION_1 = 1 % UInt32
+
+const spa_meta_acquisition_flag = UInt32
+const SPA_META_ACQUISITION_FLAG_IDENTITY_VALID = 1 % UInt32
+const SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID = 2 % UInt32
+const SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID = 4 % UInt32
+const SPA_META_ACQUISITION_FLAG_ALL = 7 % UInt32
+
+"""
+    spa_meta_acquisition
+
+Physical acquisition identity and qualified exposure time.
+
+The producer initializes this structure before publishing a complete buffer or before the first ACTIVE publication of a progressive buffer. It remains immutable until every producer and consumer lease on that buffer ends.
+
+Identity is the complete (domain, generation, sequence) tuple. The domain is opaque and compared bytewise. exposure\\_start\\_nsec is the physical exposure start mapped into the local Linux CLOCK\\_MONOTONIC domain. A valid timestamp has a nonnegative value and an inclusive uncertainty bound. Version 1 timestamps from different Linux kernels are not comparable.
+"""
+struct spa_meta_acquisition
+    data::NTuple{96, UInt8}
+end
+
+function Base.getproperty(x::Ptr{spa_meta_acquisition}, f::Symbol)
+    f === :version && return Ptr{UInt32}(x + 0)
+    f === :abi_size && return Ptr{UInt32}(x + 4)
+    f === :flags && return Ptr{UInt32}(x + 8)
+    f === :reserved0 && return Ptr{UInt32}(x + 12)
+    f === :domain && return Ptr{NTuple{16, UInt8}}(x + 16)
+    f === :generation && return Ptr{UInt64}(x + 32)
+    f === :sequence && return Ptr{UInt64}(x + 40)
+    f === :exposure_start_nsec && return Ptr{Int64}(x + 48)
+    f === :exposure_duration_nsec && return Ptr{UInt64}(x + 56)
+    f === :timestamp_uncertainty_nsec && return Ptr{UInt64}(x + 64)
+    f === :reserved && return Ptr{NTuple{3, UInt64}}(x + 72)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::spa_meta_acquisition, f::Symbol)
+    r = Ref{spa_meta_acquisition}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_meta_acquisition}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{spa_meta_acquisition}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::spa_meta_acquisition, private::Bool = false)
+    (:version, :abi_size, :flags, :reserved0, :domain, :generation, :sequence, :exposure_start_nsec, :exposure_duration_nsec, :timestamp_uncertainty_nsec, :reserved, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+"""
+    spa_meta_acquisition_init(acquisition)
+
+Initialize reusable acquisition metadata with no valid identity or time.
+
+### Prototype
+```c
+bool spa_meta_acquisition_init(struct spa_meta_acquisition *acquisition);
+```
+"""
+function spa_meta_acquisition_init(acquisition)
+    @ccall libpipewire_ao.spa_meta_acquisition_init(acquisition::Ptr{spa_meta_acquisition})::Bool
+end
+
+"""
+    spa_meta_acquisition_set_identity(acquisition, domain, generation, sequence)
+
+Establish the acquisition identity tuple.
+
+### Prototype
+```c
+bool spa_meta_acquisition_set_identity( struct spa_meta_acquisition *acquisition, const uint8_t domain[SPA_META_ACQUISITION_DOMAIN_SIZE], uint64_t generation, uint64_t sequence);
+```
+"""
+function spa_meta_acquisition_set_identity(acquisition, domain, generation, sequence)
+    @ccall libpipewire_ao.spa_meta_acquisition_set_identity(acquisition::Ptr{spa_meta_acquisition}, domain::Ptr{UInt8}, generation::UInt64, sequence::UInt64)::Bool
+end
+
+"""
+    spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
+
+Establish a local CLOCK\\_MONOTONIC exposure-start mapping.
+
+### Prototype
+```c
+bool spa_meta_acquisition_set_exposure_start( struct spa_meta_acquisition *acquisition, int64_t exposure_start_nsec, uint64_t timestamp_uncertainty_nsec);
+```
+"""
+function spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
+    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_start(acquisition::Ptr{spa_meta_acquisition}, exposure_start_nsec::Int64, timestamp_uncertainty_nsec::UInt64)::Bool
+end
+
+"""
+    spa_meta_acquisition_set_exposure_duration(acquisition, exposure_duration_nsec)
+
+Establish a positive exposure duration.
+
+### Prototype
+```c
+bool spa_meta_acquisition_set_exposure_duration( struct spa_meta_acquisition *acquisition, uint64_t exposure_duration_nsec);
+```
+"""
+function spa_meta_acquisition_set_exposure_duration(acquisition, exposure_duration_nsec)
+    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_duration(acquisition::Ptr{spa_meta_acquisition}, exposure_duration_nsec::UInt64)::Bool
+end
+
+"""
+    spa_meta_acquisition_is_valid(meta)
+
+Validate a mapped Version 1 acquisition metadata allocation.
+
+### Prototype
+```c
+bool spa_meta_acquisition_is_valid(const struct spa_meta *meta);
+```
+"""
+function spa_meta_acquisition_is_valid(meta)
+    @ccall libpipewire_ao.spa_meta_acquisition_is_valid(meta::Ptr{spa_meta})::Bool
+end
+
+"""
+    spa_meta_acquisition_identity_equal(a, b)
+
+Compare two complete, valid acquisition identity tuples.
+
+### Prototype
+```c
+bool spa_meta_acquisition_identity_equal( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b);
+```
+"""
+function spa_meta_acquisition_identity_equal(a, b)
+    @ccall libpipewire_ao.spa_meta_acquisition_identity_equal(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition})::Bool
+end
+
 const spa_meta_progressive_state = UInt32
 const SPA_META_PROGRESSIVE_STATE_PREPARED = 0 % UInt32
 const SPA_META_PROGRESSIVE_STATE_ACTIVE = 1 % UInt32
@@ -4079,7 +4229,9 @@ const SPA_META_PROGRESSIVE_STATE_ABORTED = 3 % UInt32
 
 Progressive payload publication state shared by producer and consumer.
 
-All fields other than snapshot are immutable while a producer or consumer lease is active. The producer release-stores snapshot after making each new payload prefix immutable; the consumer acquire-loads it before reading that prefix.
+One producer owns updates for the duration of a producer lease. Version, layout, granularity, and reserved fields are immutable from PREPARED until all producer and consumer leases end. The committed count never decreases. Before release-storing an ACTIVE snapshot, the producer makes the newly committed payload prefix immutable. A consumer acquire-loads snapshot before reading that prefix and does not read beyond the observed committed count.
+
+terminal\\_flags is zero in PREPARED and ACTIVE. To finish, the producer first writes terminal\\_flags and any final payload bytes, then release-stores a COMPLETE or ABORTED snapshot. A consumer reads terminal\\_flags only after an acquire-load observes that terminal snapshot. This ordering deliberately keeps terminal\\_flags out of validation while publication is active.
 """
 struct spa_meta_progressive
     data::NTuple{48, UInt8}
@@ -6750,6 +6902,7 @@ Different IO area types
 | SPA\\_IO\\_AsyncBuffers        | async area to exchange buffers, struct [`spa_io_async_buffers`](@ref)                |
 | SPA\\_IO\\_BuffersLatest       | latest complete buffer, struct [`spa_io_buffers_latest`](@ref)                       |
 | SPA\\_IO\\_BuffersLatestNotify | process-local advisory fd, struct [`spa_io_buffers_latest_notify`](@ref)             |
+| SPA\\_IO\\_BuffersLatestLink   | process-local per-mix latest link, struct [`spa_io_buffers_latest_link`](@ref)       |
 """
 const spa_io_type = UInt32
 const SPA_IO_Invalid = 0 % UInt32
@@ -6765,6 +6918,7 @@ const SPA_IO_Memory = 9 % UInt32
 const SPA_IO_AsyncBuffers = 10 % UInt32
 const SPA_IO_BuffersLatest = 11 % UInt32
 const SPA_IO_BuffersLatestNotify = 12 % UInt32
+const SPA_IO_BuffersLatestLink = 13 % UInt32
 
 """
     spa_io_buffers
@@ -7182,6 +7336,14 @@ struct spa_io_buffers_latest_notify
     reserved::UInt32
 end
 
+struct spa_io_buffers_latest_link
+    id::UInt32
+    flags::UInt32
+    io::Ptr{spa_io_buffers_latest}
+    notify_fd::Int32
+    reserved::UInt32
+end
+
 """
     pw_filter_state
 
@@ -7412,7 +7574,9 @@ end
 """
     pw_filter_disconnect(filter)
 
-Disconnect *filter*
+Disconnect *filter*.
+
+Returns -EBUSY while any latest-buffer worker ownership is active. Stop the worker, return every held buffer, end its ownership, and retry disconnect.
 
 ### Prototype
 ```c
@@ -7440,7 +7604,9 @@ end
 """
     pw_filter_remove_port(port_data)
 
-remove a port from the filter
+Remove a port from the filter.
+
+Returns -EBUSY while latest-buffer worker ownership is active on the port.
 
 ### Prototype
 ```c
@@ -7545,6 +7711,8 @@ end
 
 Get a buffer that can be filled for output ports or consumed for input ports. RT safe.
 
+Calls that dequeue, queue, begin, or end buffers on the same port must be serialized by one worker. An input latest-buffer port may hold at most one dequeued consumer buffer at a time.
+
 ### Prototype
 ```c
 struct pw_buffer *pw_filter_dequeue_buffer(void *port_data);
@@ -7555,9 +7723,182 @@ function pw_filter_dequeue_buffer(port_data)
 end
 
 """
+    pw_filter_try_dequeue_buffer_latest(port_data, buffer)
+
+Try to claim a buffer directly from an input latest-buffer mailbox. RT safe.
+
+This skips the ordinary port queue and does not read or write errno. Returns 1 and stores the claimed buffer in *buffer*, 0 when no publication is currently visible, or a negative errno-style result for invalid state. The caller must own the port's serialized buffer worker and must return a claimed buffer before trying again.
+
+### Prototype
+```c
+int pw_filter_try_dequeue_buffer_latest(void *port_data, struct pw_buffer **buffer);
+```
+"""
+function pw_filter_try_dequeue_buffer_latest(port_data, buffer)
+    @ccall libpipewire_ao.pw_filter_try_dequeue_buffer_latest(port_data::Ptr{Cvoid}, buffer::Ptr{Ptr{pw_buffer}})::Cint
+end
+
+"""
+    pw_filter_buffer_latest_poller
+
+Caller-owned state for one continuous latest-input polling interval.
+
+Initialize this object with pw_filter_buffer_latest_poller_init and clear it on every cancellation or error exit. Do not copy or modify it while initialized. A poller may retain a live-link lifetime pin across empty polls, so its worker must continue polling and must not block between calls.
+"""
+struct pw_filter_buffer_latest_poller
+    port_data::Ptr{Cvoid}
+    io::Ptr{spa_io_buffers_latest}
+    slot::UInt32
+    reserved::UInt32
+end
+
+"""
+    pw_filter_buffer_latest_poller_init(poller, port_data)
+
+Initialize a continuous latest-input polling interval. RT safe.
+
+The exclusive input worker must not hold a dequeued buffer. Initialization performs all port-mode validation outside the empty-poll loop.
+
+### Prototype
+```c
+int pw_filter_buffer_latest_poller_init( struct pw_filter_buffer_latest_poller *poller, void *port_data);
+```
+"""
+function pw_filter_buffer_latest_poller_init(poller, port_data)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_init(poller::Ptr{pw_filter_buffer_latest_poller}, port_data::Ptr{Cvoid})::Cint
+end
+
+"""
+    pw_filter_buffer_latest_poller_try_dequeue(poller, buffer)
+
+Try to claim one input publication through an initialized poller. RT safe.
+
+Returns 1 and stores a buffer, 0 for ordinary no-work, or a negative errno-style error. A successful claim or an error automatically releases the retained link pin and finishes the polling interval. Empty polls retain the pin while the link remains active. Link retirement is observed before dereferencing its shared mailbox and releases the pin before returning 0.
+
+### Prototype
+```c
+int pw_filter_buffer_latest_poller_try_dequeue( struct pw_filter_buffer_latest_poller *poller, struct pw_buffer **buffer);
+```
+"""
+function pw_filter_buffer_latest_poller_try_dequeue(poller, buffer)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_try_dequeue(poller::Ptr{pw_filter_buffer_latest_poller}, buffer::Ptr{Ptr{pw_buffer}})::Cint
+end
+
+"""
+    pw_filter_buffer_latest_poller_clear(poller)
+
+Finish a polling interval and release any retained live-link pin. RT safe.
+
+This operation is idempotent. Call it before a polling worker blocks, exits, or stops checking the link so synchronous live-link retirement can finish.
+
+### Prototype
+```c
+void pw_filter_buffer_latest_poller_clear( struct pw_filter_buffer_latest_poller *poller);
+```
+"""
+function pw_filter_buffer_latest_poller_clear(poller)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_clear(poller::Ptr{pw_filter_buffer_latest_poller})::Cvoid
+end
+
+"""
+    pw_filter_buffer_latest_stats
+
+Producer-local accounting for bounded latest-buffer acquisition.
+
+These counters are written only by the exclusive latest-buffer output worker. They may be read by that worker after it has stopped publishing; concurrent control-thread reads are not supported.
+
+| Field                           | Note                                    |
+| :------------------------------ | :-------------------------------------- |
+| dequeue\\_attempts              | output acquisition duty cycles          |
+| recycle\\_returns               | returned consumer leases examined       |
+| buffer\\_probes                 | reusable pool slots examined            |
+| pool\\_exhaustions              | attempts with no safe allocation        |
+| ready\\_reclaims                | unclaimed publications reclaimed        |
+| ready\\_withdrawals             | subscriber ready slots withdrawn        |
+| publications                    | output buffers offered to fan-out       |
+| subscriber\\_visits             | subscriber mailboxes visited            |
+| subscriber\\_deliveries         | subscriber leases created               |
+| subscriber\\_supersessions      | subscriber-local ready IDs replaced     |
+| subscriber\\_retirements        | retired slots acknowledged by producer  |
+| retired\\_leases                | leases recovered during retirement      |
+| zero\\_recipient\\_publications | offers delivered to no active slot      |
+| max\\_buffer\\_probes           | largest single bounded scan             |
+| max\\_recycle\\_returns         | largest aggregate drain per attempt     |
+| max\\_ready\\_withdrawals       | largest reclaim fan-out per attempt     |
+| max\\_subscriber\\_visits       | largest publication fan-out             |
+"""
+struct pw_filter_buffer_latest_stats
+    dequeue_attempts::UInt64
+    recycle_returns::UInt64
+    buffer_probes::UInt64
+    pool_exhaustions::UInt64
+    ready_reclaims::UInt64
+    ready_withdrawals::UInt64
+    publications::UInt64
+    subscriber_visits::UInt64
+    subscriber_deliveries::UInt64
+    subscriber_supersessions::UInt64
+    subscriber_retirements::UInt64
+    retired_leases::UInt64
+    zero_recipient_publications::UInt64
+    max_buffer_probes::UInt32
+    max_recycle_returns::UInt32
+    max_ready_withdrawals::UInt32
+    max_subscriber_visits::UInt32
+end
+
+"""
+    pw_filter_get_buffer_latest_stats(port_data, stats)
+
+Snapshot bounded latest-buffer output acquisition accounting. RT safe.
+
+The caller must own the exclusive latest-buffer output worker and must not race this operation with publication. Returns -ENOTSUP for ordinary or input ports.
+
+### Prototype
+```c
+int pw_filter_get_buffer_latest_stats(void *port_data, struct pw_filter_buffer_latest_stats *stats);
+```
+"""
+function pw_filter_get_buffer_latest_stats(port_data, stats)
+    @ccall libpipewire_ao.pw_filter_get_buffer_latest_stats(port_data::Ptr{Cvoid}, stats::Ptr{pw_filter_buffer_latest_stats})::Cint
+end
+
+"""
+    pw_filter_buffer_latest_worker_begin(port_data)
+
+Begin exclusive latest-buffer worker ownership of a port. RT safe.
+
+This lifetime barrier prevents filter disconnect, port removal, and replacement of an installed buffer pool until the worker calls pw_filter_buffer_latest_worker_end. It does not make concurrent buffer operations safe: the successful caller remains the port's only buffer worker. Returns -EBUSY for a second worker and -EPIPE while teardown is retiring the filter or port.
+
+### Prototype
+```c
+int pw_filter_buffer_latest_worker_begin(void *port_data);
+```
+"""
+function pw_filter_buffer_latest_worker_begin(port_data)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_worker_begin(port_data::Ptr{Cvoid})::Cint
+end
+
+"""
+    pw_filter_buffer_latest_worker_end(port_data)
+
+End exclusive latest-buffer worker ownership of a port. RT safe.
+
+Every successful pw_filter_buffer_latest_worker_begin must be matched exactly once after all dequeued and progressive buffers have been returned. Returns -EINVAL when no worker ownership is active.
+
+### Prototype
+```c
+int pw_filter_buffer_latest_worker_end(void *port_data);
+```
+"""
+function pw_filter_buffer_latest_worker_end(port_data)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_worker_end(port_data::Ptr{Cvoid})::Cint
+end
+
+"""
     pw_filter_queue_buffer(port_data, buffer)
 
-Submit a buffer for playback or recycle a buffer for capture. RT safe.
+Submit a buffer for playback or recycle a buffer for capture. RT safe. The caller must own the port's serialized buffer worker.
 
 ### Prototype
 ```c
@@ -7574,6 +7915,8 @@ end
 Announce an output buffer on a graph-independent latest-buffer port while retaining its producer lease. RT safe.
 
 The caller must initialize and publish its application-defined active state before this call. It may continue to write only storage that the negotiated progressive protocol still grants to the producer. The buffer must later be passed exactly once to pw_filter_end_progressive_buffer, not to pw_filter_queue_buffer.
+
+The caller must own the port's serialized output worker. Fan-out publication is latest-value delivery to independent subscribers, not an atomic multicast: subscribers may claim or supersede an offered buffer at different times. Per-subscriber leases keep the allocation unavailable for reuse until every subscriber has returned or superseded it and the producer lease has ended.
 
 This operation is supported only on an output port configured with SPA\\_IO\\_BuffersLatest.
 
@@ -7592,6 +7935,8 @@ end
 End the producer lease of an announced progressive output buffer. RT safe.
 
 Before this call, the producer must stop writing and publish its negotiated terminal state. PipeWire makes the allocation reusable only after the input consumer has also returned its lease. Consumer return and this call may occur in either order.
+
+The caller must own the same serialized output worker that began the lease.
 
 ### Prototype
 ```c
