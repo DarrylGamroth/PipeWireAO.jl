@@ -28,8 +28,8 @@ function _with_isolated_pipewireao(operation)
         environment = copy(ENV)
         environment["XDG_RUNTIME_DIR"] = runtime
         environment["PIPEWIREAO_RUNTIME_DIR"] = runtime
-        environment["PIPEWIREAO_REMOTE"] = "pipewire-ao"
-        environment["PIPEWIREAO_CORE"] = "pipewire-ao"
+        environment["PIPEWIREAO_REMOTE"] = "pipewire-ao-0"
+        environment["PIPEWIREAO_CORE"] = "pipewire-ao-0"
         process = run(
             pipeline(
                 setenv(`$daemon -c pipewire.conf -P $overrides`, environment),
@@ -39,11 +39,11 @@ function _with_isolated_pipewireao(operation)
             wait=false,
         )
         try
-            _wait_for_pipewireao_socket(joinpath(runtime, "pipewire-ao"), process)
+            _wait_for_pipewireao_socket(joinpath(runtime, "pipewire-ao-0"), process)
             return withenv(
                 "XDG_RUNTIME_DIR" => runtime,
                 "PIPEWIREAO_RUNTIME_DIR" => runtime,
-                "PIPEWIREAO_REMOTE" => "pipewire-ao",
+                "PIPEWIREAO_REMOTE" => "pipewire-ao-0",
             ) do
                 operation()
             end
