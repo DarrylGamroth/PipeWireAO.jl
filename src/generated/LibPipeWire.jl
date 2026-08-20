@@ -3879,6 +3879,7 @@ const SPA_META_Control = 6 % UInt32
 const SPA_META_Busy = 7 % UInt32
 const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
+const SPA_META_START_PipeWireAO = 10 % UInt32
 const SPA_META_Progressive = 10 % UInt32
 const SPA_META_Acquisition = 11 % UInt32
 const _SPA_META_LAST = 12 % UInt32
@@ -6916,9 +6917,10 @@ const SPA_IO_Position = 7 % UInt32
 const SPA_IO_RateMatch = 8 % UInt32
 const SPA_IO_Memory = 9 % UInt32
 const SPA_IO_AsyncBuffers = 10 % UInt32
-const SPA_IO_BuffersLatest = 11 % UInt32
-const SPA_IO_BuffersLatestNotify = 12 % UInt32
-const SPA_IO_BuffersLatestLink = 13 % UInt32
+const SPA_IO_START_PipeWireAO = 16777216 % UInt32
+const SPA_IO_BuffersLatest = 16777216 % UInt32
+const SPA_IO_BuffersLatestNotify = 16777217 % UInt32
+const SPA_IO_BuffersLatestLink = 16777218 % UInt32
 
 """
     spa_io_buffers
@@ -7848,19 +7850,19 @@ struct pw_filter_buffer_latest_stats
 end
 
 """
-    pw_filter_get_buffer_latest_stats(port_data, stats)
+    pw_filter_get_buffer_latest_stats(port_data, stats, stats_size)
 
 Snapshot bounded latest-buffer output acquisition accounting. RT safe.
 
-The caller must own the exclusive latest-buffer output worker and must not race this operation with publication. Returns -ENOTSUP for ordinary or input ports.
+The caller must own the exclusive latest-buffer output worker and must not race this operation with publication. Returns -ENOTSUP for ordinary or input ports. `stats_size` must be the caller's allocation size; the function writes only the supported prefix that fits in that allocation.
 
 ### Prototype
 ```c
-int pw_filter_get_buffer_latest_stats(void *port_data, struct pw_filter_buffer_latest_stats *stats);
+int pw_filter_get_buffer_latest_stats(void *port_data, struct pw_filter_buffer_latest_stats *stats, size_t stats_size);
 ```
 """
-function pw_filter_get_buffer_latest_stats(port_data, stats)
-    @ccall libpipewire_ao.pw_filter_get_buffer_latest_stats(port_data::Ptr{Cvoid}, stats::Ptr{pw_filter_buffer_latest_stats})::Cint
+function pw_filter_get_buffer_latest_stats(port_data, stats, stats_size)
+    @ccall libpipewire_ao.pw_filter_get_buffer_latest_stats(port_data::Ptr{Cvoid}, stats::Ptr{pw_filter_buffer_latest_stats}, stats_size::Csize_t)::Cint
 end
 
 """
@@ -8005,19 +8007,19 @@ function pw_filter_rendezvous_begin(rendezvous, acquisition, release_at_nsec, di
 end
 
 """
-    pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result)
+    pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result, result_size)
 
 Perform one bounded input scan and at most one release decision. RT safe.
 
-`monotonic_now_nsec` is supplied by the caller; this operation does not read a clock or wait. It returns 1 and writes `result` when release is eligible, 0 while the acquisition remains pending, or a negative errno-style result. Accepted input leases remain owned by the rendezvous until finish, cancel, reset, or destroy. Nonaccepted leases are returned before this call exits.
+`monotonic_now_nsec` is supplied by the caller; this operation does not read a clock or wait. `result_size` must be the caller's allocation size. The operation returns 1 and writes the supported result prefix when release is eligible, 0 while the acquisition remains pending, or a negative errno-style result. Accepted input leases remain owned by the rendezvous until finish, cancel, reset, or destroy. Nonaccepted leases are returned before this call exits.
 
 ### Prototype
 ```c
-int pw_filter_rendezvous_poll(struct pw_filter_rendezvous *rendezvous, uint64_t monotonic_now_nsec, struct pw_filter_rendezvous_result *result);
+int pw_filter_rendezvous_poll(struct pw_filter_rendezvous *rendezvous, uint64_t monotonic_now_nsec, struct pw_filter_rendezvous_result *result, size_t result_size);
 ```
 """
-function pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result)
-    @ccall libpipewire_ao.pw_filter_rendezvous_poll(rendezvous::Ptr{pw_filter_rendezvous}, monotonic_now_nsec::UInt64, result::Ptr{pw_filter_rendezvous_result})::Cint
+function pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result, result_size)
+    @ccall libpipewire_ao.pw_filter_rendezvous_poll(rendezvous::Ptr{pw_filter_rendezvous}, monotonic_now_nsec::UInt64, result::Ptr{pw_filter_rendezvous_result}, result_size::Csize_t)::Cint
 end
 
 """
@@ -8079,17 +8081,17 @@ function pw_filter_rendezvous_reset(rendezvous)
 end
 
 """
-    pw_filter_rendezvous_get_stats(rendezvous, stats)
+    pw_filter_rendezvous_get_stats(rendezvous, stats, stats_size)
 
-Snapshot single-writer rendezvous accounting. RT safe.
+Snapshot the supported prefix of single-writer rendezvous accounting. RT safe.
 
 ### Prototype
 ```c
-int pw_filter_rendezvous_get_stats(struct pw_filter_rendezvous *rendezvous, struct pw_filter_rendezvous_stats *stats);
+int pw_filter_rendezvous_get_stats(struct pw_filter_rendezvous *rendezvous, struct pw_filter_rendezvous_stats *stats, size_t stats_size);
 ```
 """
-function pw_filter_rendezvous_get_stats(rendezvous, stats)
-    @ccall libpipewire_ao.pw_filter_rendezvous_get_stats(rendezvous::Ptr{pw_filter_rendezvous}, stats::Ptr{pw_filter_rendezvous_stats})::Cint
+function pw_filter_rendezvous_get_stats(rendezvous, stats, stats_size)
+    @ccall libpipewire_ao.pw_filter_rendezvous_get_stats(rendezvous::Ptr{pw_filter_rendezvous}, stats::Ptr{pw_filter_rendezvous_stats}, stats_size::Csize_t)::Cint
 end
 
 """
@@ -8097,7 +8099,7 @@ end
 
 Return all leases, end every worker lifetime, and free the rendezvous.
 
-A cleanup failure leaves the object allocated so the caller can retry.
+This is a best-effort terminal operation. It returns the first worker- lifetime cleanup error after visiting every input, and frees the rendezvous even when it reports an invariant failure.
 
 ### Prototype
 ```c
@@ -9501,7 +9503,8 @@ const SPA_PARAM_BUFFERS_stride = 4 % UInt32
 const SPA_PARAM_BUFFERS_align = 5 % UInt32
 const SPA_PARAM_BUFFERS_dataType = 6 % UInt32
 const SPA_PARAM_BUFFERS_metaType = 7 % UInt32
-const SPA_PARAM_BUFFERS_pageSizeHint = 8 % UInt32
+const SPA_PARAM_BUFFERS_START_PipeWireAO = 16777216 % UInt32
+const SPA_PARAM_BUFFERS_pageSizeHint = 16777216 % UInt32
 
 """
     spa_buffer_page_size_hint
@@ -10007,7 +10010,8 @@ const SPA_MEDIA_SUBTYPE_START_Stream = 327680 % UInt32
 const SPA_MEDIA_SUBTYPE_midi = 327681 % UInt32
 const SPA_MEDIA_SUBTYPE_START_Application = 393216 % UInt32
 const SPA_MEDIA_SUBTYPE_control = 393217 % UInt32
-const SPA_MEDIA_SUBTYPE_ndarray = 393218 % UInt32
+const SPA_MEDIA_SUBTYPE_START_PipeWireAO = 16777216 % UInt32
+const SPA_MEDIA_SUBTYPE_ndarray = 16777216 % UInt32
 
 """
     spa_element_type
@@ -10188,11 +10192,11 @@ const SPA_FORMAT_START_Binary = 262144 % UInt32
 const SPA_FORMAT_START_Stream = 327680 % UInt32
 const SPA_FORMAT_START_Application = 393216 % UInt32
 const SPA_FORMAT_CONTROL_types = 393217 % UInt32
-const SPA_FORMAT_START_NdArray = 397312 % UInt32
-const SPA_FORMAT_NDARRAY_elementType = 397313 % UInt32
-const SPA_FORMAT_NDARRAY_shape = 397314 % UInt32
-const SPA_FORMAT_NDARRAY_layout = 397315 % UInt32
-const SPA_FORMAT_NDARRAY_rate = 397316 % UInt32
+const SPA_FORMAT_START_NdArray = 16777216 % UInt32
+const SPA_FORMAT_NDARRAY_elementType = 16777217 % UInt32
+const SPA_FORMAT_NDARRAY_shape = 16777218 % UInt32
+const SPA_FORMAT_NDARRAY_layout = 16777219 % UInt32
+const SPA_FORMAT_NDARRAY_rate = 16777220 % UInt32
 
 const spa_audio_format = UInt32
 const SPA_AUDIO_FORMAT_UNKNOWN = 0 % UInt32
