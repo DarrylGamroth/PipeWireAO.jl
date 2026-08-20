@@ -2,6 +2,7 @@ using PipeWireAO
 using Test
 
 include("aqua.jl")
+include("rtc_data_loop.jl")
 include("current_info.jl")
 include("object_callbacks.jl")
 

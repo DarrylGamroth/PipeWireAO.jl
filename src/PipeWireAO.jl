@@ -87,6 +87,14 @@ export CoreConnection,
     Port,
     PortInfo,
     Registry,
+    RTCDataLoop,
+    RTCIdle,
+    RTCScheduler,
+    RTC_BUSY_SPIN,
+    RTC_EVENTFD,
+    RTC_HYBRID,
+    RTC_SCHED_OTHER,
+    RTC_SCHED_FIFO,
     Stream,
     StreamBuffer,
     StreamBufferInfo,
@@ -256,6 +264,7 @@ export CoreConnection,
     remove_port!,
     return_buffer!,
     quit!,
+    request_exit!,
     roundtrip,
     report_error!,
     run!,
@@ -282,6 +291,7 @@ export CoreConnection,
     stream_nsec,
     stream_properties,
     stream_time,
+    terminal_result,
     tag_param,
     track_info!,
     subscribe_params!,
@@ -315,6 +325,7 @@ include("thread_loop.jl")
 include("loop_source.jl")
 include("loop_channel.jl")
 include("core.jl")
+include("rtc_data_loop.jl")
 include("proxy.jl")
 include("spa_types.jl")
 include("spa.jl")

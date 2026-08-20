@@ -20,7 +20,8 @@ Create an owning PipeWire context. The no-argument constructor also creates
 and owns a [`MainLoop`](@ref). When a loop is supplied, it must outlive the
 context.
 
-Close every child [`CoreConnection`](@ref) before closing the context.
+Close every child [`CoreConnection`](@ref) and [`RTCDataLoop`](@ref) before
+closing the context.
 """
 mutable struct Context{LoopType<:AbstractPipeWireLoop}
     handle::Ptr{LibPipeWire.pw_context}
@@ -28,6 +29,7 @@ mutable struct Context{LoopType<:AbstractPipeWireLoop}
     state_lock::ReentrantLock
     loaded_modules::Dict{String,Ptr{LibPipeWire.pw_impl_module}}
     core_count::Int
+    rtc_data_loop_count::Int
     owns_loop::Bool
 end
 
@@ -53,6 +55,7 @@ function _new_context(loop::AbstractPipeWireLoop, owns_loop::Bool, properties)
         loop,
         ReentrantLock(),
         Dict{String,Ptr{LibPipeWire.pw_impl_module}}(),
+        0,
         0,
         owns_loop,
     )
@@ -153,6 +156,12 @@ function Base.close(context::Context)
                 :open_cores,
             ),
         )
+        context.rtc_data_loop_count == 0 || throw(
+            InvalidStateException(
+                "cannot close a PipeWire context while RTC data loops are open",
+                :open_rtc_data_loops,
+            ),
+        )
         handle = context.handle
         context.handle = Ptr{LibPipeWire.pw_context}(C_NULL)
         return handle
@@ -163,6 +172,22 @@ function Base.close(context::Context)
     _release_context(context.loop)
     context.owns_loop && close(context.loop)
     return nothing
+end
+
+function _retain_rtc_data_loop(context::Context)
+    return lock(context.state_lock) do
+        handle = _require_open(context)
+        context.rtc_data_loop_count += 1
+        return handle
+    end
+end
+
+function _release_rtc_data_loop(context::Context)
+    return lock(context.state_lock) do
+        context.rtc_data_loop_count -= 1
+        @assert context.rtc_data_loop_count >= 0
+        return nothing
+    end
 end
 
 function _retain_core(context::Context)
