@@ -7896,6 +7896,219 @@ function pw_filter_buffer_latest_worker_end(port_data)
 end
 
 """
+    pw_filter_rendezvous_release_policy
+
+Prepared release behavior for a client-side complete-buffer rendezvous.
+"""
+const pw_filter_rendezvous_release_policy = UInt32
+const PW_FILTER_RENDEZVOUS_RELEASE_COMPLETE_OR_DEADLINE = 0 % UInt32
+const PW_FILTER_RENDEZVOUS_RELEASE_FIXED = 1 % UInt32
+
+"""
+    pw_filter_rendezvous_release_cause
+
+Event that made one complete-buffer rendezvous result eligible.
+"""
+const pw_filter_rendezvous_release_cause = UInt32
+const PW_FILTER_RENDEZVOUS_CAUSE_COMPLETE = 0 % UInt32
+const PW_FILTER_RENDEZVOUS_CAUSE_DEADLINE = 1 % UInt32
+const PW_FILTER_RENDEZVOUS_CAUSE_FIXED = 2 % UInt32
+
+"""
+    pw_filter_rendezvous_result
+
+One immutable complete-buffer rendezvous result.
+"""
+struct pw_filter_rendezvous_result
+    data::NTuple{120, UInt8}
+end
+
+function Base.getproperty(x::Ptr{pw_filter_rendezvous_result}, f::Symbol)
+    f === :acquisition && return Ptr{spa_meta_acquisition}(x + 0)
+    f === :accepted_inputs && return Ptr{UInt64}(x + 96)
+    f === :missing_required_inputs && return Ptr{UInt64}(x + 104)
+    f === :cause && return Ptr{pw_filter_rendezvous_release_cause}(x + 112)
+    f === :reserved && return Ptr{UInt32}(x + 116)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::pw_filter_rendezvous_result, f::Symbol)
+    r = Ref{pw_filter_rendezvous_result}(x)
+    ptr = Base.unsafe_convert(Ptr{pw_filter_rendezvous_result}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{pw_filter_rendezvous_result}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::pw_filter_rendezvous_result, private::Bool = false)
+    (:acquisition, :accepted_inputs, :missing_required_inputs, :cause, :reserved, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+"""
+    pw_filter_rendezvous_stats
+
+Single-writer accounting for one client-side buffer rendezvous.
+"""
+struct pw_filter_rendezvous_stats
+    accepted::UInt64
+    duplicate::UInt64
+    stale::UInt64
+    future::UInt64
+    rejected::UInt64
+    complete_releases::UInt64
+    deadline_releases::UInt64
+    fixed_releases::UInt64
+    missing_required_inputs::UInt64
+    lease_returns::UInt64
+    cleanup_errors::UInt64
+end
+
+mutable struct pw_filter_rendezvous end
+
+"""
+    pw_filter_rendezvous_new(rendezvous, port_data, n_ports, required_inputs, policy)
+
+Prepare an explicitly selected client-side complete-buffer rendezvous.
+
+Preparation allocates the opaque state and begins exclusive latest-buffer worker ownership on every supplied input port. It performs no graph scheduling and does not infer activation from topology. The caller must not perform another buffer operation on these ports until destroy succeeds.
+
+### Prototype
+```c
+int pw_filter_rendezvous_new(struct pw_filter_rendezvous **rendezvous, void *const *port_data, uint32_t n_ports, uint64_t required_inputs, enum pw_filter_rendezvous_release_policy policy);
+```
+"""
+function pw_filter_rendezvous_new(rendezvous, port_data, n_ports, required_inputs, policy)
+    @ccall libpipewire_ao.pw_filter_rendezvous_new(rendezvous::Ptr{Ptr{pw_filter_rendezvous}}, port_data::Ptr{Ptr{Cvoid}}, n_ports::UInt32, required_inputs::UInt64, policy::pw_filter_rendezvous_release_policy)::Cint
+end
+
+"""
+    pw_filter_rendezvous_begin(rendezvous, acquisition, release_at_nsec, discontinuity)
+
+Begin one expected acquisition after the previous result was finished.
+
+`release_at_nsec` is in the caller's local CLOCK\\_MONOTONIC domain. This operation copies the complete Version 1 acquisition metadata but uses only its valid identity tuple for matching. `discontinuity` is required when the acquisition domain changes across completed results.
+
+### Prototype
+```c
+int pw_filter_rendezvous_begin(struct pw_filter_rendezvous *rendezvous, const struct spa_meta_acquisition *acquisition, uint64_t release_at_nsec, bool discontinuity);
+```
+"""
+function pw_filter_rendezvous_begin(rendezvous, acquisition, release_at_nsec, discontinuity)
+    @ccall libpipewire_ao.pw_filter_rendezvous_begin(rendezvous::Ptr{pw_filter_rendezvous}, acquisition::Ptr{spa_meta_acquisition}, release_at_nsec::UInt64, discontinuity::Bool)::Cint
+end
+
+"""
+    pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result)
+
+Perform one bounded input scan and at most one release decision. RT safe.
+
+`monotonic_now_nsec` is supplied by the caller; this operation does not read a clock or wait. It returns 1 and writes `result` when release is eligible, 0 while the acquisition remains pending, or a negative errno-style result. Accepted input leases remain owned by the rendezvous until finish, cancel, reset, or destroy. Nonaccepted leases are returned before this call exits.
+
+### Prototype
+```c
+int pw_filter_rendezvous_poll(struct pw_filter_rendezvous *rendezvous, uint64_t monotonic_now_nsec, struct pw_filter_rendezvous_result *result);
+```
+"""
+function pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result)
+    @ccall libpipewire_ao.pw_filter_rendezvous_poll(rendezvous::Ptr{pw_filter_rendezvous}, monotonic_now_nsec::UInt64, result::Ptr{pw_filter_rendezvous_result})::Cint
+end
+
+"""
+    pw_filter_rendezvous_get_buffer(rendezvous, input_index)
+
+Borrow one accepted input buffer after a release decision. RT safe.
+
+The pointer remains valid only until the next finish, cancel, reset, or destroy operation. The caller must not queue it directly.
+
+### Prototype
+```c
+struct pw_buffer *pw_filter_rendezvous_get_buffer( struct pw_filter_rendezvous *rendezvous, uint32_t input_index);
+```
+"""
+function pw_filter_rendezvous_get_buffer(rendezvous, input_index)
+    @ccall libpipewire_ao.pw_filter_rendezvous_get_buffer(rendezvous::Ptr{pw_filter_rendezvous}, input_index::UInt32)::Ptr{pw_buffer}
+end
+
+"""
+    pw_filter_rendezvous_finish(rendezvous)
+
+Return all accepted leases and complete the released acquisition. RT safe.
+
+### Prototype
+```c
+int pw_filter_rendezvous_finish(struct pw_filter_rendezvous *rendezvous);
+```
+"""
+function pw_filter_rendezvous_finish(rendezvous)
+    @ccall libpipewire_ao.pw_filter_rendezvous_finish(rendezvous::Ptr{pw_filter_rendezvous})::Cint
+end
+
+"""
+    pw_filter_rendezvous_cancel(rendezvous)
+
+Return retained leases and cancel only the active acquisition. RT safe.
+
+### Prototype
+```c
+int pw_filter_rendezvous_cancel(struct pw_filter_rendezvous *rendezvous);
+```
+"""
+function pw_filter_rendezvous_cancel(rendezvous)
+    @ccall libpipewire_ao.pw_filter_rendezvous_cancel(rendezvous::Ptr{pw_filter_rendezvous})::Cint
+end
+
+"""
+    pw_filter_rendezvous_reset(rendezvous)
+
+Cancel active work and clear completed-acquisition ordering state. RT safe.
+
+### Prototype
+```c
+int pw_filter_rendezvous_reset(struct pw_filter_rendezvous *rendezvous);
+```
+"""
+function pw_filter_rendezvous_reset(rendezvous)
+    @ccall libpipewire_ao.pw_filter_rendezvous_reset(rendezvous::Ptr{pw_filter_rendezvous})::Cint
+end
+
+"""
+    pw_filter_rendezvous_get_stats(rendezvous, stats)
+
+Snapshot single-writer rendezvous accounting. RT safe.
+
+### Prototype
+```c
+int pw_filter_rendezvous_get_stats(struct pw_filter_rendezvous *rendezvous, struct pw_filter_rendezvous_stats *stats);
+```
+"""
+function pw_filter_rendezvous_get_stats(rendezvous, stats)
+    @ccall libpipewire_ao.pw_filter_rendezvous_get_stats(rendezvous::Ptr{pw_filter_rendezvous}, stats::Ptr{pw_filter_rendezvous_stats})::Cint
+end
+
+"""
+    pw_filter_rendezvous_destroy(rendezvous)
+
+Return all leases, end every worker lifetime, and free the rendezvous.
+
+A cleanup failure leaves the object allocated so the caller can retry.
+
+### Prototype
+```c
+int pw_filter_rendezvous_destroy(struct pw_filter_rendezvous *rendezvous);
+```
+"""
+function pw_filter_rendezvous_destroy(rendezvous)
+    @ccall libpipewire_ao.pw_filter_rendezvous_destroy(rendezvous::Ptr{pw_filter_rendezvous})::Cint
+end
+
+"""
     pw_filter_queue_buffer(port_data, buffer)
 
 Submit a buffer for playback or recycle a buffer for capture. RT safe. The caller must own the port's serialized buffer worker.
@@ -8556,6 +8769,223 @@ void pw_data_loop_set_thread_utils(struct pw_data_loop *loop, struct spa_thread_
 """
 function pw_data_loop_set_thread_utils(loop, impl)
     @ccall libpipewire_ao.pw_data_loop_set_thread_utils(loop::Ptr{pw_data_loop}, impl::Ptr{spa_thread_utils})::Cvoid
+end
+
+mutable struct pw_rtc_data_loop end
+
+"""
+    pw_rtc_data_loop_idle
+
+Receiver idle behavior after the process function reports no work.
+
+| Enumerator                                  | Note                                                                     |
+| :------------------------------------------ | :----------------------------------------------------------------------- |
+| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_BUSY\\_SPIN | Poll again immediately. Requires a reserved physical core.               |
+| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_EVENTFD     | Block in the embedded PipeWire loop until a registered source wakes it.  |
+| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_HYBRID      | Busy-spin for a fixed iteration count, then block like Eventfd.          |
+"""
+const pw_rtc_data_loop_idle = UInt32
+const PW_RTC_DATA_LOOP_IDLE_BUSY_SPIN = 0 % UInt32
+const PW_RTC_DATA_LOOP_IDLE_EVENTFD = 1 % UInt32
+const PW_RTC_DATA_LOOP_IDLE_HYBRID = 2 % UInt32
+
+"""
+    pw_rtc_data_loop_scheduler
+
+Scheduling policy requested through module-rt ThreadUtils.
+"""
+const pw_rtc_data_loop_scheduler = UInt32
+const PW_RTC_DATA_LOOP_SCHED_OTHER = 0 % UInt32
+const PW_RTC_DATA_LOOP_SCHED_FIFO = 1 % UInt32
+
+"""
+    pw_rtc_data_loop_config
+
+RTC data-loop configuration.
+
+| Field                      | Note                                                                  |
+| :------------------------- | :-------------------------------------------------------------------- |
+| priority                   | SCHED\\_FIFO priority. -1 selects the module-rt configured priority.  |
+| hybrid\\_spin\\_iterations | Busy-spin iterations before Hybrid blocks. Must be nonzero.           |
+"""
+struct pw_rtc_data_loop_config
+    version::UInt32
+    idle::pw_rtc_data_loop_idle
+    scheduler::pw_rtc_data_loop_scheduler
+    priority::Cint
+    hybrid_spin_iterations::UInt32
+end
+
+"""
+    pw_rtc_data_loop_events
+
+Loop events, used with pw_rtc_data_loop_add_listener.
+"""
+struct pw_rtc_data_loop_events
+    version::UInt32
+    destroy::Ptr{Cvoid}
+end
+
+# typedef int ( * pw_rtc_data_loop_process_t ) ( void * data )
+"""
+Execute one bounded RTC duty cycle.
+
+Return a positive work count when work was completed, zero when no work was available, or a negative errno-style value to terminate the loop. The function runs on the RTC thread and must be real-time safe. It must not allocate, perform file I/O, wait for a peer, or retain unbounded work.
+"""
+const pw_rtc_data_loop_process_t = Ptr{Cvoid}
+
+"""
+    pw_rtc_data_loop_new(context, props, config, process, data)
+
+Create an RTC data loop.
+
+The context and its module-rt ThreadUtils must outlive the data loop. The properties may contain [`SPA_KEY_THREAD_NAME`](@ref), [`SPA_KEY_THREAD_AFFINITY`](@ref), and [`SPA_KEY_THREAD_RESET_ON_FORK`](@ref). Notification sources for Eventfd or Hybrid must be installed on pw_rtc_data_loop_get_loop before starting.
+
+### Prototype
+```c
+struct pw_rtc_data_loop * pw_rtc_data_loop_new(struct pw_context *context, const struct spa_dict *props, const struct pw_rtc_data_loop_config *config, pw_rtc_data_loop_process_t process, void *data);
+```
+"""
+function pw_rtc_data_loop_new(context, props, config, process, data)
+    @ccall libpipewire_ao.pw_rtc_data_loop_new(context::Ptr{pw_context}, props::Ptr{spa_dict}, config::Ptr{pw_rtc_data_loop_config}, process::pw_rtc_data_loop_process_t, data::Ptr{Cvoid})::Ptr{pw_rtc_data_loop}
+end
+
+"""
+    pw_rtc_data_loop_add_listener(loop, listener, events, data)
+
+### Prototype
+```c
+void pw_rtc_data_loop_add_listener(struct pw_rtc_data_loop *loop, struct spa_hook *listener, const struct pw_rtc_data_loop_events *events, void *data);
+```
+"""
+function pw_rtc_data_loop_add_listener(loop, listener, events, data)
+    @ccall libpipewire_ao.pw_rtc_data_loop_add_listener(loop::Ptr{pw_rtc_data_loop}, listener::Ptr{spa_hook}, events::Ptr{pw_rtc_data_loop_events}, data::Ptr{Cvoid})::Cvoid
+end
+
+"""
+    pw_rtc_data_loop_get_loop(loop)
+
+Get the embedded event loop used by Eventfd and Hybrid idle policies.
+
+### Prototype
+```c
+struct pw_loop *pw_rtc_data_loop_get_loop(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_get_loop(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_get_loop(loop::Ptr{pw_rtc_data_loop})::Ptr{pw_loop}
+end
+
+"""
+    pw_rtc_data_loop_destroy(loop)
+
+Destroy the loop. The caller must serialize lifecycle operations.
+
+### Prototype
+```c
+void pw_rtc_data_loop_destroy(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_destroy(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_destroy(loop::Ptr{pw_rtc_data_loop})::Cvoid
+end
+
+"""
+    pw_rtc_data_loop_start(loop)
+
+Start the RTC thread and apply its requested scheduling policy.
+
+### Prototype
+```c
+int pw_rtc_data_loop_start(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_start(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_start(loop::Ptr{pw_rtc_data_loop})::Cint
+end
+
+"""
+    pw_rtc_data_loop_stop(loop)
+
+Stop and join the RTC thread. Must not be called from the RTC thread.
+
+### Prototype
+```c
+int pw_rtc_data_loop_stop(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_stop(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_stop(loop::Ptr{pw_rtc_data_loop})::Cint
+end
+
+"""
+    pw_rtc_data_loop_exit(loop)
+
+Request exit without joining. Safe to call from the process function.
+
+### Prototype
+```c
+void pw_rtc_data_loop_exit(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_exit(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_exit(loop::Ptr{pw_rtc_data_loop})::Cvoid
+end
+
+"""
+    pw_rtc_data_loop_in_thread(loop)
+
+Check whether the current thread is this RTC data loop's thread.
+
+### Prototype
+```c
+bool pw_rtc_data_loop_in_thread(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_in_thread(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_in_thread(loop::Ptr{pw_rtc_data_loop})::Bool
+end
+
+"""
+    pw_rtc_data_loop_get_thread(loop)
+
+Get the thread object, or NULL when the loop has not been started.
+
+### Prototype
+```c
+struct spa_thread *pw_rtc_data_loop_get_thread(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_get_thread(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_get_thread(loop::Ptr{pw_rtc_data_loop})::Ptr{spa_thread}
+end
+
+"""
+    pw_rtc_data_loop_get_result(loop)
+
+Get the terminal process or event-loop result.
+
+### Prototype
+```c
+int pw_rtc_data_loop_get_result(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_get_result(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_get_result(loop::Ptr{pw_rtc_data_loop})::Cint
+end
+
+"""
+    pw_rtc_data_loop_is_running(loop)
+
+Return true while the RTC duty-cycle loop is running.
+
+### Prototype
+```c
+bool pw_rtc_data_loop_is_running(struct pw_rtc_data_loop *loop);
+```
+"""
+function pw_rtc_data_loop_is_running(loop)
+    @ccall libpipewire_ao.pw_rtc_data_loop_is_running(loop::Ptr{pw_rtc_data_loop})::Bool
 end
 
 # typedef void ( * pw_timer_callback ) ( void * data )
