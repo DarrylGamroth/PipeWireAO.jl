@@ -175,6 +175,112 @@ end
         (typemax(Int32), typemax(Int32), typemax(Int32));
         layout=NdArray.ROW_MAJOR,
     )
+
+    enum_matrix = MatrixEnumFormat(
+        MatrixFormat(NdArray.F64_LE, 16, 16; rate=SPA.Fraction(1_000, 1));
+        element_type_alternatives=[NdArray.F32_LE],
+        layout_alternatives=[NdArray.ROW_MAJOR],
+        rate_choice=NdArrayRateChoice(
+            SPA.CHOICE_RANGE,
+            [SPA.Fraction(500, 1), SPA.Fraction(2_000, 1)],
+        ),
+    )
+    enum_matrix_parameter = matrix_format_param(enum_matrix)
+    @test enum_matrix_parameter.object.id == SPA.PARAM_ENUM_FORMAT
+    element_choice = pod_value(
+        SPA.Choice{SPA.Id},
+        enum_matrix_parameter.object[SPA.FORMAT_NDARRAY_ELEMENT_TYPE].value,
+    )
+    @test element_choice == SPA.Choice(
+        SPA.CHOICE_ENUM,
+        SPA.Id[
+            SPA.Id(UInt32(NdArray.F64_LE)),
+            SPA.Id(UInt32(NdArray.F64_LE)),
+            SPA.Id(UInt32(NdArray.F32_LE)),
+        ],
+    )
+    @test pod_value(
+        SPA.Array{Int32},
+        enum_matrix_parameter.object[SPA.FORMAT_NDARRAY_SHAPE].value,
+    ) == SPA.Array(Int32[16, 16])
+    @test pod_value(
+        SPA.Choice{SPA.Id},
+        enum_matrix_parameter.object[SPA.FORMAT_NDARRAY_LAYOUT].value,
+    ) == SPA.Choice(
+        SPA.CHOICE_ENUM,
+        SPA.Id[
+            SPA.Id(UInt32(NdArray.COLUMN_MAJOR)),
+            SPA.Id(UInt32(NdArray.COLUMN_MAJOR)),
+            SPA.Id(UInt32(NdArray.ROW_MAJOR)),
+        ],
+    )
+    @test pod_value(
+        SPA.Choice{SPA.Fraction},
+        enum_matrix_parameter.object[SPA.FORMAT_NDARRAY_RATE].value,
+    ) == SPA.Choice(
+        SPA.CHOICE_RANGE,
+        SPA.Fraction[
+            SPA.Fraction(1_000, 1),
+            SPA.Fraction(500, 1),
+            SPA.Fraction(2_000, 1),
+        ],
+    )
+    @test_throws ArgumentError MatrixFormat(enum_matrix_parameter)
+
+    enum_vector = VectorEnumFormat(
+        VectorFormat(NdArray.F32_LE, 64; rate=SPA.Fraction(2_000, 1));
+        element_type_alternatives=[NdArray.F64_LE],
+        rate_choice=NdArrayRateChoice(
+            SPA.CHOICE_ENUM,
+            [SPA.Fraction(1_000, 1), SPA.Fraction(500, 1)],
+        ),
+    )
+    enum_vector_parameter = vector_format_param(enum_vector)
+    @test pod_value(
+        SPA.Id,
+        enum_vector_parameter.object[SPA.FORMAT_NDARRAY_LAYOUT].value,
+    ) == SPA.Id(UInt32(NdArray.ROW_MAJOR))
+    @test pod_value(
+        SPA.Choice{SPA.Fraction},
+        enum_vector_parameter.object[SPA.FORMAT_NDARRAY_RATE].value,
+    ).values == SPA.Fraction[
+        SPA.Fraction(2_000, 1),
+        SPA.Fraction(2_000, 1),
+        SPA.Fraction(1_000, 1),
+        SPA.Fraction(500, 1),
+    ]
+
+    @test_throws ArgumentError NdArrayRateChoice(SPA.CHOICE_ENUM, SPA.Fraction[])
+    @test_throws ArgumentError NdArrayRateChoice(
+        SPA.CHOICE_RANGE,
+        [SPA.Fraction(500, 1)],
+    )
+    @test_throws ArgumentError NdArrayRateChoice(
+        SPA.CHOICE_FLAGS,
+        [SPA.Fraction(500, 1)],
+    )
+    @test_throws ArgumentError NdArrayEnumFormat(
+        NdArrayFormat(NdArray.F32_LE, (8,); layout=NdArray.ROW_MAJOR);
+        rate_choice=NdArrayRateChoice(
+            SPA.CHOICE_RANGE,
+            [SPA.Fraction(500, 1), SPA.Fraction(2_000, 1)],
+        ),
+    )
+    @test_throws ArgumentError MatrixEnumFormat(
+        MatrixFormat(NdArray.F32_LE, 8, 8; rate=SPA.Fraction(250, 1));
+        rate_choice=NdArrayRateChoice(
+            SPA.CHOICE_RANGE,
+            [SPA.Fraction(500, 1), SPA.Fraction(2_000, 1)],
+        ),
+    )
+    @test_throws ArgumentError NdArrayEnumFormat(
+        NdArrayFormat(NdArray.F32_LE, (8,); layout=NdArray.ROW_MAJOR);
+        element_type_alternatives=[NdArray.UNKNOWN],
+    )
+    @test_throws ArgumentError NdArrayEnumFormat(
+        NdArrayFormat(NdArray.F32_LE, (8,); layout=NdArray.ROW_MAJOR);
+        layout_alternatives=[NdArray.LAYOUT_UNKNOWN],
+    )
 end
 
 

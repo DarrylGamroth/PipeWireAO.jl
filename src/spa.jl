@@ -1247,6 +1247,141 @@ NdArrayFormat(format::MatrixFormat) = NdArrayFormat(
     rate=format.rate,
 )
 
+"""
+    NdArrayRateChoice(kind, values)
+
+Describe additional rates for an enumerated ndarray format. `kind` must be
+`SPA.CHOICE_ENUM`, `SPA.CHOICE_RANGE`, or `SPA.CHOICE_STEP`. Enum values are
+additional discrete alternatives; range values are `(min, max)`; step values
+are `(min, max, step)`. The default rate comes from the fixed format.
+"""
+struct NdArrayRateChoice
+    kind::SPA.ChoiceKind
+    values::Vector{SPA.Fraction}
+
+    function NdArrayRateChoice(kind::SPA.ChoiceKind, values)
+        kind in (SPA.CHOICE_ENUM, SPA.CHOICE_RANGE, SPA.CHOICE_STEP) || throw(
+            ArgumentError("unsupported ndarray rate choice $kind"),
+        )
+        converted = collect(SPA.Fraction, values)
+        if kind == SPA.CHOICE_ENUM
+            isempty(converted) && throw(
+                ArgumentError("an enumerated ndarray rate choice requires an alternative"),
+            )
+        else
+            required = kind == SPA.CHOICE_RANGE ? 2 : 3
+            length(converted) == required || throw(
+                ArgumentError("ndarray rate choice $kind requires $required values"),
+            )
+        end
+        all(rate -> rate.num > 0 && rate.denom > 0, converted) || throw(
+            ArgumentError("ndarray rate choices must contain positive fractions"),
+        )
+        return new(kind, converted)
+    end
+end
+
+function _fraction_compare(left::SPA.Fraction, right::SPA.Fraction)
+    left_product = UInt64(left.num) * UInt64(right.denom)
+    right_product = UInt64(right.num) * UInt64(left.denom)
+    return cmp(left_product, right_product)
+end
+
+function _validate_ndarray_rate_choice(
+    rate::Union{Nothing,SPA.Fraction},
+    choice::Union{Nothing,NdArrayRateChoice},
+)
+    choice === nothing && return nothing
+    rate === nothing && throw(ArgumentError("an ndarray rate choice requires a default rate"))
+    if choice.kind in (SPA.CHOICE_RANGE, SPA.CHOICE_STEP)
+        minimum, maximum = choice.values[1:2]
+        _fraction_compare(minimum, rate) <= 0 &&
+            _fraction_compare(rate, maximum) <= 0 || throw(
+            ArgumentError("the default ndarray rate is outside the offered range"),
+        )
+    end
+    return nothing
+end
+
+"""
+    NdArrayEnumFormat(default; element_type_alternatives=[],
+                      layout_alternatives=[], rate_choice=nothing)
+
+Describe one exact ndarray shape with negotiable element type, layout, and
+rate. Alternatives are validated before a POD is built. Offer a separate
+`NdArrayEnumFormat` for every supported shape.
+"""
+struct NdArrayEnumFormat{N}
+    default::NdArrayFormat{N}
+    element_type_alternatives::Vector{NdArray.ElementType}
+    layout_alternatives::Vector{NdArray.Layout}
+    rate_choice::Union{Nothing,NdArrayRateChoice}
+
+    function NdArrayEnumFormat(
+        default::NdArrayFormat{N};
+        element_type_alternatives=NdArray.ElementType[],
+        layout_alternatives=NdArray.Layout[],
+        rate_choice::Union{Nothing,NdArrayRateChoice}=nothing,
+    ) where {N}
+        elements = collect(NdArray.ElementType, element_type_alternatives)
+        foreach(_ndarray_element_size, elements)
+        layouts = collect(NdArray.Layout, layout_alternatives)
+        all(layout -> layout in (NdArray.ROW_MAJOR, NdArray.COLUMN_MAJOR), layouts) ||
+            throw(ArgumentError("an ndarray layout alternative is unsupported"))
+        _validate_ndarray_rate_choice(default.rate, rate_choice)
+        return new{N}(default, elements, layouts, rate_choice)
+    end
+end
+
+"""
+    VectorEnumFormat(default; element_type_alternatives=[], rate_choice=nothing)
+
+Describe an enumerated vector profile. Its layout remains canonical row-major;
+only element type and rate can vary.
+"""
+struct VectorEnumFormat
+    format::NdArrayEnumFormat{1}
+
+    function VectorEnumFormat(
+        default::VectorFormat;
+        element_type_alternatives=NdArray.ElementType[],
+        rate_choice::Union{Nothing,NdArrayRateChoice}=nothing,
+    )
+        format = NdArrayEnumFormat(
+            NdArrayFormat(default);
+            element_type_alternatives,
+            rate_choice,
+        )
+        return new(format)
+    end
+end
+
+"""
+    MatrixEnumFormat(default; element_type_alternatives=[],
+                     layout_alternatives=[], rate_choice=nothing)
+
+Describe an enumerated matrix profile with explicit row- or column-major
+layout alternatives.
+"""
+struct MatrixEnumFormat
+    format::NdArrayEnumFormat{2}
+
+    function MatrixEnumFormat(
+        default::MatrixFormat;
+        element_type_alternatives=NdArray.ElementType[],
+        layout_alternatives=NdArray.Layout[],
+        rate_choice::Union{Nothing,NdArrayRateChoice}=nothing,
+    )
+        format = NdArrayEnumFormat(
+            NdArrayFormat(default);
+            element_type_alternatives,
+            layout_alternatives,
+            rate_choice,
+        )
+        return new(format)
+    end
+end
+
 element_count(format::NdArrayFormat) = first(_checked_ndarray_size(format.element_type, format.shape))
 element_count(format::Union{VectorFormat,MatrixFormat}) = element_count(NdArrayFormat(format))
 payload_size(format::NdArrayFormat) = last(_checked_ndarray_size(format.element_type, format.shape))
@@ -1319,6 +1454,54 @@ function ndarray_format(format::NdArrayFormat; id::Integer=LibPipeWire.SPA_PARAM
     return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
 end
 
+function _ndarray_enum_id(default::Integer, alternatives)
+    values = SPA.Id[SPA.Id(default), SPA.Id(default)]
+    append!(values, SPA.Id(UInt32(value)) for value in alternatives)
+    return SPA.Choice(SPA.CHOICE_ENUM, values)
+end
+
+function _ndarray_enum_rate(default::SPA.Fraction, choice::NdArrayRateChoice)
+    values = if choice.kind == SPA.CHOICE_ENUM
+        SPA.Fraction[default, default, choice.values...]
+    else
+        SPA.Fraction[default, choice.values...]
+    end
+    return SPA.Choice(choice.kind, values)
+end
+
+function ndarray_format(
+    format::NdArrayEnumFormat;
+    id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+)
+    default = format.default
+    element_type = isempty(format.element_type_alternatives) ?
+                   SPA.Id(UInt32(default.element_type)) :
+                   _ndarray_enum_id(
+        UInt32(default.element_type),
+        format.element_type_alternatives,
+    )
+    layout = isempty(format.layout_alternatives) ?
+             SPA.Id(UInt32(default.layout)) :
+             _ndarray_enum_id(UInt32(default.layout), format.layout_alternatives)
+    properties = SPA.Property[
+        SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
+        SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
+        SPA.Property(SPA.FORMAT_NDARRAY_ELEMENT_TYPE, element_type),
+        SPA.Property(SPA.FORMAT_NDARRAY_SHAPE, SPA.Array(collect(default.shape))),
+        SPA.Property(SPA.FORMAT_NDARRAY_LAYOUT, layout),
+    ]
+    if default.rate !== nothing
+        rate = format.rate_choice === nothing ?
+               default.rate :
+               _ndarray_enum_rate(default.rate, format.rate_choice)
+        push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, rate))
+    end
+    return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
+end
+
+ndarray_format(format::Union{VectorEnumFormat,MatrixEnumFormat}; kwargs...) =
+    ndarray_format(format.format; kwargs...)
+
 ndarray_format(format::Union{VectorFormat,MatrixFormat}; kwargs...) =
     ndarray_format(NdArrayFormat(format); kwargs...)
 function ndarray_format(
@@ -1332,6 +1515,7 @@ function ndarray_format(
 end
 
 vector_format(format::VectorFormat; kwargs...) = ndarray_format(format; kwargs...)
+vector_format(format::VectorEnumFormat; kwargs...) = ndarray_format(format; kwargs...)
 function vector_format(
     element_type::NdArray.ElementType,
     length::Integer;
@@ -1342,6 +1526,7 @@ function vector_format(
 end
 
 matrix_format(format::MatrixFormat; kwargs...) = ndarray_format(format; kwargs...)
+matrix_format(format::MatrixEnumFormat; kwargs...) = ndarray_format(format; kwargs...)
 function matrix_format(
     element_type::NdArray.ElementType,
     rows::Integer,
