@@ -39,7 +39,7 @@ end
     @test ispow2(cache_line_size)
     @test sizeof(native.spa_ringbuffer_shared_index) == cache_line_size
     @test sizeof(native.spa_ringbuffer_shared) == 2 * cache_line_size
-    @test sizeof(native.spa_io_buffers_latest_ready) == cache_line_size
+    @test sizeof(native.spa_io_buffers_latest_submission) == cache_line_size
     @test sizeof(native.spa_io_buffers_latest) == 3 * cache_line_size + 64 * sizeof(UInt32)
     @test sizeof(native.spa_meta_progressive) == 48
 
@@ -47,11 +47,11 @@ end
     GC.@preserve bytes begin
         control = Ptr{native.spa_io_buffers_latest}(Base.pointer(bytes))
         base = UInt(control)
-        @test UInt(control.ready) - base == 0
-        @test UInt(control.recycle) - base == cache_line_size
-        @test UInt(control.recycle.readindex) - base == cache_line_size
-        @test UInt(control.recycle.writeindex) - base == 2 * cache_line_size
-        @test UInt(control.recycle_ids) - base == 3 * cache_line_size
+        @test UInt(control.submission) - base == 0
+        @test UInt(control.completion) - base == cache_line_size
+        @test UInt(control.completion.readindex) - base == cache_line_size
+        @test UInt(control.completion.writeindex) - base == 2 * cache_line_size
+        @test UInt(control.completion_ids) - base == 3 * cache_line_size
     end
 end
 

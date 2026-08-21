@@ -7260,36 +7260,37 @@ struct spa_io_async_buffers
 end
 
 """
-    spa_io_buffers_latest_ready
+    spa_io_buffers_latest_submission
 
-| Field      | Note                                              |
-| :--------- | :------------------------------------------------ |
-| superseded | output-owned count of unclaimed buffers replaced  |
+| Field     | Note                                                  |
+| :-------- | :---------------------------------------------------- |
+| value     | atomic packed sequence and buffer ID                  |
+| overflows | output-owned count of unclaimed submissions replaced  |
 """
-struct spa_io_buffers_latest_ready
+struct spa_io_buffers_latest_submission
     data::NTuple{64, UInt8}
 end
 
-function Base.getproperty(x::Ptr{spa_io_buffers_latest_ready}, f::Symbol)
-    f === :id && return Ptr{UInt32}(x + 0)
-    f === :superseded && return Ptr{UInt32}(x + 4)
-    f === :padding && return Ptr{NTuple{56, UInt8}}(x + 8)
+function Base.getproperty(x::Ptr{spa_io_buffers_latest_submission}, f::Symbol)
+    f === :value && return Ptr{UInt64}(x + 0)
+    f === :overflows && return Ptr{UInt64}(x + 8)
+    f === :padding && return Ptr{NTuple{48, UInt8}}(x + 16)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::spa_io_buffers_latest_ready, f::Symbol)
-    r = Ref{spa_io_buffers_latest_ready}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest_ready}, r)
+function Base.getproperty(x::spa_io_buffers_latest_submission, f::Symbol)
+    r = Ref{spa_io_buffers_latest_submission}(x)
+    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest_submission}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{spa_io_buffers_latest_ready}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{spa_io_buffers_latest_submission}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::spa_io_buffers_latest_ready, private::Bool = false)
-    (:id, :superseded, :padding, if private
+function Base.propertynames(x::spa_io_buffers_latest_submission, private::Bool = false)
+    (:value, :overflows, :padding, if private
             fieldnames(typeof(x))
         else
             ()
@@ -7301,9 +7302,9 @@ struct spa_io_buffers_latest
 end
 
 function Base.getproperty(x::Ptr{spa_io_buffers_latest}, f::Symbol)
-    f === :ready && return Ptr{spa_io_buffers_latest_ready}(x + 0)
-    f === :recycle && return Ptr{spa_ringbuffer_shared}(x + 64)
-    f === :recycle_ids && return Ptr{NTuple{64, UInt32}}(x + 192)
+    f === :submission && return Ptr{spa_io_buffers_latest_submission}(x + 0)
+    f === :completion && return Ptr{spa_ringbuffer_shared}(x + 64)
+    f === :completion_ids && return Ptr{NTuple{64, UInt32}}(x + 192)
     return getfield(x, f)
 end
 
@@ -7319,7 +7320,7 @@ function Base.setproperty!(x::Ptr{spa_io_buffers_latest}, f::Symbol, v)
 end
 
 function Base.propertynames(x::spa_io_buffers_latest, private::Bool = false)
-    (:ready, :recycle, :recycle_ids, if private
+    (:submission, :completion, :completion_ids, if private
             fieldnames(typeof(x))
         else
             ()
@@ -7725,19 +7726,19 @@ function pw_filter_dequeue_buffer(port_data)
 end
 
 """
-    pw_filter_try_dequeue_buffer_latest(port_data, buffer)
+    pw_filter_try_dequeue_buffer_latest(port_data, buffer, submission_sequence)
 
-Try to claim a buffer directly from an input latest-buffer mailbox. RT safe.
+Try to receive a buffer directly from an input latest-buffer submission channel. RT safe.
 
-This skips the ordinary port queue and does not read or write errno. Returns 1 and stores the claimed buffer in *buffer*, 0 when no publication is currently visible, or a negative errno-style result for invalid state. The caller must own the port's serialized buffer worker and must return a claimed buffer before trying again.
+This skips the ordinary port queue and does not read or write errno. Returns 1 and stores the claimed buffer and its nonzero transport sequence in *buffer* and *submission_sequence*, 0 when no submission is currently visible, or a negative errno-style result for invalid state. The caller must own the port's serialized buffer worker and must complete a claimed buffer before trying again.
 
 ### Prototype
 ```c
-int pw_filter_try_dequeue_buffer_latest(void *port_data, struct pw_buffer **buffer);
+int pw_filter_try_dequeue_buffer_latest(void *port_data, struct pw_buffer **buffer, uint64_t *submission_sequence);
 ```
 """
-function pw_filter_try_dequeue_buffer_latest(port_data, buffer)
-    @ccall libpipewire_ao.pw_filter_try_dequeue_buffer_latest(port_data::Ptr{Cvoid}, buffer::Ptr{Ptr{pw_buffer}})::Cint
+function pw_filter_try_dequeue_buffer_latest(port_data, buffer, submission_sequence)
+    @ccall libpipewire_ao.pw_filter_try_dequeue_buffer_latest(port_data::Ptr{Cvoid}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
 end
 
 """
@@ -7771,19 +7772,19 @@ function pw_filter_buffer_latest_poller_init(poller, port_data)
 end
 
 """
-    pw_filter_buffer_latest_poller_try_dequeue(poller, buffer)
+    pw_filter_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
 
 Try to claim one input publication through an initialized poller. RT safe.
 
-Returns 1 and stores a buffer, 0 for ordinary no-work, or a negative errno-style error. A successful claim or an error automatically releases the retained link pin and finishes the polling interval. Empty polls retain the pin while the link remains active. Link retirement is observed before dereferencing its shared mailbox and releases the pin before returning 0.
+Returns 1 and stores a buffer, 0 for ordinary no-work, or a negative errno-style error. A successful claim or an error automatically releases the retained link pin and finishes the polling interval. Empty polls retain the pin while the link remains active. Link retirement is observed before dereferencing its shared channel and releases the pin before returning 0.
 
 ### Prototype
 ```c
-int pw_filter_buffer_latest_poller_try_dequeue( struct pw_filter_buffer_latest_poller *poller, struct pw_buffer **buffer);
+int pw_filter_buffer_latest_poller_try_dequeue( struct pw_filter_buffer_latest_poller *poller, struct pw_buffer **buffer, uint64_t *submission_sequence);
 ```
 """
-function pw_filter_buffer_latest_poller_try_dequeue(poller, buffer)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_try_dequeue(poller::Ptr{pw_filter_buffer_latest_poller}, buffer::Ptr{Ptr{pw_buffer}})::Cint
+function pw_filter_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
+    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_try_dequeue(poller::Ptr{pw_filter_buffer_latest_poller}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
 end
 
 """
@@ -7812,40 +7813,40 @@ These counters are written only by the exclusive latest-buffer output worker. Th
 | Field                           | Note                                    |
 | :------------------------------ | :-------------------------------------- |
 | dequeue\\_attempts              | output acquisition duty cycles          |
-| recycle\\_returns               | returned consumer leases examined       |
+| completions                     | completed consumer leases examined      |
 | buffer\\_probes                 | reusable pool slots examined            |
 | pool\\_exhaustions              | attempts with no safe allocation        |
-| ready\\_reclaims                | unclaimed publications reclaimed        |
-| ready\\_withdrawals             | subscriber ready slots withdrawn        |
+| submission\\_reclaims           | unclaimed submissions reclaimed         |
+| submission\\_withdrawals        | subscriber submissions withdrawn        |
 | publications                    | output buffers offered to fan-out       |
-| subscriber\\_visits             | subscriber mailboxes visited            |
+| subscriber\\_visits             | subscriber channels visited             |
 | subscriber\\_deliveries         | subscriber leases created               |
-| subscriber\\_supersessions      | subscriber-local ready IDs replaced     |
+| submission\\_overflows          | unclaimed submissions replaced          |
 | subscriber\\_retirements        | retired slots acknowledged by producer  |
 | retired\\_leases                | leases recovered during retirement      |
 | zero\\_recipient\\_publications | offers delivered to no active slot      |
 | max\\_buffer\\_probes           | largest single bounded scan             |
-| max\\_recycle\\_returns         | largest aggregate drain per attempt     |
-| max\\_ready\\_withdrawals       | largest reclaim fan-out per attempt     |
+| max\\_completions               | largest aggregate drain per attempt     |
+| max\\_submission\\_withdrawals  | largest reclaim fan-out per attempt     |
 | max\\_subscriber\\_visits       | largest publication fan-out             |
 """
 struct pw_filter_buffer_latest_stats
     dequeue_attempts::UInt64
-    recycle_returns::UInt64
+    completions::UInt64
     buffer_probes::UInt64
     pool_exhaustions::UInt64
-    ready_reclaims::UInt64
-    ready_withdrawals::UInt64
+    submission_reclaims::UInt64
+    submission_withdrawals::UInt64
     publications::UInt64
     subscriber_visits::UInt64
     subscriber_deliveries::UInt64
-    subscriber_supersessions::UInt64
+    submission_overflows::UInt64
     subscriber_retirements::UInt64
     retired_leases::UInt64
     zero_recipient_publications::UInt64
     max_buffer_probes::UInt32
-    max_recycle_returns::UInt32
-    max_ready_withdrawals::UInt32
+    max_completions::UInt32
+    max_submission_withdrawals::UInt32
     max_subscriber_visits::UInt32
 end
 
@@ -8131,7 +8132,7 @@ Announce an output buffer on a graph-independent latest-buffer port while retain
 
 The caller must initialize and publish its application-defined active state before this call. It may continue to write only storage that the negotiated progressive protocol still grants to the producer. The buffer must later be passed exactly once to pw_filter_end_progressive_buffer, not to pw_filter_queue_buffer.
 
-The caller must own the port's serialized output worker. Fan-out publication is latest-value delivery to independent subscribers, not an atomic multicast: subscribers may claim or supersede an offered buffer at different times. Per-subscriber leases keep the allocation unavailable for reuse until every subscriber has returned or superseded it and the producer lease has ended.
+The caller must own the port's serialized output worker. Fan-out publication is latest-value delivery to independent subscribers, not an atomic multicast: subscribers may receive or overflow an offered buffer at different times. Per-subscriber leases keep the allocation unavailable for reuse until every subscriber has completed or overflowed it and the producer lease has ended.
 
 This operation is supported only on an output port configured with SPA\\_IO\\_BuffersLatest.
 
