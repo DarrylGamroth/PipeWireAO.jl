@@ -5,11 +5,13 @@ authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
 
 [deps]
 PipeWireAO_jll = "cde84cf6-9a21-5ce0-b5e3-1526e778c30b"
+UnsafeArrays = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
 
 [compat]
 Aqua = "0.8"
 PipeWireAO_jll = "1.7"
 Test = "1"
+UnsafeArrays = "1"
 julia = "1.10"
 
 [extras]

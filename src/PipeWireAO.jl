@@ -1,5 +1,7 @@
 module PipeWireAO
 
+using UnsafeArrays: UnsafeArray
+
 export CoreConnection,
     AcquisitionDomain,
     AcquisitionExposureStart,
@@ -26,6 +28,23 @@ export CoreConnection,
     FilterIO,
     FilterPort,
     FilterPosition,
+    ImageBuffer,
+    ImageBufferState,
+    ImageData,
+    ImageFrame,
+    ImageProgressive,
+    ImageSource,
+    ImageSourceConfig,
+    ImageSourceStats,
+    IMAGE_BUFFER_AVAILABLE,
+    IMAGE_BUFFER_PRODUCER,
+    IMAGE_BUFFER_PROGRESSIVE,
+    IMAGE_BUFFER_PUBLISHED,
+    IMAGE_BUFFER_UNUSED,
+    IMAGE_SOURCE_ALLOW_PROGRESSIVE,
+    IMAGE_SOURCE_MAX_BUFFERS,
+    IMAGE_SOURCE_REQUIRE_ACQUISITION,
+    IMAGE_SOURCE_REQUIRE_HEADER,
     ProgressiveFilterBuffer,
     BufferInfo,
     BufferMetadata,
@@ -216,6 +235,9 @@ export CoreConnection,
     get_permissions!,
     has_current_info,
     initialize_progressive!,
+    image_buffer_index,
+    image_buffer_state,
+    image_source_stats,
     initialize_acquisition!,
     in_thread,
     is_driving,
@@ -258,11 +280,18 @@ export CoreConnection,
     progressive_valid,
     payload_size,
     publish_progressive!,
+    publish_complete!,
+    update_progressive!,
+    finish_progressive!,
     process_latency_param,
     proxy_id,
     queue_buffer!,
     remove_port!,
     return_buffer!,
+    prepare!,
+    teardown!,
+    try_acquire!,
+    try_reclaim!,
     quit!,
     request_exit!,
     roundtrip,
@@ -331,6 +360,7 @@ include("spa_types.jl")
 include("spa.jl")
 include("objects.jl")
 include("stream.jl")
+include("image_source.jl")
 include("filter.jl")
 include("listeners.jl")
 

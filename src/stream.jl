@@ -136,6 +136,7 @@ mutable struct Stream{CoreType<:CoreConnection,Callbacks}
     buffer_owners::Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}
     callbacks_active::Bool
     connected::Bool
+    image_source_count::Int
 end
 
 function _stream_control_info(
@@ -382,6 +383,7 @@ function Stream(
         Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}(),
         true,
         false,
+        0,
     )
     try
         events[] = _stream_events(stream)
@@ -426,6 +428,12 @@ end
 function Base.close(stream::Stream)
     handle = lock(stream.state_lock) do
         stream.handle == C_NULL && return C_NULL
+        stream.image_source_count == 0 || throw(
+            InvalidStateException(
+                "close every image source before closing its PipeWire stream",
+                :image_sources,
+            ),
+        )
         handle = stream.handle
         stream.handle = Ptr{LibPipeWire.pw_stream}(C_NULL)
         stream.connected = false
@@ -1529,8 +1537,7 @@ end
 "Return a borrowed byte view of a metadata payload."
 function metadata_bytes(metadata::BufferMetadata)
     native = _native_metadata(metadata)
-    native.data == C_NULL && return UInt8[]
-    return unsafe_wrap(Vector{UInt8}, Ptr{UInt8}(native.data), Int(native.size); own=false)
+    return UnsafeArray(Ptr{UInt8}(native.data), (Int(native.size),))
 end
 
 function _typed_metadata(buffer::AbstractPipeWireBuffer, type::UInt32, ::Type{T}) where {T}
@@ -1986,7 +1993,7 @@ end
 function bytes(mapping::MappedBufferData)
     mapping.pointer == C_NULL &&
         throw(InvalidStateException("the PipeWire data mapping is closed", :closed))
-    return unsafe_wrap(Vector{UInt8}, mapping.pointer, mapping.length; own=false)
+    return UnsafeArray(mapping.pointer, (mapping.length,))
 end
 
 "Return the writable capacity in bytes of a PipeWire data plane."
@@ -2019,13 +2026,13 @@ function bytes(data::AbstractPipeWireData)
     pointer = data_pointer(data)
     offset = Int(chunk.offset % max(native.maxsize, UInt32(1)))
     size = min(Int(chunk.size), Int(native.maxsize) - offset)
-    return unsafe_wrap(Vector{UInt8}, pointer + offset, size; own=false)
+    return UnsafeArray(pointer + offset, (size,))
 end
 
 "Return a borrowed writable byte view spanning a PipeWire data plane's capacity."
 function writable_bytes(data::AbstractPipeWireData)
     native = _native_data(data)
-    return unsafe_wrap(Vector{UInt8}, data_pointer(data), Int(native.maxsize); own=false)
+    return UnsafeArray(data_pointer(data), (Int(native.maxsize),))
 end
 
 "Set valid chunk bounds for a PipeWire data plane and return `data`."
