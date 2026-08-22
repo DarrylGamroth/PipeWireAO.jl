@@ -2047,8 +2047,6 @@ function buffer_memory(data::AbstractPipeWireData, length::Integer=capacity(data
     return UnsafeArray(data_pointer(data), (Int(length),))
 end
 
-Base.@deprecate writable_bytes(data::AbstractPipeWireData) buffer_memory(data)
-
 "Set valid chunk bounds for a PipeWire data plane and return `data`."
 function set_chunk!(
     data::AbstractPipeWireData;

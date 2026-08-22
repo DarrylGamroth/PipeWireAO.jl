@@ -345,7 +345,6 @@ export CoreConnection,
     hello!,
     clear!,
     buffer_memory,
-    writable_bytes,
     with_main_loop,
     with_thread_loop_lock,
     with_registry
