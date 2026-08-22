@@ -929,8 +929,14 @@ end
           SPA.Id(UInt32(SPA.PAGE_SIZE_HUGE_2MB))
 
     metadata = metadata_param(PipeWireAO.LibPipeWire.SPA_META_Header; size=64)
+    header = header_metadata_param()
     io = io_param(PipeWireAO.LibPipeWire.SPA_IO_Buffers; size=32)
     @test pod_value(SPA.Parameter, Pod(metadata)) == metadata
+    @test pod_value(SPA.Parameter, Pod(header)) == header
+    @test pod_value(Int32, only(
+        property.value for property in header.object.properties if
+        property.key == PipeWireAO.LibPipeWire.SPA_PARAM_META_size
+    )) == Int32(sizeof(PipeWireAO.LibPipeWire.spa_meta_header))
     @test pod_value(SPA.Parameter, Pod(io)) == io
     @test_throws ArgumentError buffers_param(size=big(typemax(Int32)) + 1)
 

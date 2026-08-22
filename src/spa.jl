@@ -644,6 +644,13 @@ function metadata_param(
     return SPA.Parameter(LibPipeWire.SPA_TYPE_OBJECT_ParamMeta, id, properties)
 end
 
+"Request standard SPA header metadata on every negotiated buffer."
+header_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
+    SPA.META_HEADER;
+    size=sizeof(LibPipeWire.spa_meta_header),
+    id,
+)
+
 "Request native Version 1 progressive metadata on every negotiated buffer."
 progressive_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
     SPA.META_PROGRESSIVE;
