@@ -1017,7 +1017,10 @@ include("examples.jl")
         @test chunk_info(data) == BufferChunk(0, 8, 4, SPA.CHUNK_FLAG_CORRUPTED)
         @test snapshot == BufferChunk(2, 4, 2, SPA.CHUNK_FLAG_CORRUPTED)
         @test length(bytes(data)) == 8
-        @test writable_bytes(data) == storage
+        @test buffer_memory(data) == storage
+        @test buffer_memory(data, 4) == storage[1:4]
+        @test_throws ArgumentError buffer_memory(data, -1)
+        @test_throws ArgumentError buffer_memory(data, 17)
 
         allocated = allocate_buffer!(
             stream,

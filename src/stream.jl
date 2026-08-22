@@ -2031,11 +2031,23 @@ function bytes(data::AbstractPipeWireData)
     return UnsafeArray(pointer + offset, (size,))
 end
 
-"Return a borrowed writable byte view spanning a PipeWire data plane's capacity."
-function writable_bytes(data::AbstractPipeWireData)
-    native = _native_data(data)
-    return UnsafeArray(data_pointer(data), (Int(native.maxsize),))
+"""
+    buffer_memory(data[, length])
+
+Return a borrowed byte view of the mapped memory backing a PipeWire data plane.
+By default the view spans the plane's full capacity; pass `length` to request a
+bounded prefix. The view does not own the memory and is valid only while the
+containing PipeWire buffer is leased.
+"""
+function buffer_memory(data::AbstractPipeWireData, length::Integer=capacity(data))
+    available = capacity(data)
+    0 <= length <= available || throw(ArgumentError(
+        "requested memory length $length is outside the data-plane capacity $available",
+    ))
+    return UnsafeArray(data_pointer(data), (Int(length),))
 end
+
+Base.@deprecate writable_bytes(data::AbstractPipeWireData) buffer_memory(data)
 
 "Set valid chunk bounds for a PipeWire data plane and return `data`."
 function set_chunk!(

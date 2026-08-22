@@ -508,7 +508,8 @@ end
             BufferChunk(2, 4, 2, SPA.CHUNK_FLAG_CORRUPTED),
         )
         @test filter_data_allocations(data) == 0
-        @test writable_bytes(data) == storage
+        @test buffer_memory(data) == storage
+        @test buffer_memory(data, 4) == storage[1:4]
         @test set_chunk!(data; offset=1, size=8, stride=4) === data
         @test chunk_info(data) == BufferChunk(1, 8, 4, SPA.CHUNK_FLAG_CORRUPTED)
         @test snapshot == BufferChunk(2, 4, 2, SPA.CHUNK_FLAG_CORRUPTED)
