@@ -552,8 +552,9 @@ Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageR
 Pkg.add("PipeWireAO")
 ```
 
-`PipeWireAO_jll` currently supports glibc-based Linux on x86_64, with portable
-baseline and AVX2 artifacts selected from the host CPU capabilities.
+`PipeWireAO_jll` currently supports glibc-based Linux on aarch64 and x86_64.
+On x86_64, baseline, AVX2, and AVX-512 artifacts are selected from the host
+CPU capabilities. PipeWireAO 0.2 requires PipeWireAO_jll 1.7.0+2 or newer.
 
 ## Regenerating the C bindings
 

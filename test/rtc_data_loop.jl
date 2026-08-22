@@ -105,15 +105,25 @@ end
     process = RTCNativeProcess(Threads.Atomic{Int}(0))
     loop = RTCDataLoop(context, process)
     try
-        @test start!(loop) === loop
-        deadline = time() + 5
-        while isrunning(loop) && time() < deadline
-            sleep(0.001)
+        thread_utils = PipeWireAO.LibPipeWire.pw_context_get_object(
+            context.handle,
+            "Spa:Pointer:Interface:ThreadUtils",
+        )
+        if thread_utils == C_NULL
+            # module-rt is optional when the test process lacks RLIMIT_RTPRIO
+            # and no RTKit fallback is present.
+            @test_skip start!(loop) === loop
+        else
+            @test start!(loop) === loop
+            deadline = time() + 5
+            while isrunning(loop) && time() < deadline
+                sleep(0.001)
+            end
+            @test !isrunning(loop)
+            @test process.count[] >= 1024
+            @test terminal_result(loop) == -Base.Libc.ECANCELED
+            @test_throws PipeWireError stop!(loop)
         end
-        @test !isrunning(loop)
-        @test process.count[] >= 1024
-        @test terminal_result(loop) == -Base.Libc.ECANCELED
-        @test_throws PipeWireError stop!(loop)
     finally
         close(loop)
         close(context)

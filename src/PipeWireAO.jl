@@ -366,6 +366,16 @@ include("image_source.jl")
 include("filter.jl")
 include("listeners.jl")
 
+const _MINIMUM_JLL_VERSION = v"1.7.0+2"
+
+function __init__()
+    version = pkgversion(LibPipeWire.PipeWireAO_jll)
+    version >= _MINIMUM_JLL_VERSION || error(
+        "PipeWireAO requires PipeWireAO_jll $_MINIMUM_JLL_VERSION or newer; " *
+        "found $version. Update PipeWireAO_jll and restart Julia.",
+    )
+end
+
 """
     library_version() -> VersionNumber
 
