@@ -327,7 +327,7 @@ function _acquired_buffer(source::ImageSource, operation, operation_name::Symbol
         throw(InvalidStateException("the image source is not prepared", :unprepared))
     source.output[] = Ptr{LibPipeWire.pw_image_buffer}(C_NULL)
     result = operation(_require_open(source), source.output)
-    result == 0 && return nothing
+    result in (0, -Base.Libc.EPIPE) && return nothing
     _check_result(operation_name, result)
     result == 1 || throw(PipeWireError(operation_name, Cint(-Base.Libc.EPROTO)))
     handle = source.output[]
@@ -341,14 +341,14 @@ function _acquired_buffer(source::ImageSource, operation, operation_name::Symbol
     return buffer
 end
 
-"Acquire one producer-owned image slot, or return `nothing` on pool exhaustion."
+"Acquire one producer-owned image slot, or return `nothing` on pool exhaustion or subscriber loss."
 try_acquire!(source::ImageSource) = _acquired_buffer(
     source,
     LibPipeWire.pw_image_source_try_acquire,
     :pw_image_source_try_acquire,
 )
 
-"Withdraw at most one visible, unclaimed image under explicit lossy policy."
+"Withdraw at most one visible, unclaimed image under explicit lossy policy, or return `nothing`."
 try_reclaim!(source::ImageSource) = _acquired_buffer(
     source,
     LibPipeWire.pw_image_source_try_reclaim,
