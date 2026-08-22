@@ -19,6 +19,8 @@ const STREAM_DONT_RECONNECT = LibPipeWire.PW_STREAM_FLAG_DONT_RECONNECT
 const STREAM_ALLOC_BUFFERS = LibPipeWire.PW_STREAM_FLAG_ALLOC_BUFFERS
 "Enable explicit stream processing triggers."
 const STREAM_TRIGGER = LibPipeWire.PW_STREAM_FLAG_TRIGGER
+"Require scheduler-independent latest-buffer transport on every stream link."
+const STREAM_BUFFER_LATEST = LibPipeWire.PW_STREAM_FLAG_BUFFER_LATEST
 "Dequeue and queue buffers outside the real-time process callback."
 const STREAM_ASYNC = LibPipeWire.PW_STREAM_FLAG_ASYNC
 "Request process callbacks as soon as playback buffers are available."

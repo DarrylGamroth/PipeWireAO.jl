@@ -1,4 +1,5 @@
 @testset "image-source API" begin
+    @test STREAM_BUFFER_LATEST == PipeWireAO.LibPipeWire.PW_STREAM_FLAG_BUFFER_LATEST
     config = ImageSourceConfig(
         3,
         8;
