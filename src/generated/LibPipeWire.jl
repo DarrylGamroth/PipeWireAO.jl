@@ -1699,20 +1699,21 @@ It is also possible to add the loop to an existing event loop by using the spa\\
 
 spa\\_loop\\_control\\_enter() and spa\\_loop\\_control\\_leave() should be called once from the thread that will run the iterate() function.
 
-| Field      | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| get\\_fd   | get the loop fd  Get the fd of this loop control. This fd will be readable when a source in the loop has activity. The user should call iterate() with a 0 timeout to schedule one iteration of the loop and dispatch the sources.  # Arguments * `object`: the control to query # Returns the fd of the loop                                                                                                                                                                    |
-| add\\_hook | Add a hook  Adds hooks to the loop controlled by *ctrl*.  # Arguments * `object`: the control to change * `hooks`: the hooks to add                                                                                                                                                                                                                                                                                                                                              |
-| enter      | Enter a loop  This function should be called before calling iterate and is typically used to capture the thread that this loop will run in. It should ideally be called once from the thread that will run the loop. This function will lock the loop.  # Arguments * `object`: the control                                                                                                                                                                                      |
-| leave      | Leave a loop  It should ideally be called once after calling iterate when the loop will no longer be iterated from the thread that called enter().  This function will unlock the loop.  # Arguments * `object`: the control                                                                                                                                                                                                                                                     |
-| iterate    | Perform one iteration of the loop.  This function will first unlock the loop and then block up to *timeout* milliseconds, lock the loop again and then dispatch the fds with activity.  The number of dispatched fds is returned.  # Arguments * `ctrl`: the control * `timeout`: an optional timeout in milliseconds.	0 for no timeout, -1 for infinite timeout.                                                                                                                 |
-| check      | Check context of the loop  This function will check if the current thread is currently the one that did the enter call. Since version 1:1.  returns 1 on success, 0 or negative errno value on error.  # Arguments * `ctrl`: the control                                                                                                                                                                                                                                         |
-| lock       | Lock the loop. This will ensure the loop is not in the process of dispatching callbacks. Since version 2:2  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                                                                                                              |
-| unlock     | Unlock the loop. Unlocks the loop again so that callbacks can be dispatched again. Since version 2:2  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                                                                                                                    |
-| get\\_time | get the absolute time Get the current time with timeout that can be used in wait. Since version 2:2  This function can be called from any thread.                                                                                                                                                                                                                                                                                                                                |
-| wait       | Wait for a signal Wait until a thread performs signal. Since version 2:2  This function must be called with the loop lock. Because this is a blocking call, it should not be performed from a realtime thread.  # Arguments * `object`:\\[in\\] the control * `abstime`:\\[in\\] the maximum time to wait for the signal or NULL # Returns 0 on success or a negative return value on error.                                                                                     |
-| signal     | Signal waiters Wake up all threads blocked in wait. Since version 2:2 When wait\\_for\\_accept is set, this functions blocks until all threads performed accept.  This function must be called with the loop lock and is safe to call from a realtime thread source dispatch functions when wait\\_for\\_accept is false.  # Arguments * `object`:\\[in\\] the control * `wait_for_accept`:\\[in\\] block for accept # Returns 0 on success or a negative return value on error. |
-| accept     | Accept signalers Resume the thread that signaled with wait\\_for accept.  This function must be called with the loop lock and is safe to call from a realtime thread source dispatch functions.  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                         |
+| Field      | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| get\\_fd   | get the loop fd  Get the fd of this loop control. This fd will be readable when a source in the loop has activity. The user should call iterate() with a 0 timeout to schedule one iteration of the loop and dispatch the sources.  # Arguments * `object`: the control to query # Returns the fd of the loop                                                                                                                                                                                                                    |
+| add\\_hook | Add a hook  Adds hooks to the loop controlled by *ctrl*.  # Arguments * `object`: the control to change * `hooks`: the hooks to add                                                                                                                                                                                                                                                                                                                                                                                              |
+| enter      | Enter a loop  This function should be called before calling iterate and is typically used to capture the thread that this loop will run in. It should ideally be called once from the thread that will run the loop. This function will lock the loop.  # Arguments * `object`: the control                                                                                                                                                                                                                                      |
+| leave      | Leave a loop  It should ideally be called once after calling iterate when the loop will no longer be iterated from the thread that called enter().  This function will unlock the loop.  # Arguments * `object`: the control                                                                                                                                                                                                                                                                                                     |
+| iterate    | Perform one iteration of the loop.  This function will first unlock the loop and then block up to *timeout* milliseconds, lock the loop again and then dispatch the fds with activity.  The number of dispatched fds is returned.  # Arguments * `ctrl`: the control * `timeout`: an optional timeout in milliseconds.	0 for no timeout, -1 for infinite timeout.                                                                                                                                                                 |
+| check      | Check context of the loop  This function will check if the current thread is currently the one that did the enter call. Since version 1:1.  returns 1 on success, 0 or negative errno value on error.  # Arguments * `ctrl`: the control                                                                                                                                                                                                                                                                                         |
+| lock       | Lock the loop. This will ensure the loop is not in the process of dispatching callbacks. Since version 2:2  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                                                                                                                                                              |
+| unlock     | Unlock the loop. Unlocks the loop again so that callbacks can be dispatched again. Since version 2:2  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                                                                                                                                                                    |
+| get\\_time | get the absolute time Get the current time with timeout that can be used in wait. Since version 2:2  This function can be called from any thread.                                                                                                                                                                                                                                                                                                                                                                                |
+| wait       | Wait for a signal Wait until a thread performs signal. Since version 2:2  This function must be called with the loop lock. Because this is a blocking call, it should not be performed from a realtime thread.  # Arguments * `object`:\\[in\\] the control * `abstime`:\\[in\\] the maximum time to wait for the signal or NULL # Returns 0 on success or a negative return value on error.                                                                                                                                     |
+| signal     | Signal waiters Wake up all threads blocked in wait. Since version 2:2 When wait\\_for\\_accept is set, this functions blocks until all threads performed accept.  This function must be called with the loop lock and is safe to call from a realtime thread source dispatch functions when wait\\_for\\_accept is false.  # Arguments * `object`:\\[in\\] the control * `wait_for_accept`:\\[in\\] block for accept # Returns 0 on success or a negative return value on error.                                                 |
+| accept     | Accept signalers Resume the thread that signaled with wait\\_for accept.  This function must be called with the loop lock and is safe to call from a realtime thread source dispatch functions.  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error.                                                                                                                                                                                                                         |
+| yield      | Dispatch control work and yield the entered loop lock without polling file descriptors.  This function must be called by the thread that entered the loop and with no additional recursive loop locks held. It dispatches queued invokes, then releases and immediately reacquires the loop lock so administrative callers can modify loop-owned state. It does not wait for or dispatch fd sources. Since version 3:3.  # Arguments * `object`:\\[in\\] the control # Returns 0 on success or a negative return value on error. |
 """
 struct spa_loop_control_methods
     version::UInt32
@@ -1728,6 +1729,7 @@ struct spa_loop_control_methods
     wait::Ptr{Cvoid}
     signal::Ptr{Cvoid}
     accept::Ptr{Cvoid}
+    yield::Ptr{Cvoid}
 end
 
 # typedef void ( * spa_source_io_func_t ) ( void * data , int fd , uint32_t mask )
@@ -3864,7 +3866,6 @@ end
 | SPA\\_META\\_Busy           | don't write to buffer when count > 0                                                                          |
 | SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
 | SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
-| SPA\\_META\\_Progressive    | struct [`spa_meta_progressive`](@ref)                                                                         |
 | SPA\\_META\\_Acquisition    | struct [`spa_meta_acquisition`](@ref)                                                                         |
 | \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
@@ -3880,7 +3881,6 @@ const SPA_META_Busy = 7 % UInt32
 const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
 const SPA_META_START_PipeWireAO = 10 % UInt32
-const SPA_META_Progressive = 10 % UInt32
 const SPA_META_Acquisition = 11 % UInt32
 const _SPA_META_LAST = 12 % UInt32
 const SPA_META_START_custom = 512 % UInt32
@@ -4074,28 +4074,42 @@ end
 """
     spa_meta_acquisition_constant
 
-Version 1 acquisition metadata ABI.
+Acquisition metadata ABI constants.
 """
 const spa_meta_acquisition_constant = UInt32
-const SPA_META_ACQUISITION_VERSION = 1 % UInt32
+const SPA_META_ACQUISITION_VERSION_1 = 1 % UInt32
+const SPA_META_ACQUISITION_VERSION_2 = 2 % UInt32
+const SPA_META_ACQUISITION_VERSION = 2 % UInt32
 const SPA_META_ACQUISITION_SIZE = 96 % UInt32
+const SPA_META_ACQUISITION_WIRE_SIZE = 96 % UInt32
 const SPA_META_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
+const SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE = 8 % UInt32
 const SPA_META_FEATURE_ACQUISITION_VERSION_1 = 1 % UInt32
+const SPA_META_FEATURE_ACQUISITION_VERSION_2 = 2 % UInt32
+const SPA_META_FEATURE_ACQUISITION_CURRENT = 2 % UInt32
 
 const spa_meta_acquisition_flag = UInt32
 const SPA_META_ACQUISITION_FLAG_IDENTITY_VALID = 1 % UInt32
 const SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID = 2 % UInt32
 const SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID = 4 % UInt32
-const SPA_META_ACQUISITION_FLAG_ALL = 7 % UInt32
+const SPA_META_ACQUISITION_FLAG_PTP_REFERENCE_VALID = 8 % UInt32
+const SPA_META_ACQUISITION_FLAG_ALL = 15 % UInt32
+
+const spa_meta_acquisition_timebase = UInt32
+const SPA_META_ACQUISITION_TIMEBASE_NONE = 0 % UInt32
+const SPA_META_ACQUISITION_TIMEBASE_MONOTONIC = 1 % UInt32
+const SPA_META_ACQUISITION_TIMEBASE_TAI = 2 % UInt32
 
 """
     spa_meta_acquisition
 
 Physical acquisition identity and qualified exposure time.
 
-The producer initializes this structure before publishing a complete buffer or before the first ACTIVE publication of a progressive buffer. It remains immutable until every producer and consumer lease on that buffer ends.
+The producer initializes this structure before publishing a complete buffer. It remains immutable until every producer and consumer lease on that buffer ends.
 
-Identity is the complete (domain, generation, sequence) tuple. The domain is opaque and compared bytewise. exposure\\_start\\_nsec is the physical exposure start mapped into the local Linux CLOCK\\_MONOTONIC domain. A valid timestamp has a nonnegative value and an inclusive uncertainty bound. Version 1 timestamps from different Linux kernels are not comparable.
+Identity is the complete (domain, generation, sequence) tuple. The domain is opaque and compared bytewise. Version 1 exposure timestamps are in the local Linux CLOCK\\_MONOTONIC domain and are never comparable across hosts.
+
+Version 2 makes the timebase explicit. Cross-host timestamps use CLOCK\\_TAI nanoseconds and identify the PTP grandmaster and PTP domain that established the mapping. timestamp\\_uncertainty\\_nsec is an inclusive error bound for the exposure-start mapping. A PTP time is comparable only with another valid Version 2 PTP time carrying the same grandmaster identity and domain number.
 """
 struct spa_meta_acquisition
     data::NTuple{96, UInt8}
@@ -4105,14 +4119,17 @@ function Base.getproperty(x::Ptr{spa_meta_acquisition}, f::Symbol)
     f === :version && return Ptr{UInt32}(x + 0)
     f === :abi_size && return Ptr{UInt32}(x + 4)
     f === :flags && return Ptr{UInt32}(x + 8)
-    f === :reserved0 && return Ptr{UInt32}(x + 12)
+    f === :timebase && return Ptr{UInt32}(x + 12)
     f === :domain && return Ptr{NTuple{16, UInt8}}(x + 16)
     f === :generation && return Ptr{UInt64}(x + 32)
     f === :sequence && return Ptr{UInt64}(x + 40)
     f === :exposure_start_nsec && return Ptr{Int64}(x + 48)
     f === :exposure_duration_nsec && return Ptr{UInt64}(x + 56)
     f === :timestamp_uncertainty_nsec && return Ptr{UInt64}(x + 64)
-    f === :reserved && return Ptr{NTuple{3, UInt64}}(x + 72)
+    f === :ptp_grandmaster_id && return Ptr{NTuple{8, UInt8}}(x + 72)
+    f === :ptp_domain_number && return Ptr{UInt8}(x + 80)
+    f === :reserved && return Ptr{NTuple{7, UInt8}}(x + 81)
+    f === :reserved2 && return Ptr{UInt64}(x + 88)
     return getfield(x, f)
 end
 
@@ -4128,7 +4145,7 @@ function Base.setproperty!(x::Ptr{spa_meta_acquisition}, f::Symbol, v)
 end
 
 function Base.propertynames(x::spa_meta_acquisition, private::Bool = false)
-    (:version, :abi_size, :flags, :reserved0, :domain, :generation, :sequence, :exposure_start_nsec, :exposure_duration_nsec, :timestamp_uncertainty_nsec, :reserved, if private
+    (:version, :abi_size, :flags, :timebase, :domain, :generation, :sequence, :exposure_start_nsec, :exposure_duration_nsec, :timestamp_uncertainty_nsec, :ptp_grandmaster_id, :ptp_domain_number, :reserved, :reserved2, if private
             fieldnames(typeof(x))
         else
             ()
@@ -4166,7 +4183,7 @@ end
 """
     spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
 
-Establish a local CLOCK\\_MONOTONIC exposure-start mapping.
+Establish a host-local CLOCK\\_MONOTONIC exposure-start mapping.
 
 ### Prototype
 ```c
@@ -4175,6 +4192,20 @@ bool spa_meta_acquisition_set_exposure_start( struct spa_meta_acquisition *acqui
 """
 function spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
     @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_start(acquisition::Ptr{spa_meta_acquisition}, exposure_start_nsec::Int64, timestamp_uncertainty_nsec::UInt64)::Bool
+end
+
+"""
+    spa_meta_acquisition_set_exposure_start_ptp(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec, ptp_grandmaster_id, ptp_domain_number)
+
+Establish a PTP-qualified CLOCK\\_TAI exposure-start mapping.
+
+### Prototype
+```c
+bool spa_meta_acquisition_set_exposure_start_ptp( struct spa_meta_acquisition *acquisition, int64_t exposure_start_nsec, uint64_t timestamp_uncertainty_nsec, const uint8_t ptp_grandmaster_id[SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE], uint8_t ptp_domain_number);
+```
+"""
+function spa_meta_acquisition_set_exposure_start_ptp(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec, ptp_grandmaster_id, ptp_domain_number)
+    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_start_ptp(acquisition::Ptr{spa_meta_acquisition}, exposure_start_nsec::Int64, timestamp_uncertainty_nsec::UInt64, ptp_grandmaster_id::Ptr{UInt8}, ptp_domain_number::UInt8)::Bool
 end
 
 """
@@ -4194,7 +4225,7 @@ end
 """
     spa_meta_acquisition_is_valid(meta)
 
-Validate a mapped Version 1 acquisition metadata allocation.
+Validate a mapped Version 1 or Version 2 acquisition metadata allocation.
 
 ### Prototype
 ```c
@@ -4203,6 +4234,34 @@ bool spa_meta_acquisition_is_valid(const struct spa_meta *meta);
 """
 function spa_meta_acquisition_is_valid(meta)
     @ccall libpipewire_ao.spa_meta_acquisition_is_valid(meta::Ptr{spa_meta})::Bool
+end
+
+"""
+    spa_meta_acquisition_serialize(acquisition, wire, wire_size)
+
+Serialize Version 2 metadata to the canonical big-endian wire record.
+
+### Prototype
+```c
+bool spa_meta_acquisition_serialize( const struct spa_meta_acquisition *acquisition, uint8_t *wire, uint32_t wire_size);
+```
+"""
+function spa_meta_acquisition_serialize(acquisition, wire, wire_size)
+    @ccall libpipewire_ao.spa_meta_acquisition_serialize(acquisition::Ptr{spa_meta_acquisition}, wire::Ptr{UInt8}, wire_size::UInt32)::Bool
+end
+
+"""
+    spa_meta_acquisition_deserialize(acquisition, wire, wire_size)
+
+Deserialize and validate a canonical big-endian Version 2 wire record.
+
+### Prototype
+```c
+bool spa_meta_acquisition_deserialize( struct spa_meta_acquisition *acquisition, const uint8_t *wire, uint32_t wire_size);
+```
+"""
+function spa_meta_acquisition_deserialize(acquisition, wire, wire_size)
+    @ccall libpipewire_ao.spa_meta_acquisition_deserialize(acquisition::Ptr{spa_meta_acquisition}, wire::Ptr{UInt8}, wire_size::UInt32)::Bool
 end
 
 """
@@ -4219,132 +4278,34 @@ function spa_meta_acquisition_identity_equal(a, b)
     @ccall libpipewire_ao.spa_meta_acquisition_identity_equal(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition})::Bool
 end
 
-const spa_meta_progressive_state = UInt32
-const SPA_META_PROGRESSIVE_STATE_PREPARED = 0 % UInt32
-const SPA_META_PROGRESSIVE_STATE_ACTIVE = 1 % UInt32
-const SPA_META_PROGRESSIVE_STATE_COMPLETE = 2 % UInt32
-const SPA_META_PROGRESSIVE_STATE_ABORTED = 3 % UInt32
-
 """
-    spa_meta_progressive
+    spa_meta_acquisition_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
 
-Progressive payload publication state shared by producer and consumer.
+Compare PTP-qualified time domains and return a - b with their summed error.
 
-One producer owns updates for the duration of a producer lease. Version, layout, granularity, and reserved fields are immutable from PREPARED until all producer and consumer leases end. The committed count never decreases. Before release-storing an ACTIVE snapshot, the producer makes the newly committed payload prefix immutable. A consumer acquire-loads snapshot before reading that prefix and does not read beyond the observed committed count.
-
-terminal\\_flags is zero in PREPARED and ACTIVE. To finish, the producer first writes terminal\\_flags and any final payload bytes, then release-stores a COMPLETE or ABORTED snapshot. A consumer reads terminal\\_flags only after an acquire-load observes that terminal snapshot. This ordering deliberately keeps terminal\\_flags out of validation while publication is active.
-"""
-struct spa_meta_progressive
-    data::NTuple{48, UInt8}
-end
-
-function Base.getproperty(x::Ptr{spa_meta_progressive}, f::Symbol)
-    f === :version && return Ptr{UInt32}(x + 0)
-    f === :abi_size && return Ptr{UInt32}(x + 4)
-    f === :data_index && return Ptr{UInt32}(x + 8)
-    f === :payload_offset && return Ptr{UInt32}(x + 12)
-    f === :payload_size && return Ptr{UInt32}(x + 16)
-    f === :commit_granularity && return Ptr{UInt32}(x + 20)
-    f === :terminal_flags && return Ptr{UInt32}(x + 24)
-    f === :reserved0 && return Ptr{UInt32}(x + 28)
-    f === :snapshot && return Ptr{UInt64}(x + 32)
-    f === :reserved1 && return Ptr{UInt64}(x + 40)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_meta_progressive, f::Symbol)
-    r = Ref{spa_meta_progressive}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_meta_progressive}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_meta_progressive}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_meta_progressive, private::Bool = false)
-    (:version, :abi_size, :data_index, :payload_offset, :payload_size, :commit_granularity, :terminal_flags, :reserved0, :snapshot, :reserved1, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
-
-"""
-    spa_meta_progressive_snapshot_encode(committed, state)
+The returned uncertainty saturates at UINT64\\_MAX. Join policy remains with the caller; this helper only proves that the two timestamps are comparable.
 
 ### Prototype
 ```c
-uint64_t spa_meta_progressive_snapshot_encode(uint32_t committed, enum spa_meta_progressive_state state);
+bool spa_meta_acquisition_time_difference( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b, int64_t *difference_nsec, uint64_t *combined_uncertainty_nsec);
 ```
 """
-function spa_meta_progressive_snapshot_encode(committed, state)
-    @ccall libpipewire_ao.spa_meta_progressive_snapshot_encode(committed::UInt32, state::spa_meta_progressive_state)::UInt64
+function spa_meta_acquisition_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
+    @ccall libpipewire_ao.spa_meta_acquisition_time_difference(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition}, difference_nsec::Ptr{Int64}, combined_uncertainty_nsec::Ptr{UInt64})::Bool
 end
 
 """
-    spa_meta_progressive_snapshot_decode(snapshot, committed, state)
+    spa_meta_acquisition_times_match(a, b, tolerance_nsec)
+
+Test whether comparable PTP times overlap within an additional tolerance.
 
 ### Prototype
 ```c
-bool spa_meta_progressive_snapshot_decode(uint64_t snapshot, uint32_t *committed, enum spa_meta_progressive_state *state);
+bool spa_meta_acquisition_times_match( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b, uint64_t tolerance_nsec);
 ```
 """
-function spa_meta_progressive_snapshot_decode(snapshot, committed, state)
-    @ccall libpipewire_ao.spa_meta_progressive_snapshot_decode(snapshot::UInt64, committed::Ptr{UInt32}, state::Ptr{spa_meta_progressive_state})::Bool
-end
-
-"""
-    spa_meta_progressive_load_acquire(meta)
-
-### Prototype
-```c
-uint64_t spa_meta_progressive_load_acquire( const struct spa_meta_progressive *meta);
-```
-"""
-function spa_meta_progressive_load_acquire(meta)
-    @ccall libpipewire_ao.spa_meta_progressive_load_acquire(meta::Ptr{spa_meta_progressive})::UInt64
-end
-
-"""
-    spa_meta_progressive_store_release(meta, snapshot)
-
-### Prototype
-```c
-void spa_meta_progressive_store_release( struct spa_meta_progressive *meta, uint64_t snapshot);
-```
-"""
-function spa_meta_progressive_store_release(meta, snapshot)
-    @ccall libpipewire_ao.spa_meta_progressive_store_release(meta::Ptr{spa_meta_progressive}, snapshot::UInt64)::Cvoid
-end
-
-"""
-    spa_meta_progressive_init(meta, data_index, payload_offset, payload_size, commit_granularity)
-
-Initialize a reusable Version 1 progressive metadata allocation.
-
-### Prototype
-```c
-bool spa_meta_progressive_init(struct spa_meta_progressive *meta, uint32_t data_index, uint32_t payload_offset, uint32_t payload_size, uint32_t commit_granularity);
-```
-"""
-function spa_meta_progressive_init(meta, data_index, payload_offset, payload_size, commit_granularity)
-    @ccall libpipewire_ao.spa_meta_progressive_init(meta::Ptr{spa_meta_progressive}, data_index::UInt32, payload_offset::UInt32, payload_size::UInt32, commit_granularity::UInt32)::Bool
-end
-
-"""
-    spa_meta_progressive_is_valid(meta)
-
-Validate a mapped Version 1 progressive metadata allocation.
-
-### Prototype
-```c
-bool spa_meta_progressive_is_valid(const struct spa_meta *meta);
-```
-"""
-function spa_meta_progressive_is_valid(meta)
-    @ccall libpipewire_ao.spa_meta_progressive_is_valid(meta::Ptr{spa_meta})::Bool
+function spa_meta_acquisition_times_match(a, b, tolerance_nsec)
+    @ccall libpipewire_ao.spa_meta_acquisition_times_match(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition}, tolerance_nsec::UInt64)::Bool
 end
 
 """
@@ -5122,361 +5083,6 @@ void pw_buffers_clear(struct pw_buffers *buffers);
 """
 function pw_buffers_clear(buffers)
     @ccall libpipewire_ao.pw_buffers_clear(buffers::Ptr{pw_buffers})::Cvoid
-end
-
-"""
-` pw_stream`
-
-\\{
-"""
-mutable struct pw_stream end
-
-mutable struct pw_image_source end
-
-mutable struct pw_image_buffer end
-
-const pw_image_source_flag = UInt32
-const PW_IMAGE_SOURCE_FLAG_REQUIRE_HEADER = 1 % UInt32
-const PW_IMAGE_SOURCE_FLAG_REQUIRE_ACQUISITION = 2 % UInt32
-const PW_IMAGE_SOURCE_FLAG_ALLOW_PROGRESSIVE = 4 % UInt32
-const PW_IMAGE_SOURCE_FLAG_ALL = 7 % UInt32
-
-struct pw_image_source_config
-    version::UInt32
-    min_buffers::UInt32
-    max_buffers::UInt32
-    flags::UInt32
-end
-
-const pw_image_buffer_state = UInt32
-const PW_IMAGE_BUFFER_STATE_UNUSED = 0 % UInt32
-const PW_IMAGE_BUFFER_STATE_AVAILABLE = 1 % UInt32
-const PW_IMAGE_BUFFER_STATE_PRODUCER = 2 % UInt32
-const PW_IMAGE_BUFFER_STATE_PROGRESSIVE = 3 % UInt32
-const PW_IMAGE_BUFFER_STATE_PUBLISHED = 4 % UInt32
-
-"""
-    pw_image_frame
-
-Common complete-image metadata supplied by the producer.
-
-| Field       | Note                                                            |
-| :---------- | :-------------------------------------------------------------- |
-| acquisition | Optional validated Version 1 physical-acquisition observation.  |
-"""
-struct pw_image_frame
-    version::UInt32
-    data_index::UInt32
-    header_flags::UInt32
-    chunk_flags::UInt32
-    offset::UInt32
-    size::UInt32
-    stride::Int32
-    reserved::UInt32
-    sequence::UInt64
-    pts::Int64
-    acquisition::Ptr{spa_meta_acquisition}
-end
-
-struct pw_image_progressive
-    version::UInt32
-    payload_size::UInt32
-    commit_granularity::UInt32
-    committed::UInt32
-end
-
-"""
-    pw_image_source_stats
-
-Single-writer counters. Concurrent snapshots are not supported.
-"""
-struct pw_image_source_stats
-    prepare_calls::UInt64
-    acquire_calls::UInt64
-    available_acquisitions::UInt64
-    reusable_acquisitions::UInt64
-    pool_exhaustions::UInt64
-    forced_reclaims::UInt64
-    producer_returns::UInt64
-    complete_publications::UInt64
-    progressive_started::UInt64
-    progressive_updates::UInt64
-    progressive_completed::UInt64
-    progressive_aborted::UInt64
-    invalid_transitions::UInt64
-    metadata_errors::UInt64
-    teardown_returns::UInt64
-    pool_size::UInt32
-    max_available_probes::UInt32
-end
-
-"""
-    pw_image_source_new(stream, config)
-
-### Prototype
-```c
-struct pw_image_source *pw_image_source_new(struct pw_stream *stream, const struct pw_image_source_config *config);
-```
-"""
-function pw_image_source_new(stream, config)
-    @ccall libpipewire_ao.pw_image_source_new(stream::Ptr{pw_stream}, config::Ptr{pw_image_source_config})::Ptr{pw_image_source}
-end
-
-"""
-    pw_image_source_destroy(source)
-
-### Prototype
-```c
-void pw_image_source_destroy(struct pw_image_source *source);
-```
-"""
-function pw_image_source_destroy(source)
-    @ccall libpipewire_ao.pw_image_source_destroy(source::Ptr{pw_image_source})::Cvoid
-end
-
-"""
-    pw_image_source_prepare(source)
-
-Acquire the exclusive latest-buffer worker and claim the negotiated pool. This preparation operation may be called only while the producer is quiescent. Every pool slot begins Available.
-
-### Prototype
-```c
-int pw_image_source_prepare(struct pw_image_source *source);
-```
-"""
-function pw_image_source_prepare(source)
-    @ccall libpipewire_ao.pw_image_source_prepare(source::Ptr{pw_image_source})::Cint
-end
-
-"""
-    pw_image_source_teardown(source)
-
-Abort active progressive publications, return locally held buffers, and end exclusive worker ownership. A camera adapter must stop acquisition, fence SDK callbacks, and unregister the buffers before this call.
-
-### Prototype
-```c
-int pw_image_source_teardown(struct pw_image_source *source);
-```
-"""
-function pw_image_source_teardown(source)
-    @ccall libpipewire_ao.pw_image_source_teardown(source::Ptr{pw_image_source})::Cint
-end
-
-"""
-    pw_image_source_get_n_buffers(source)
-
-### Prototype
-```c
-uint32_t pw_image_source_get_n_buffers(const struct pw_image_source *source);
-```
-"""
-function pw_image_source_get_n_buffers(source)
-    @ccall libpipewire_ao.pw_image_source_get_n_buffers(source::Ptr{pw_image_source})::UInt32
-end
-
-"""
-    pw_image_source_get_buffer(source, index)
-
-### Prototype
-```c
-struct pw_image_buffer *pw_image_source_get_buffer( struct pw_image_source *source, uint32_t index);
-```
-"""
-function pw_image_source_get_buffer(source, index)
-    @ccall libpipewire_ao.pw_image_source_get_buffer(source::Ptr{pw_image_source}, index::UInt32)::Ptr{pw_image_buffer}
-end
-
-"""
-    pw_image_buffer_get_index(buffer)
-
-### Prototype
-```c
-uint32_t pw_image_buffer_get_index(const struct pw_image_buffer *buffer);
-```
-"""
-function pw_image_buffer_get_index(buffer)
-    @ccall libpipewire_ao.pw_image_buffer_get_index(buffer::Ptr{pw_image_buffer})::UInt32
-end
-
-"""
-    pw_image_buffer_get_state(buffer)
-
-### Prototype
-```c
-enum pw_image_buffer_state pw_image_buffer_get_state( const struct pw_image_buffer *buffer);
-```
-"""
-function pw_image_buffer_get_state(buffer)
-    @ccall libpipewire_ao.pw_image_buffer_get_state(buffer::Ptr{pw_image_buffer})::pw_image_buffer_state
-end
-
-"""
-    pw_buffer
-
-a buffer structure obtained from [`pw_stream_dequeue_buffer`](@ref)(). The size of this structure can grow as more fields are added in the future
-
-| Field       | Note                                                                                                                                                                                                                                                                              |
-| :---------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| buffer      | the spa buffer                                                                                                                                                                                                                                                                    |
-| user\\_data | user data attached to the buffer. The user of the stream can set custom data associated with the buffer, typically in the add\\_buffer event. Any cleanup should be performed in the remove\\_buffer event. The user data is returned unmodified each time a buffer is dequeued.  |
-| size        | This field is set by the user and the sum of all queued buffers is returned in the time info. For audio, it is advised to use the number of frames in the buffer for this field.                                                                                                  |
-| requested   | For playback streams, this field contains the suggested amount of data to provide. For audio streams this will be the amount of frames required by the resampler. This field is 0 when no suggestion is provided. Since 0.3.50                                                    |
-| time        | For capture streams, this field contains the cycle time in nanoseconds when this buffer was queued in the stream. It can be compared against the pw_time values or [`pw_stream_get_nsec`](@ref)() Since 1.0.5                                                                     |
-"""
-struct pw_buffer
-    buffer::Ptr{spa_buffer}
-    user_data::Ptr{Cvoid}
-    size::UInt64
-    requested::UInt64
-    time::UInt64
-end
-
-"""
-    pw_image_buffer_get_pw_buffer(buffer)
-
-### Prototype
-```c
-struct pw_buffer *pw_image_buffer_get_pw_buffer( const struct pw_image_buffer *buffer);
-```
-"""
-function pw_image_buffer_get_pw_buffer(buffer)
-    @ccall libpipewire_ao.pw_image_buffer_get_pw_buffer(buffer::Ptr{pw_image_buffer})::Ptr{pw_buffer}
-end
-
-"""
-    pw_image_buffer_get_user_data(buffer)
-
-### Prototype
-```c
-void *pw_image_buffer_get_user_data(const struct pw_image_buffer *buffer);
-```
-"""
-function pw_image_buffer_get_user_data(buffer)
-    @ccall libpipewire_ao.pw_image_buffer_get_user_data(buffer::Ptr{pw_image_buffer})::Ptr{Cvoid}
-end
-
-"""
-    pw_image_buffer_set_user_data(buffer, user_data)
-
-### Prototype
-```c
-void pw_image_buffer_set_user_data(struct pw_image_buffer *buffer, void *user_data);
-```
-"""
-function pw_image_buffer_set_user_data(buffer, user_data)
-    @ccall libpipewire_ao.pw_image_buffer_set_user_data(buffer::Ptr{pw_image_buffer}, user_data::Ptr{Cvoid})::Cvoid
-end
-
-"""
-    pw_image_source_try_acquire(source, buffer)
-
-Acquire one producer-owned slot without withdrawing a visible submission.
-
-Returns 1 with a buffer, 0 when the bounded pool is exhausted, or a negative errno-style result. The caller owns the returned payload until it publishes, begins progressive publication, or returns the buffer.
-
-### Prototype
-```c
-int pw_image_source_try_acquire(struct pw_image_source *source, struct pw_image_buffer **buffer);
-```
-"""
-function pw_image_source_try_acquire(source, buffer)
-    @ccall libpipewire_ao.pw_image_source_try_acquire(source::Ptr{pw_image_source}, buffer::Ptr{Ptr{pw_image_buffer}})::Cint
-end
-
-"""
-    pw_image_source_return_buffer(source, buffer)
-
-Return an unpublished producer-owned buffer to the local available set.
-
-### Prototype
-```c
-int pw_image_source_return_buffer(struct pw_image_source *source, struct pw_image_buffer *buffer);
-```
-"""
-function pw_image_source_return_buffer(source, buffer)
-    @ccall libpipewire_ao.pw_image_source_return_buffer(source::Ptr{pw_image_source}, buffer::Ptr{pw_image_buffer})::Cint
-end
-
-"""
-    pw_image_source_publish_complete(source, buffer, frame)
-
-Publish one terminal complete frame without copying payload bytes.
-
-### Prototype
-```c
-int pw_image_source_publish_complete(struct pw_image_source *source, struct pw_image_buffer *buffer, const struct pw_image_frame *frame);
-```
-"""
-function pw_image_source_publish_complete(source, buffer, frame)
-    @ccall libpipewire_ao.pw_image_source_publish_complete(source::Ptr{pw_image_source}, buffer::Ptr{pw_image_buffer}, frame::Ptr{pw_image_frame})::Cint
-end
-
-"""
-    pw_image_source_begin_progressive(source, buffer, frame, progressive)
-
-Announce a mapped-host-memory buffer while its producer is still writing.
-
-### Prototype
-```c
-int pw_image_source_begin_progressive(struct pw_image_source *source, struct pw_image_buffer *buffer, const struct pw_image_frame *frame, const struct pw_image_progressive *progressive);
-```
-"""
-function pw_image_source_begin_progressive(source, buffer, frame, progressive)
-    @ccall libpipewire_ao.pw_image_source_begin_progressive(source::Ptr{pw_image_source}, buffer::Ptr{pw_image_buffer}, frame::Ptr{pw_image_frame}, progressive::Ptr{pw_image_progressive})::Cint
-end
-
-"""
-    pw_image_source_update_progressive(source, buffer, committed)
-
-Release-publish a larger immutable prefix for an active buffer.
-
-### Prototype
-```c
-int pw_image_source_update_progressive(struct pw_image_source *source, struct pw_image_buffer *buffer, uint32_t committed);
-```
-"""
-function pw_image_source_update_progressive(source, buffer, committed)
-    @ccall libpipewire_ao.pw_image_source_update_progressive(source::Ptr{pw_image_source}, buffer::Ptr{pw_image_buffer}, committed::UInt32)::Cint
-end
-
-"""
-    pw_image_source_finish_progressive(source, buffer, committed, state, terminal_flags)
-
-Finish the producer lease in Complete or Aborted state.
-
-### Prototype
-```c
-int pw_image_source_finish_progressive(struct pw_image_source *source, struct pw_image_buffer *buffer, uint32_t committed, enum spa_meta_progressive_state state, uint32_t terminal_flags);
-```
-"""
-function pw_image_source_finish_progressive(source, buffer, committed, state, terminal_flags)
-    @ccall libpipewire_ao.pw_image_source_finish_progressive(source::Ptr{pw_image_source}, buffer::Ptr{pw_image_buffer}, committed::UInt32, state::spa_meta_progressive_state, terminal_flags::UInt32)::Cint
-end
-
-"""
-    pw_image_source_try_reclaim(source, buffer)
-
-Explicitly withdraw at most one visible, unclaimed submission and return it producer-owned. This is a lossy starvation-recovery operation, not ordinary acquisition.
-
-### Prototype
-```c
-int pw_image_source_try_reclaim(struct pw_image_source *source, struct pw_image_buffer **buffer);
-```
-"""
-function pw_image_source_try_reclaim(source, buffer)
-    @ccall libpipewire_ao.pw_image_source_try_reclaim(source::Ptr{pw_image_source}, buffer::Ptr{Ptr{pw_image_buffer}})::Cint
-end
-
-"""
-    pw_image_source_get_stats(source, stats, stats_size)
-
-### Prototype
-```c
-int pw_image_source_get_stats(const struct pw_image_source *source, struct pw_image_source_stats *stats, size_t stats_size);
-```
-"""
-function pw_image_source_get_stats(source, stats, stats_size)
-    @ccall libpipewire_ao.pw_image_source_get_stats(source::Ptr{pw_image_source}, stats::Ptr{pw_image_source_stats}, stats_size::Csize_t)::Cint
 end
 
 mutable struct pw_factory end
@@ -6482,105 +6088,700 @@ function pw_port_enum_params(object, seq, id, start, num, filter)
 end
 
 """
-    spa_ringbuffer
+` pw_stream`
 
-A ringbuffer type.
+\\{
 """
-struct spa_ringbuffer
-    readindex::UInt32
-    writeindex::UInt32
-end
+mutable struct pw_stream end
 
 """
-    spa_ringbuffer_shared_index
+    pw_stream_state
 
-A single-writer index isolated from independently written cache lines.
+` pw_stream_state The state of a stream `
+
+| Enumerator                        | Note                       |
+| :-------------------------------- | :------------------------- |
+| PW\\_STREAM\\_STATE\\_ERROR       | the stream is in error     |
+| PW\\_STREAM\\_STATE\\_UNCONNECTED | unconnected                |
+| PW\\_STREAM\\_STATE\\_CONNECTING  | connection is in progress  |
+| PW\\_STREAM\\_STATE\\_PAUSED      | paused                     |
+| PW\\_STREAM\\_STATE\\_STREAMING   | streaming                  |
 """
-struct spa_ringbuffer_shared_index
-    data::NTuple{64, UInt8}
-end
-
-function Base.getproperty(x::Ptr{spa_ringbuffer_shared_index}, f::Symbol)
-    f === :value && return Ptr{UInt32}(x + 0)
-    f === :padding && return Ptr{NTuple{60, UInt8}}(x + 4)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_ringbuffer_shared_index, f::Symbol)
-    r = Ref{spa_ringbuffer_shared_index}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_ringbuffer_shared_index}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_ringbuffer_shared_index}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_ringbuffer_shared_index, private::Bool = false)
-    (:value, :padding, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
+const pw_stream_state = Int32
+const PW_STREAM_STATE_ERROR = -1 % Int32
+const PW_STREAM_STATE_UNCONNECTED = 0 % Int32
+const PW_STREAM_STATE_CONNECTING = 1 % Int32
+const PW_STREAM_STATE_PAUSED = 2 % Int32
+const PW_STREAM_STATE_STREAMING = 3 % Int32
 
 """
-    spa_ringbuffer_shared
+    pw_buffer
 
-Ringbuffer indices suitable for cross-core shared memory.
+a buffer structure obtained from [`pw_stream_dequeue_buffer`](@ref)(). The size of this structure can grow as more fields are added in the future
 
-The consumer alone writes readindex and the producer alone writes writeindex. Each index occupies its own cache line so that independent progress does not introduce false sharing. The compact [`spa_ringbuffer`](@ref) is retained for ABI compatibility and layouts that do not need this isolation.
+| Field       | Note                                                                                                                                                                                                                                                                              |
+| :---------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| buffer      | the spa buffer                                                                                                                                                                                                                                                                    |
+| user\\_data | user data attached to the buffer. The user of the stream can set custom data associated with the buffer, typically in the add\\_buffer event. Any cleanup should be performed in the remove\\_buffer event. The user data is returned unmodified each time a buffer is dequeued.  |
+| size        | This field is set by the user and the sum of all queued buffers is returned in the time info. For audio, it is advised to use the number of frames in the buffer for this field.                                                                                                  |
+| requested   | For playback streams, this field contains the suggested amount of data to provide. For audio streams this will be the amount of frames required by the resampler. This field is 0 when no suggestion is provided. Since 0.3.50                                                    |
+| time        | For capture streams, this field contains the cycle time in nanoseconds when this buffer was queued in the stream. It can be compared against the pw_time values or [`pw_stream_get_nsec`](@ref)() Since 1.0.5                                                                     |
 """
-struct spa_ringbuffer_shared
-    data::NTuple{128, UInt8}
+struct pw_buffer
+    buffer::Ptr{spa_buffer}
+    user_data::Ptr{Cvoid}
+    size::UInt64
+    requested::UInt64
+    time::UInt64
 end
 
-function Base.getproperty(x::Ptr{spa_ringbuffer_shared}, f::Symbol)
-    f === :readindex && return Ptr{spa_ringbuffer_shared_index}(x + 0)
-    f === :writeindex && return Ptr{spa_ringbuffer_shared_index}(x + 64)
-    return getfield(x, f)
+"""
+    pw_stream_control
+
+| Field        | Note                                        |
+| :----------- | :------------------------------------------ |
+| name         | name of the control                         |
+| flags        | extra flags (unused)                        |
+| def          | default value                               |
+| min          | min value                                   |
+| max          | max value                                   |
+| values       | array of values                             |
+| n\\_values   | number of values in array                   |
+| max\\_values | max values that can be set on this control  |
+"""
+struct pw_stream_control
+    name::Cstring
+    flags::UInt32
+    def::Cfloat
+    min::Cfloat
+    max::Cfloat
+    values::Ptr{Cfloat}
+    n_values::UInt32
+    max_values::UInt32
 end
 
-function Base.getproperty(x::spa_ringbuffer_shared, f::Symbol)
-    r = Ref{spa_ringbuffer_shared}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_ringbuffer_shared}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
+"""
+    pw_time
+
+A time structure.
+
+Use [`pw_stream_get_time_n`](@ref)() to get an updated time snapshot of the stream. The time snapshot can give information about the time in the driver of the graph, the delay to the edge of the graph and the internal queuing in the stream. This function should only be called in the STREAMING state and will return an error when called in any other state.
+
+[`pw_time`](@ref).ticks gives a monotonic increasing counter of the time in the graph driver. I can be used to generate a timeline to schedule samples as well as detect discontinuities in the timeline caused by xruns.
+
+[`pw_time`](@ref).delay is expressed as [`pw_time`](@ref).rate, the time domain of the graph. This value, and [`pw_time`](@ref).ticks, were captured at [`pw_time`](@ref).now and can be extrapolated to the current time like this:
+
+```c++
+{.c}
+    uint64_t now = pw_stream_get_nsec(stream);
+    int64_t diff = now - pw_time.now;
+    int64_t elapsed = (pw_time.rate.denom * diff) / (pw_time.rate.num * SPA_NSEC_PER_SEC);
+```
+
+[`pw_time`](@ref).delay contains the total delay that a signal will travel through the graph. This includes the delay caused by filters in the graph as well as delays caused by the hardware and extra delay offsets added to this. The delay is usually quite stable and should only change when the topology, quantum or samplerate of the graph changes.
+
+The (positive) delay requires the application to send the stream early relative to other synchronized streams in order to arrive at the edge of the graph in time. This is usually done by delaying the other streams with the given delay.
+
+A delay offset is sometimes added (by the user) to improve synchronization of the streams when the reported latency is incorrect in some way. This means that with a large enough negative offset, the delay can become negative as well. A negative delay in this context means that the user would like this stream to be delayed with the (positive) delay amount in order to synchronize it with other streams. Streams are in general not expected to be able to delay themselves and it is acceptable to clamp negative delays to 0.
+
+[`pw_time`](@ref).queued and [`pw_time`](@ref).buffered is expressed in the time domain of the stream, or the format that is used for the buffers of this stream.
+
+[`pw_time`](@ref).queued is the sum of all the [`pw_buffer`](@ref).size fields of the buffers that are currently queued in the stream but not yet processed. The application can choose the units of this value, for example, time, samples, frames or bytes (below expressed as app.rate).
+
+[`pw_time`](@ref).buffered is format dependent, for audio/raw it contains the number of frames that are buffered inside the resampler/converter.
+
+The total delay of data in a stream is the sum of the queued and buffered data (not yet processed data) and the delay to the edge of the graph, usually a playback or capture device.
+
+For an audio playback stream, if you were to queue a buffer, the total delay in milliseconds for the first sample in the newly queued buffer to be played by the hardware can be calculated as:
+
+```c++
+{.unparsed}
+  (pw_time.buffered * 1000 / stream.samplerate) +
+    (pw_time.queued * 1000 / app.rate) +
+     ((pw_time.delay - elapsed) * 1000 * pw_time.rate.num / pw_time.rate.denom)
+```
+
+The current extrapolated time (in ms) in the source or sink can be calculated as:
+
+```c++
+{.unparsed}
+  (pw_time.ticks + elapsed) * 1000 * pw_time.rate.num / pw_time.rate.denom
+```
+
+Below is an overview of the different timing values:
+
+```c++
+{.unparsed}
+           stream time domain           graph time domain
+         /-----------------------\\/-----------------------------\\
+
+ queue     +-+ +-+  +-----------+                 +--------+
+ ---->     | | | |->| converter | ->   graph  ->  | kernel | -> speaker
+ <----     +-+ +-+  +-----------+                 +--------+
+ dequeue   buffers                \\-------------------/\\--------/
+                                     graph              internal
+                                    latency             latency
+         \\--------/\\-------------/\\-----------------------------/
+           queued      buffered            delay
+```
+
+| Field            | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| :--------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| now              | the time in nanoseconds. This is the time when this time report was updated. It is usually updated every graph cycle. You can use [`pw_stream_get_nsec`](@ref)() to calculate the elapsed time between this report and the current time and calculate updated ticks and delay values.                                                                                                                                                                                                                                                          |
+| rate             | the rate of *ticks* and delay. This is usually expressed in 1/<samplerate>.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ticks            | the ticks at *now*. This is the current time that the remote end is reading/writing. This is monotonicaly increasing.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| delay            | delay to device. This is the time it will take for the next output sample of the stream to be presented by the playback device or the time a sample traveled from the capture device. This delay includes the delay introduced by all filters on the path between the stream and the device and extra delay offsets. The delay is normally constant in a graph and can change when the topology of the graph or the quantum changes. This delay does not include the delay caused by queued buffers. The delay can be negative, see pw_time .  |
+| queued           | data queued in the stream, this is the sum of the size fields in the [`pw_buffer`](@ref) that are currently queued                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| buffered         | for audio/raw streams, this contains the extra number of frames buffered in the resampler. Since 0.3.50.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| queued\\_buffers | the number of buffers that are queued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| avail\\_buffers  | the number of buffers that can be dequeued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| size             | for audio/raw playback streams, this contains the number of samples requested by the resampler for the current quantum. for audio/raw capture streams this will be the number of samples available for the current quantum. Since 1.1.0                                                                                                                                                                                                                                                                                                        |
+"""
+struct pw_time
+    now::Int64
+    rate::spa_fraction
+    ticks::UInt64
+    delay::Int64
+    queued::UInt64
+    buffered::UInt64
+    queued_buffers::UInt32
+    avail_buffers::UInt32
+    size::UInt64
 end
 
-function Base.setproperty!(x::Ptr{spa_ringbuffer_shared}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
+"""
+    pw_stream_events
+
+Events for a stream. These events are always called from the mainloop unless explicitly documented otherwise.
+
+| Field           | Note                                                                                                                                                                                                                                      |
+| :-------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| state\\_changed | when the stream state changes. Since 1.4 this also sets errno when the new state is PW\\_STREAM\\_STATE\\_ERROR                                                                                                                           |
+| control\\_info  | Notify information about a control.                                                                                                                                                                                                       |
+| io\\_changed    | when io changed on the stream.                                                                                                                                                                                                            |
+| param\\_changed | when a parameter changed                                                                                                                                                                                                                  |
+| add\\_buffer    | when a new buffer was created for this stream                                                                                                                                                                                             |
+| remove\\_buffer | when a buffer was destroyed for this stream                                                                                                                                                                                               |
+| process         | when a buffer can be queued (for playback streams) or dequeued (for capture streams). This is normally called from the mainloop but can also be called directly from the realtime data thread if the user is prepared to deal with this.  |
+| drained         | The stream is drained                                                                                                                                                                                                                     |
+| command         | A command notify, Since 0.3.39:1                                                                                                                                                                                                          |
+| trigger\\_done  | a trigger\\_process completed. Since version 0.3.40:2. This is normally called from the mainloop but since 1.1.0 it can also be called directly from the realtime data thread if the user is prepared to deal with this.                  |
+"""
+struct pw_stream_events
+    version::UInt32
+    destroy::Ptr{Cvoid}
+    state_changed::Ptr{Cvoid}
+    control_info::Ptr{Cvoid}
+    io_changed::Ptr{Cvoid}
+    param_changed::Ptr{Cvoid}
+    add_buffer::Ptr{Cvoid}
+    remove_buffer::Ptr{Cvoid}
+    process::Ptr{Cvoid}
+    drained::Ptr{Cvoid}
+    command::Ptr{Cvoid}
+    trigger_done::Ptr{Cvoid}
 end
 
-function Base.propertynames(x::spa_ringbuffer_shared, private::Bool = false)
-    (:readindex, :writeindex, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
+"""
+    pw_stream_state_as_string(state)
+
+Convert a stream state to a readable string
+
+### Prototype
+```c
+const char * pw_stream_state_as_string(enum pw_stream_state state);
+```
+"""
+function pw_stream_state_as_string(state)
+    @ccall libpipewire_ao.pw_stream_state_as_string(state::pw_stream_state)::Cstring
 end
+
+"""
+    pw_stream_flags
+
+` pw_stream_flags Extra flags that can be used in \\ref pw_stream_connect() `
+
+| Enumerator                               | Note                                                                                                                                                                                                                                                                                      |
+| :--------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_STREAM\\_FLAG\\_NONE                | no flags                                                                                                                                                                                                                                                                                  |
+| PW\\_STREAM\\_FLAG\\_AUTOCONNECT         | try to automatically connect this stream                                                                                                                                                                                                                                                  |
+| PW\\_STREAM\\_FLAG\\_INACTIVE            | start the stream inactive, [`pw_stream_set_active`](@ref)() needs to be called explicitly                                                                                                                                                                                                 |
+| PW\\_STREAM\\_FLAG\\_MAP\\_BUFFERS       | mmap the buffers except DmaBuf that is not explicitly marked as mappable.                                                                                                                                                                                                                 |
+| PW\\_STREAM\\_FLAG\\_DRIVER              | be a driver                                                                                                                                                                                                                                                                               |
+| PW\\_STREAM\\_FLAG\\_RT\\_PROCESS        | call process from the realtime thread. You MUST use RT safe functions in the process callback.                                                                                                                                                                                            |
+| PW\\_STREAM\\_FLAG\\_NO\\_CONVERT        | don't convert format                                                                                                                                                                                                                                                                      |
+| PW\\_STREAM\\_FLAG\\_EXCLUSIVE           | require exclusive access to the device                                                                                                                                                                                                                                                    |
+| PW\\_STREAM\\_FLAG\\_DONT\\_RECONNECT    | don't try to reconnect this stream when the sink/source is removed                                                                                                                                                                                                                        |
+| PW\\_STREAM\\_FLAG\\_ALLOC\\_BUFFERS     | the application will allocate buffer memory. In the add\\_buffer event, the data of the buffer should be set                                                                                                                                                                              |
+| PW\\_STREAM\\_FLAG\\_TRIGGER             | the output stream will not be scheduled automatically but \\_trigger\\_process() needs to be called. This can be used when the output of the stream depends on input from other streams.                                                                                                  |
+| PW\\_STREAM\\_FLAG\\_ASYNC               | Buffers will not be dequeued/queued from the realtime process() function. This is assumed when RT\\_PROCESS is unset but can also be the case when the process() function does a trigger\\_process() that will then dequeue/queue a buffer from another process() function. since 0.3.73  |
+| PW\\_STREAM\\_FLAG\\_EARLY\\_PROCESS     | Call process as soon as there is a buffer to dequeue. This is only relevant for playback and when not using RT\\_PROCESS. It can be used to keep the maximum number of buffers queued. Since 0.3.81                                                                                       |
+| PW\\_STREAM\\_FLAG\\_RT\\_TRIGGER\\_DONE | Call trigger\\_done from the realtime thread. You MUST use RT safe functions in the trigger\\_done callback. Since 1.1.0                                                                                                                                                                  |
+"""
+const pw_stream_flags = UInt32
+const PW_STREAM_FLAG_NONE = 0 % UInt32
+const PW_STREAM_FLAG_AUTOCONNECT = 1 % UInt32
+const PW_STREAM_FLAG_INACTIVE = 2 % UInt32
+const PW_STREAM_FLAG_MAP_BUFFERS = 4 % UInt32
+const PW_STREAM_FLAG_DRIVER = 8 % UInt32
+const PW_STREAM_FLAG_RT_PROCESS = 16 % UInt32
+const PW_STREAM_FLAG_NO_CONVERT = 32 % UInt32
+const PW_STREAM_FLAG_EXCLUSIVE = 64 % UInt32
+const PW_STREAM_FLAG_DONT_RECONNECT = 128 % UInt32
+const PW_STREAM_FLAG_ALLOC_BUFFERS = 256 % UInt32
+const PW_STREAM_FLAG_TRIGGER = 512 % UInt32
+const PW_STREAM_FLAG_ASYNC = 1024 % UInt32
+const PW_STREAM_FLAG_EARLY_PROCESS = 2048 % UInt32
+const PW_STREAM_FLAG_RT_TRIGGER_DONE = 4096 % UInt32
+
+"""
+    pw_stream_new(core, name, props)
+
+Create a new unconnected pw_stream
+
+# Returns
+a newly allocated pw_stream
+### Prototype
+```c
+struct pw_stream * pw_stream_new(struct pw_core *core, const char *name, struct pw_properties *props );
+```
+"""
+function pw_stream_new(core, name, props)
+    @ccall libpipewire_ao.pw_stream_new(core::Ptr{pw_core}, name::Cstring, props::Ptr{pw_properties})::Ptr{pw_stream}
+end
+
+"""
+    pw_stream_new_simple(loop, name, props, events, data)
+
+### Prototype
+```c
+struct pw_stream * pw_stream_new_simple(struct pw_loop *loop, const char *name, struct pw_properties *props, const struct pw_stream_events *events, void *data );
+```
+"""
+function pw_stream_new_simple(loop, name, props, events, data)
+    @ccall libpipewire_ao.pw_stream_new_simple(loop::Ptr{pw_loop}, name::Cstring, props::Ptr{pw_properties}, events::Ptr{pw_stream_events}, data::Ptr{Cvoid})::Ptr{pw_stream}
+end
+
+"""
+    pw_stream_destroy(stream)
+
+Destroy a stream
+
+### Prototype
+```c
+void pw_stream_destroy(struct pw_stream *stream);
+```
+"""
+function pw_stream_destroy(stream)
+    @ccall libpipewire_ao.pw_stream_destroy(stream::Ptr{pw_stream})::Cvoid
+end
+
+"""
+    pw_stream_add_listener(stream, listener, events, data)
+
+### Prototype
+```c
+void pw_stream_add_listener(struct pw_stream *stream, struct spa_hook *listener, const struct pw_stream_events *events, void *data);
+```
+"""
+function pw_stream_add_listener(stream, listener, events, data)
+    @ccall libpipewire_ao.pw_stream_add_listener(stream::Ptr{pw_stream}, listener::Ptr{spa_hook}, events::Ptr{pw_stream_events}, data::Ptr{Cvoid})::Cvoid
+end
+
+"""
+    pw_stream_get_state(stream, error)
+
+Get the current stream state. Since 1.4 this also sets errno when the state is PW\\_STREAM\\_STATE\\_ERROR
+
+### Prototype
+```c
+enum pw_stream_state pw_stream_get_state(struct pw_stream *stream, const char **error);
+```
+"""
+function pw_stream_get_state(stream, error)
+    @ccall libpipewire_ao.pw_stream_get_state(stream::Ptr{pw_stream}, error::Ptr{Cstring})::pw_stream_state
+end
+
+"""
+    pw_stream_get_name(stream)
+
+### Prototype
+```c
+const char *pw_stream_get_name(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_name(stream)
+    @ccall libpipewire_ao.pw_stream_get_name(stream::Ptr{pw_stream})::Cstring
+end
+
+"""
+    pw_stream_get_core(stream)
+
+### Prototype
+```c
+struct pw_core *pw_stream_get_core(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_core(stream)
+    @ccall libpipewire_ao.pw_stream_get_core(stream::Ptr{pw_stream})::Ptr{pw_core}
+end
+
+"""
+    pw_stream_get_properties(stream)
+
+### Prototype
+```c
+const struct pw_properties *pw_stream_get_properties(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_properties(stream)
+    @ccall libpipewire_ao.pw_stream_get_properties(stream::Ptr{pw_stream})::Ptr{pw_properties}
+end
+
+"""
+    pw_stream_update_properties(stream, dict)
+
+### Prototype
+```c
+int pw_stream_update_properties(struct pw_stream *stream, const struct spa_dict *dict);
+```
+"""
+function pw_stream_update_properties(stream, dict)
+    @ccall libpipewire_ao.pw_stream_update_properties(stream::Ptr{pw_stream}, dict::Ptr{spa_dict})::Cint
+end
+
+"""
+    pw_stream_connect(stream, direction, target_id, flags, params, n_params)
+
+Connect a stream for input or output on *port_path*.
+
+You should connect to the process event and use [`pw_stream_dequeue_buffer`](@ref)() to get the latest metadata and data.
+
+# Returns
+0 on success < 0 on error.
+### Prototype
+```c
+int pw_stream_connect(struct pw_stream *stream, enum pw_direction direction, uint32_t target_id, /**< should have the value PW_ID_ANY. * To select a specific target * node, specify the * PW_KEY_OBJECT_SERIAL or the * PW_KEY_NODE_NAME value of the target * node in the PW_KEY_TARGET_OBJECT * property of the stream. * Specifying target nodes by * their id is deprecated. */ enum pw_stream_flags flags, const struct spa_pod **params, /**< an array with params. The params * should ideally contain supported * formats. */ uint32_t n_params );
+```
+"""
+function pw_stream_connect(stream, direction, target_id, flags, params, n_params)
+    @ccall libpipewire_ao.pw_stream_connect(stream::Ptr{pw_stream}, direction::spa_direction, target_id::UInt32, flags::pw_stream_flags, params::Ptr{Ptr{spa_pod}}, n_params::UInt32)::Cint
+end
+
+"""
+    pw_stream_get_node_id(stream)
+
+Get the node ID of the stream.
+
+# Returns
+node ID.
+### Prototype
+```c
+uint32_t pw_stream_get_node_id(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_node_id(stream)
+    @ccall libpipewire_ao.pw_stream_get_node_id(stream::Ptr{pw_stream})::UInt32
+end
+
+"""
+    pw_stream_disconnect(stream)
+
+Disconnect *stream*
+
+### Prototype
+```c
+int pw_stream_disconnect(struct pw_stream *stream);
+```
+"""
+function pw_stream_disconnect(stream)
+    @ccall libpipewire_ao.pw_stream_disconnect(stream::Ptr{pw_stream})::Cint
+end
+
+# automatic type deduction for variadic arguments may not be what you want, please use with caution
+@generated function pw_stream_set_error(stream, res, error, va_list...)
+        :(@ccall(libpipewire_ao.pw_stream_set_error(stream::Ptr{pw_stream}, res::Cint, error::Cstring; $(to_c_type_pairs(va_list)...))::Cint))
+    end
+
+"""
+    pw_stream_update_params(stream, params, n_params)
+
+Update the param exposed on the stream.
+
+### Prototype
+```c
+int pw_stream_update_params(struct pw_stream *stream, const struct spa_pod **params, uint32_t n_params );
+```
+"""
+function pw_stream_update_params(stream, params, n_params)
+    @ccall libpipewire_ao.pw_stream_update_params(stream::Ptr{pw_stream}, params::Ptr{Ptr{spa_pod}}, n_params::UInt32)::Cint
+end
+
+"""
+    pw_stream_set_param(stream, id, param)
+
+Set a parameter on the stream. This is like [`pw_stream_set_control`](@ref)() but with a complete [`spa_pod`](@ref) param. It can also be called from the param\\_changed event handler to intercept and modify the param for the adapter. Since 0.3.70
+
+### Prototype
+```c
+int pw_stream_set_param(struct pw_stream *stream, uint32_t id, const struct spa_pod *param );
+```
+"""
+function pw_stream_set_param(stream, id, param)
+    @ccall libpipewire_ao.pw_stream_set_param(stream::Ptr{pw_stream}, id::UInt32, param::Ptr{spa_pod})::Cint
+end
+
+"""
+    pw_stream_get_control(stream, id)
+
+Get control values
+
+### Prototype
+```c
+const struct pw_stream_control *pw_stream_get_control(struct pw_stream *stream, uint32_t id);
+```
+"""
+function pw_stream_get_control(stream, id)
+    @ccall libpipewire_ao.pw_stream_get_control(stream::Ptr{pw_stream}, id::UInt32)::Ptr{pw_stream_control}
+end
+
+# automatic type deduction for variadic arguments may not be what you want, please use with caution
+@generated function pw_stream_set_control(stream, id, n_values, values, va_list...)
+        :(@ccall(libpipewire_ao.pw_stream_set_control(stream::Ptr{pw_stream}, id::UInt32, n_values::UInt32, values::Ptr{Cfloat}; $(to_c_type_pairs(va_list)...))::Cint))
+    end
+
+"""
+    pw_stream_get_time_n(stream, time, size)
+
+Query the time on the stream. Returns an error when the stream is not running. RT safe
+
+### Prototype
+```c
+int pw_stream_get_time_n(struct pw_stream *stream, struct pw_time *time, size_t size);
+```
+"""
+function pw_stream_get_time_n(stream, time, size)
+    @ccall libpipewire_ao.pw_stream_get_time_n(stream::Ptr{pw_stream}, time::Ptr{pw_time}, size::Csize_t)::Cint
+end
+
+"""
+    pw_stream_get_nsec(stream)
+
+Get the current time in nanoseconds. This value can be compared with the pw_time.now value. RT safe. Since 1.1.0
+
+### Prototype
+```c
+uint64_t pw_stream_get_nsec(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_nsec(stream)
+    @ccall libpipewire_ao.pw_stream_get_nsec(stream::Ptr{pw_stream})::UInt64
+end
+
+"""
+    pw_stream_get_data_loop(stream)
+
+Get the data loop that is doing the processing of this stream. This loop is assigned after [`pw_stream_connect`](@ref)(). * Since 1.1.0
+
+### Prototype
+```c
+struct pw_loop *pw_stream_get_data_loop(struct pw_stream *stream);
+```
+"""
+function pw_stream_get_data_loop(stream)
+    @ccall libpipewire_ao.pw_stream_get_data_loop(stream::Ptr{pw_stream})::Ptr{pw_loop}
+end
+
+"""
+    pw_stream_get_time(stream, time)
+
+Query the time on the stream, deprecated since 0.3.50, use [`pw_stream_get_time_n`](@ref)() to get the fields added since 0.3.50. RT safe.
+
+### Prototype
+```c
+SPA_DEPRECATED int pw_stream_get_time(struct pw_stream *stream, struct pw_time *time);
+```
+"""
+function pw_stream_get_time(stream, time)
+    @ccall libpipewire_ao.pw_stream_get_time(stream::Ptr{pw_stream}, time::Ptr{pw_time})::Cint
+end
+
+"""
+    pw_stream_dequeue_buffer(stream)
+
+Get a buffer that can be filled for playback streams or consumed for capture streams. RT safe.
+
+### Prototype
+```c
+struct pw_buffer *pw_stream_dequeue_buffer(struct pw_stream *stream);
+```
+"""
+function pw_stream_dequeue_buffer(stream)
+    @ccall libpipewire_ao.pw_stream_dequeue_buffer(stream::Ptr{pw_stream})::Ptr{pw_buffer}
+end
+
+"""
+    pw_stream_queue_buffer(stream, buffer)
+
+Submit a buffer for playback or recycle a buffer for capture. RT safe.
+
+### Prototype
+```c
+int pw_stream_queue_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
+```
+"""
+function pw_stream_queue_buffer(stream, buffer)
+    @ccall libpipewire_ao.pw_stream_queue_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
+end
+
+"""
+    pw_stream_return_buffer(stream, buffer)
+
+Return a buffer to the queue without using it. This makes the buffer immediately available to dequeue again. RT safe.
+
+### Prototype
+```c
+int pw_stream_return_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
+```
+"""
+function pw_stream_return_buffer(stream, buffer)
+    @ccall libpipewire_ao.pw_stream_return_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
+end
+
+"""
+    pw_stream_set_active(stream, active)
+
+Activate or deactivate the stream
+
+### Prototype
+```c
+int pw_stream_set_active(struct pw_stream *stream, bool active);
+```
+"""
+function pw_stream_set_active(stream, active)
+    @ccall libpipewire_ao.pw_stream_set_active(stream::Ptr{pw_stream}, active::Bool)::Cint
+end
+
+"""
+    pw_stream_flush(stream, drain)
+
+Flush a stream. When *drain* is true, the drained callback will be called when all data is played or recorded. The stream can be resumed after the drain by setting it active again with pw_stream_set_active(). A flush without a drain is mostly useful afer a state change to PAUSED, to flush any remaining data from the queues and the converters. RT safe.
+
+### Prototype
+```c
+int pw_stream_flush(struct pw_stream *stream, bool drain);
+```
+"""
+function pw_stream_flush(stream, drain)
+    @ccall libpipewire_ao.pw_stream_flush(stream::Ptr{pw_stream}, drain::Bool)::Cint
+end
+
+"""
+    pw_stream_is_driving(stream)
+
+Check if the stream is driving. The stream needs to have the PW\\_STREAM\\_FLAG\\_DRIVER set. When the stream is driving, [`pw_stream_trigger_process`](@ref)() needs to be called when data is available (output) or needed (input). Since 0.3.34
+
+### Prototype
+```c
+bool pw_stream_is_driving(struct pw_stream *stream);
+```
+"""
+function pw_stream_is_driving(stream)
+    @ccall libpipewire_ao.pw_stream_is_driving(stream::Ptr{pw_stream})::Bool
+end
+
+"""
+    pw_stream_is_lazy(stream)
+
+Check if the graph is using lazy scheduling. If the stream is driving according to pw_stream_is_driving(), then it should consider taking into account the RequestProcess commands when driving the graph.
+
+If the stream is not driving, it should send out RequestProcess events with pw_stream_emit_event() or indirectly with pw_stream_trigger_process() to suggest a new graph cycle to the driver.
+
+It is not a requirement that all RequestProcess events/commands need to start a graph cycle. Since 1.4.0
+
+### Prototype
+```c
+bool pw_stream_is_lazy(struct pw_stream *stream);
+```
+"""
+function pw_stream_is_lazy(stream)
+    @ccall libpipewire_ao.pw_stream_is_lazy(stream::Ptr{pw_stream})::Bool
+end
+
+"""
+    pw_stream_trigger_process(stream)
+
+Trigger a push/pull on the stream. One iteration of the graph will be scheduled when the stream is driving according to pw_stream_is_driving(). If it successfully finishes, process() will be called and the trigger\\_done event will be emitted. It is possible for the graph iteration to not finish, so [`pw_stream_trigger_process`](@ref)() needs to be called again even if process() and trigger\\_done is not called.
+
+If there is a deadline after which the stream will have xrun, [`pw_stream_trigger_process`](@ref)() should be called then, whether or not process()/trigger\\_done has been called. Sound hardware will xrun if there is any delay in audio processing, so the ALSA plugin triggers the graph every quantum to ensure audio keeps flowing. Drivers that do not have a deadline, such as the freewheel driver, should use a timeout to ensure that forward progress keeps being made. A reasonable choice of deadline is three times the quantum: if the graph is taking 3x longer than normal, it is likely that it is hung and should be retriggered.
+
+Streams that are not drivers according to pw_stream_is_driving() can also call this method. The result is that a RequestProcess event is sent to the driver. If the graph is lazy scheduling according to pw_stream_is_lazy(), this might result in a graph cycle by the driver. If the graph is not lazy scheduling and the stream is not a driver, this method will have no effect.
+
+RT safe.
+
+Since 0.3.34
+
+### Prototype
+```c
+int pw_stream_trigger_process(struct pw_stream *stream);
+```
+"""
+function pw_stream_trigger_process(stream)
+    @ccall libpipewire_ao.pw_stream_trigger_process(stream::Ptr{pw_stream})::Cint
+end
+
+"""
+    pw_stream_emit_event(stream, event)
+
+Emit an event from this stream. RT safe. Since 1.2.6
+
+### Prototype
+```c
+int pw_stream_emit_event(struct pw_stream *stream, const struct spa_event *event);
+```
+"""
+function pw_stream_emit_event(stream, event)
+    @ccall libpipewire_ao.pw_stream_emit_event(stream::Ptr{pw_stream}, event::Ptr{spa_event})::Cint
+end
+
+"""
+    pw_stream_set_rate(stream, rate)
+
+Adjust the rate of the stream. When the stream is using an adaptive resampler, adjust the resampler rate. When there is no resampler, -ENOTSUP is returned. Activating the adaptive resampler will add a small amount of delay to the samples, you can deactivate it again by setting a value <= 0.0. RT safe. Since 1.4.0
+
+### Prototype
+```c
+int pw_stream_set_rate(struct pw_stream *stream, double rate);
+```
+"""
+function pw_stream_set_rate(stream, rate)
+    @ccall libpipewire_ao.pw_stream_set_rate(stream::Ptr{pw_stream}, rate::Cdouble)::Cint
+end
+
+"""
+` pw_filter`
+
+\\{
+"""
+mutable struct pw_filter end
 
 """
     spa_io_type
 
 Different IO area types
 
-| Enumerator                     | Note                                                                                 |
-| :----------------------------- | :----------------------------------------------------------------------------------- |
-| SPA\\_IO\\_Buffers             | area to exchange buffers, struct [`spa_io_buffers`](@ref)                            |
-| SPA\\_IO\\_Range               | expected byte range, struct [`spa_io_range`](@ref) (currently not used in PipeWire)  |
-| SPA\\_IO\\_Clock               | area to update clock information, struct [`spa_io_clock`](@ref)                      |
-| SPA\\_IO\\_Latency             | latency reporting, struct [`spa_io_latency`](@ref)                                   |
-| SPA\\_IO\\_Control             | area for control messages, struct [`spa_io_sequence`](@ref)                          |
-| SPA\\_IO\\_Notify              | area for notify messages, struct [`spa_io_sequence`](@ref)                           |
-| SPA\\_IO\\_Position            | position information in the graph, struct [`spa_io_position`](@ref)                  |
-| SPA\\_IO\\_RateMatch           | rate matching between nodes, struct [`spa_io_rate_match`](@ref)                      |
-| SPA\\_IO\\_Memory              | memory pointer, struct [`spa_io_memory`](@ref) (currently not used in PipeWire)      |
-| SPA\\_IO\\_AsyncBuffers        | async area to exchange buffers, struct [`spa_io_async_buffers`](@ref)                |
-| SPA\\_IO\\_BuffersLatest       | latest complete buffer, struct [`spa_io_buffers_latest`](@ref)                       |
-| SPA\\_IO\\_BuffersLatestNotify | process-local advisory fd, struct [`spa_io_buffers_latest_notify`](@ref)             |
-| SPA\\_IO\\_BuffersLatestLink   | process-local per-mix latest link, struct [`spa_io_buffers_latest_link`](@ref)       |
+| Enumerator              | Note                                                                                 |
+| :---------------------- | :----------------------------------------------------------------------------------- |
+| SPA\\_IO\\_Buffers      | area to exchange buffers, struct [`spa_io_buffers`](@ref)                            |
+| SPA\\_IO\\_Range        | expected byte range, struct [`spa_io_range`](@ref) (currently not used in PipeWire)  |
+| SPA\\_IO\\_Clock        | area to update clock information, struct [`spa_io_clock`](@ref)                      |
+| SPA\\_IO\\_Latency      | latency reporting, struct [`spa_io_latency`](@ref)                                   |
+| SPA\\_IO\\_Control      | area for control messages, struct [`spa_io_sequence`](@ref)                          |
+| SPA\\_IO\\_Notify       | area for notify messages, struct [`spa_io_sequence`](@ref)                           |
+| SPA\\_IO\\_Position     | position information in the graph, struct [`spa_io_position`](@ref)                  |
+| SPA\\_IO\\_RateMatch    | rate matching between nodes, struct [`spa_io_rate_match`](@ref)                      |
+| SPA\\_IO\\_Memory       | memory pointer, struct [`spa_io_memory`](@ref) (currently not used in PipeWire)      |
+| SPA\\_IO\\_AsyncBuffers | async area to exchange buffers, struct [`spa_io_async_buffers`](@ref)                |
 """
 const spa_io_type = UInt32
 const SPA_IO_Invalid = 0 % UInt32
@@ -6594,10 +6795,6 @@ const SPA_IO_Position = 7 % UInt32
 const SPA_IO_RateMatch = 8 % UInt32
 const SPA_IO_Memory = 9 % UInt32
 const SPA_IO_AsyncBuffers = 10 % UInt32
-const SPA_IO_START_PipeWireAO = 16777216 % UInt32
-const SPA_IO_BuffersLatest = 16777216 % UInt32
-const SPA_IO_BuffersLatestNotify = 16777217 % UInt32
-const SPA_IO_BuffersLatestLink = 16777218 % UInt32
 
 """
     spa_io_buffers
@@ -6937,953 +7134,6 @@ struct spa_io_async_buffers
 end
 
 """
-    spa_io_buffers_latest_submission
-
-| Field     | Note                                                  |
-| :-------- | :---------------------------------------------------- |
-| value     | atomic packed sequence and buffer ID                  |
-| overflows | output-owned count of unclaimed submissions replaced  |
-"""
-struct spa_io_buffers_latest_submission
-    data::NTuple{64, UInt8}
-end
-
-function Base.getproperty(x::Ptr{spa_io_buffers_latest_submission}, f::Symbol)
-    f === :value && return Ptr{UInt64}(x + 0)
-    f === :overflows && return Ptr{UInt64}(x + 8)
-    f === :padding && return Ptr{NTuple{48, UInt8}}(x + 16)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_io_buffers_latest_submission, f::Symbol)
-    r = Ref{spa_io_buffers_latest_submission}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest_submission}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_io_buffers_latest_submission}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_io_buffers_latest_submission, private::Bool = false)
-    (:value, :overflows, :padding, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
-
-struct spa_io_buffers_latest
-    data::NTuple{448, UInt8}
-end
-
-function Base.getproperty(x::Ptr{spa_io_buffers_latest}, f::Symbol)
-    f === :submission && return Ptr{spa_io_buffers_latest_submission}(x + 0)
-    f === :completion && return Ptr{spa_ringbuffer_shared}(x + 64)
-    f === :completion_ids && return Ptr{NTuple{64, UInt32}}(x + 192)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_io_buffers_latest, f::Symbol)
-    r = Ref{spa_io_buffers_latest}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_io_buffers_latest}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_io_buffers_latest}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_io_buffers_latest, private::Bool = false)
-    (:submission, :completion, :completion_ids, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
-
-"""
-    spa_io_buffers_latest_notify
-
-Process-local advisory notification for SPA\\_IO\\_BuffersLatest.
-
-The host must broker fd into each process; the numeric descriptor is never stored in shared memory. The output writes one non-blocking event after a successful publication. The input may drain or wait on the descriptor, but must always recheck struct [`spa_io_buffers_latest`](@ref) because notifications may coalesce or be stale.
-"""
-struct spa_io_buffers_latest_notify
-    fd::Int32
-    reserved::UInt32
-end
-
-struct spa_io_buffers_latest_link
-    id::UInt32
-    flags::UInt32
-    io::Ptr{spa_io_buffers_latest}
-    notify_fd::Int32
-    reserved::UInt32
-end
-
-"""
-    pw_buffer_latest_stats
-
-Producer-local accounting for bounded latest-buffer acquisition.
-
-These counters are written only by the endpoint's exclusive output worker. Concurrent control-thread snapshots are not supported.
-"""
-struct pw_buffer_latest_stats
-    dequeue_attempts::UInt64
-    completions::UInt64
-    buffer_probes::UInt64
-    pool_exhaustions::UInt64
-    submission_reclaims::UInt64
-    submission_withdrawals::UInt64
-    publications::UInt64
-    subscriber_visits::UInt64
-    subscriber_deliveries::UInt64
-    submission_overflows::UInt64
-    subscriber_retirements::UInt64
-    retired_leases::UInt64
-    zero_recipient_publications::UInt64
-    max_buffer_probes::UInt32
-    max_completions::UInt32
-    max_submission_withdrawals::UInt32
-    max_subscriber_visits::UInt32
-end
-
-"""
-    pw_stream_state
-
-` pw_stream_state The state of a stream `
-
-| Enumerator                        | Note                       |
-| :-------------------------------- | :------------------------- |
-| PW\\_STREAM\\_STATE\\_ERROR       | the stream is in error     |
-| PW\\_STREAM\\_STATE\\_UNCONNECTED | unconnected                |
-| PW\\_STREAM\\_STATE\\_CONNECTING  | connection is in progress  |
-| PW\\_STREAM\\_STATE\\_PAUSED      | paused                     |
-| PW\\_STREAM\\_STATE\\_STREAMING   | streaming                  |
-"""
-const pw_stream_state = Int32
-const PW_STREAM_STATE_ERROR = -1 % Int32
-const PW_STREAM_STATE_UNCONNECTED = 0 % Int32
-const PW_STREAM_STATE_CONNECTING = 1 % Int32
-const PW_STREAM_STATE_PAUSED = 2 % Int32
-const PW_STREAM_STATE_STREAMING = 3 % Int32
-
-"""
-    pw_stream_control
-
-| Field        | Note                                        |
-| :----------- | :------------------------------------------ |
-| name         | name of the control                         |
-| flags        | extra flags (unused)                        |
-| def          | default value                               |
-| min          | min value                                   |
-| max          | max value                                   |
-| values       | array of values                             |
-| n\\_values   | number of values in array                   |
-| max\\_values | max values that can be set on this control  |
-"""
-struct pw_stream_control
-    name::Cstring
-    flags::UInt32
-    def::Cfloat
-    min::Cfloat
-    max::Cfloat
-    values::Ptr{Cfloat}
-    n_values::UInt32
-    max_values::UInt32
-end
-
-"""
-    pw_time
-
-A time structure.
-
-Use [`pw_stream_get_time_n`](@ref)() to get an updated time snapshot of the stream. The time snapshot can give information about the time in the driver of the graph, the delay to the edge of the graph and the internal queuing in the stream. This function should only be called in the STREAMING state and will return an error when called in any other state.
-
-[`pw_time`](@ref).ticks gives a monotonic increasing counter of the time in the graph driver. I can be used to generate a timeline to schedule samples as well as detect discontinuities in the timeline caused by xruns.
-
-[`pw_time`](@ref).delay is expressed as [`pw_time`](@ref).rate, the time domain of the graph. This value, and [`pw_time`](@ref).ticks, were captured at [`pw_time`](@ref).now and can be extrapolated to the current time like this:
-
-```c++
-{.c}
-    uint64_t now = pw_stream_get_nsec(stream);
-    int64_t diff = now - pw_time.now;
-    int64_t elapsed = (pw_time.rate.denom * diff) / (pw_time.rate.num * SPA_NSEC_PER_SEC);
-```
-
-[`pw_time`](@ref).delay contains the total delay that a signal will travel through the graph. This includes the delay caused by filters in the graph as well as delays caused by the hardware and extra delay offsets added to this. The delay is usually quite stable and should only change when the topology, quantum or samplerate of the graph changes.
-
-The (positive) delay requires the application to send the stream early relative to other synchronized streams in order to arrive at the edge of the graph in time. This is usually done by delaying the other streams with the given delay.
-
-A delay offset is sometimes added (by the user) to improve synchronization of the streams when the reported latency is incorrect in some way. This means that with a large enough negative offset, the delay can become negative as well. A negative delay in this context means that the user would like this stream to be delayed with the (positive) delay amount in order to synchronize it with other streams. Streams are in general not expected to be able to delay themselves and it is acceptable to clamp negative delays to 0.
-
-[`pw_time`](@ref).queued and [`pw_time`](@ref).buffered is expressed in the time domain of the stream, or the format that is used for the buffers of this stream.
-
-[`pw_time`](@ref).queued is the sum of all the [`pw_buffer`](@ref).size fields of the buffers that are currently queued in the stream but not yet processed. The application can choose the units of this value, for example, time, samples, frames or bytes (below expressed as app.rate).
-
-[`pw_time`](@ref).buffered is format dependent, for audio/raw it contains the number of frames that are buffered inside the resampler/converter.
-
-The total delay of data in a stream is the sum of the queued and buffered data (not yet processed data) and the delay to the edge of the graph, usually a playback or capture device.
-
-For an audio playback stream, if you were to queue a buffer, the total delay in milliseconds for the first sample in the newly queued buffer to be played by the hardware can be calculated as:
-
-```c++
-{.unparsed}
-  (pw_time.buffered * 1000 / stream.samplerate) +
-    (pw_time.queued * 1000 / app.rate) +
-     ((pw_time.delay - elapsed) * 1000 * pw_time.rate.num / pw_time.rate.denom)
-```
-
-The current extrapolated time (in ms) in the source or sink can be calculated as:
-
-```c++
-{.unparsed}
-  (pw_time.ticks + elapsed) * 1000 * pw_time.rate.num / pw_time.rate.denom
-```
-
-Below is an overview of the different timing values:
-
-```c++
-{.unparsed}
-           stream time domain           graph time domain
-         /-----------------------\\/-----------------------------\\
-
- queue     +-+ +-+  +-----------+                 +--------+
- ---->     | | | |->| converter | ->   graph  ->  | kernel | -> speaker
- <----     +-+ +-+  +-----------+                 +--------+
- dequeue   buffers                \\-------------------/\\--------/
-                                     graph              internal
-                                    latency             latency
-         \\--------/\\-------------/\\-----------------------------/
-           queued      buffered            delay
-```
-
-| Field            | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| :--------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| now              | the time in nanoseconds. This is the time when this time report was updated. It is usually updated every graph cycle. You can use [`pw_stream_get_nsec`](@ref)() to calculate the elapsed time between this report and the current time and calculate updated ticks and delay values.                                                                                                                                                                                                                                                          |
-| rate             | the rate of *ticks* and delay. This is usually expressed in 1/<samplerate>.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ticks            | the ticks at *now*. This is the current time that the remote end is reading/writing. This is monotonicaly increasing.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| delay            | delay to device. This is the time it will take for the next output sample of the stream to be presented by the playback device or the time a sample traveled from the capture device. This delay includes the delay introduced by all filters on the path between the stream and the device and extra delay offsets. The delay is normally constant in a graph and can change when the topology of the graph or the quantum changes. This delay does not include the delay caused by queued buffers. The delay can be negative, see pw_time .  |
-| queued           | data queued in the stream, this is the sum of the size fields in the [`pw_buffer`](@ref) that are currently queued                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| buffered         | for audio/raw streams, this contains the extra number of frames buffered in the resampler. Since 0.3.50.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| queued\\_buffers | the number of buffers that are queued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| avail\\_buffers  | the number of buffers that can be dequeued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| size             | for audio/raw playback streams, this contains the number of samples requested by the resampler for the current quantum. for audio/raw capture streams this will be the number of samples available for the current quantum. Since 1.1.0                                                                                                                                                                                                                                                                                                        |
-"""
-struct pw_time
-    now::Int64
-    rate::spa_fraction
-    ticks::UInt64
-    delay::Int64
-    queued::UInt64
-    buffered::UInt64
-    queued_buffers::UInt32
-    avail_buffers::UInt32
-    size::UInt64
-end
-
-"""
-    pw_stream_events
-
-Events for a stream. These events are always called from the mainloop unless explicitly documented otherwise.
-
-| Field           | Note                                                                                                                                                                                                                                      |
-| :-------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| state\\_changed | when the stream state changes. Since 1.4 this also sets errno when the new state is PW\\_STREAM\\_STATE\\_ERROR                                                                                                                           |
-| control\\_info  | Notify information about a control.                                                                                                                                                                                                       |
-| io\\_changed    | when io changed on the stream.                                                                                                                                                                                                            |
-| param\\_changed | when a parameter changed                                                                                                                                                                                                                  |
-| add\\_buffer    | when a new buffer was created for this stream                                                                                                                                                                                             |
-| remove\\_buffer | when a buffer was destroyed for this stream                                                                                                                                                                                               |
-| process         | when a buffer can be queued (for playback streams) or dequeued (for capture streams). This is normally called from the mainloop but can also be called directly from the realtime data thread if the user is prepared to deal with this.  |
-| drained         | The stream is drained                                                                                                                                                                                                                     |
-| command         | A command notify, Since 0.3.39:1                                                                                                                                                                                                          |
-| trigger\\_done  | a trigger\\_process completed. Since version 0.3.40:2. This is normally called from the mainloop but since 1.1.0 it can also be called directly from the realtime data thread if the user is prepared to deal with this.                  |
-"""
-struct pw_stream_events
-    version::UInt32
-    destroy::Ptr{Cvoid}
-    state_changed::Ptr{Cvoid}
-    control_info::Ptr{Cvoid}
-    io_changed::Ptr{Cvoid}
-    param_changed::Ptr{Cvoid}
-    add_buffer::Ptr{Cvoid}
-    remove_buffer::Ptr{Cvoid}
-    process::Ptr{Cvoid}
-    drained::Ptr{Cvoid}
-    command::Ptr{Cvoid}
-    trigger_done::Ptr{Cvoid}
-end
-
-"""
-    pw_stream_state_as_string(state)
-
-Convert a stream state to a readable string
-
-### Prototype
-```c
-const char * pw_stream_state_as_string(enum pw_stream_state state);
-```
-"""
-function pw_stream_state_as_string(state)
-    @ccall libpipewire_ao.pw_stream_state_as_string(state::pw_stream_state)::Cstring
-end
-
-"""
-    pw_stream_flags
-
-` pw_stream_flags Extra flags that can be used in \\ref pw_stream_connect() `
-
-| Enumerator                               | Note                                                                                                                                                                                                                                                                                      |
-| :--------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PW\\_STREAM\\_FLAG\\_NONE                | no flags                                                                                                                                                                                                                                                                                  |
-| PW\\_STREAM\\_FLAG\\_AUTOCONNECT         | try to automatically connect this stream                                                                                                                                                                                                                                                  |
-| PW\\_STREAM\\_FLAG\\_INACTIVE            | start the stream inactive, [`pw_stream_set_active`](@ref)() needs to be called explicitly                                                                                                                                                                                                 |
-| PW\\_STREAM\\_FLAG\\_MAP\\_BUFFERS       | mmap the buffers except DmaBuf that is not explicitly marked as mappable.                                                                                                                                                                                                                 |
-| PW\\_STREAM\\_FLAG\\_DRIVER              | be a driver                                                                                                                                                                                                                                                                               |
-| PW\\_STREAM\\_FLAG\\_RT\\_PROCESS        | call process from the realtime thread. You MUST use RT safe functions in the process callback.                                                                                                                                                                                            |
-| PW\\_STREAM\\_FLAG\\_NO\\_CONVERT        | don't convert format                                                                                                                                                                                                                                                                      |
-| PW\\_STREAM\\_FLAG\\_EXCLUSIVE           | require exclusive access to the device                                                                                                                                                                                                                                                    |
-| PW\\_STREAM\\_FLAG\\_DONT\\_RECONNECT    | don't try to reconnect this stream when the sink/source is removed                                                                                                                                                                                                                        |
-| PW\\_STREAM\\_FLAG\\_ALLOC\\_BUFFERS     | the application will allocate buffer memory. In the add\\_buffer event, the data of the buffer should be set                                                                                                                                                                              |
-| PW\\_STREAM\\_FLAG\\_TRIGGER             | the output stream will not be scheduled automatically but \\_trigger\\_process() needs to be called. This can be used when the output of the stream depends on input from other streams.                                                                                                  |
-| PW\\_STREAM\\_FLAG\\_ASYNC               | Buffers will not be dequeued/queued from the realtime process() function. This is assumed when RT\\_PROCESS is unset but can also be the case when the process() function does a trigger\\_process() that will then dequeue/queue a buffer from another process() function. since 0.3.73  |
-| PW\\_STREAM\\_FLAG\\_EARLY\\_PROCESS     | Call process as soon as there is a buffer to dequeue. This is only relevant for playback and when not using RT\\_PROCESS. It can be used to keep the maximum number of buffers queued. Since 0.3.81                                                                                       |
-| PW\\_STREAM\\_FLAG\\_RT\\_TRIGGER\\_DONE | Call trigger\\_done from the realtime thread. You MUST use RT safe functions in the trigger\\_done callback. Since 1.1.0                                                                                                                                                                  |
-| PW\\_STREAM\\_FLAG\\_BUFFER\\_LATEST     | require graph-independent latest-buffer transport for every link                                                                                                                                                                                                                          |
-"""
-const pw_stream_flags = UInt32
-const PW_STREAM_FLAG_NONE = 0 % UInt32
-const PW_STREAM_FLAG_AUTOCONNECT = 1 % UInt32
-const PW_STREAM_FLAG_INACTIVE = 2 % UInt32
-const PW_STREAM_FLAG_MAP_BUFFERS = 4 % UInt32
-const PW_STREAM_FLAG_DRIVER = 8 % UInt32
-const PW_STREAM_FLAG_RT_PROCESS = 16 % UInt32
-const PW_STREAM_FLAG_NO_CONVERT = 32 % UInt32
-const PW_STREAM_FLAG_EXCLUSIVE = 64 % UInt32
-const PW_STREAM_FLAG_DONT_RECONNECT = 128 % UInt32
-const PW_STREAM_FLAG_ALLOC_BUFFERS = 256 % UInt32
-const PW_STREAM_FLAG_TRIGGER = 512 % UInt32
-const PW_STREAM_FLAG_ASYNC = 1024 % UInt32
-const PW_STREAM_FLAG_EARLY_PROCESS = 2048 % UInt32
-const PW_STREAM_FLAG_RT_TRIGGER_DONE = 4096 % UInt32
-const PW_STREAM_FLAG_BUFFER_LATEST = 8192 % UInt32
-
-"""
-    pw_stream_new(core, name, props)
-
-Create a new unconnected pw_stream
-
-# Returns
-a newly allocated pw_stream
-### Prototype
-```c
-struct pw_stream * pw_stream_new(struct pw_core *core, const char *name, struct pw_properties *props );
-```
-"""
-function pw_stream_new(core, name, props)
-    @ccall libpipewire_ao.pw_stream_new(core::Ptr{pw_core}, name::Cstring, props::Ptr{pw_properties})::Ptr{pw_stream}
-end
-
-"""
-    pw_stream_new_simple(loop, name, props, events, data)
-
-### Prototype
-```c
-struct pw_stream * pw_stream_new_simple(struct pw_loop *loop, const char *name, struct pw_properties *props, const struct pw_stream_events *events, void *data );
-```
-"""
-function pw_stream_new_simple(loop, name, props, events, data)
-    @ccall libpipewire_ao.pw_stream_new_simple(loop::Ptr{pw_loop}, name::Cstring, props::Ptr{pw_properties}, events::Ptr{pw_stream_events}, data::Ptr{Cvoid})::Ptr{pw_stream}
-end
-
-"""
-    pw_stream_destroy(stream)
-
-Destroy a stream
-
-### Prototype
-```c
-void pw_stream_destroy(struct pw_stream *stream);
-```
-"""
-function pw_stream_destroy(stream)
-    @ccall libpipewire_ao.pw_stream_destroy(stream::Ptr{pw_stream})::Cvoid
-end
-
-"""
-    pw_stream_add_listener(stream, listener, events, data)
-
-### Prototype
-```c
-void pw_stream_add_listener(struct pw_stream *stream, struct spa_hook *listener, const struct pw_stream_events *events, void *data);
-```
-"""
-function pw_stream_add_listener(stream, listener, events, data)
-    @ccall libpipewire_ao.pw_stream_add_listener(stream::Ptr{pw_stream}, listener::Ptr{spa_hook}, events::Ptr{pw_stream_events}, data::Ptr{Cvoid})::Cvoid
-end
-
-"""
-    pw_stream_get_state(stream, error)
-
-Get the current stream state. Since 1.4 this also sets errno when the state is PW\\_STREAM\\_STATE\\_ERROR
-
-### Prototype
-```c
-enum pw_stream_state pw_stream_get_state(struct pw_stream *stream, const char **error);
-```
-"""
-function pw_stream_get_state(stream, error)
-    @ccall libpipewire_ao.pw_stream_get_state(stream::Ptr{pw_stream}, error::Ptr{Cstring})::pw_stream_state
-end
-
-"""
-    pw_stream_get_name(stream)
-
-### Prototype
-```c
-const char *pw_stream_get_name(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_name(stream)
-    @ccall libpipewire_ao.pw_stream_get_name(stream::Ptr{pw_stream})::Cstring
-end
-
-"""
-    pw_stream_get_core(stream)
-
-### Prototype
-```c
-struct pw_core *pw_stream_get_core(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_core(stream)
-    @ccall libpipewire_ao.pw_stream_get_core(stream::Ptr{pw_stream})::Ptr{pw_core}
-end
-
-"""
-    pw_stream_get_properties(stream)
-
-### Prototype
-```c
-const struct pw_properties *pw_stream_get_properties(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_properties(stream)
-    @ccall libpipewire_ao.pw_stream_get_properties(stream::Ptr{pw_stream})::Ptr{pw_properties}
-end
-
-"""
-    pw_stream_update_properties(stream, dict)
-
-### Prototype
-```c
-int pw_stream_update_properties(struct pw_stream *stream, const struct spa_dict *dict);
-```
-"""
-function pw_stream_update_properties(stream, dict)
-    @ccall libpipewire_ao.pw_stream_update_properties(stream::Ptr{pw_stream}, dict::Ptr{spa_dict})::Cint
-end
-
-"""
-    pw_stream_connect(stream, direction, target_id, flags, params, n_params)
-
-Connect a stream for input or output on *port_path*.
-
-You should connect to the process event and use [`pw_stream_dequeue_buffer`](@ref)() to get the latest metadata and data.
-
-# Returns
-0 on success < 0 on error.
-### Prototype
-```c
-int pw_stream_connect(struct pw_stream *stream, enum pw_direction direction, uint32_t target_id, /**< should have the value PW_ID_ANY. * To select a specific target * node, specify the * PW_KEY_OBJECT_SERIAL or the * PW_KEY_NODE_NAME value of the target * node in the PW_KEY_TARGET_OBJECT * property of the stream. * Specifying target nodes by * their id is deprecated. */ enum pw_stream_flags flags, const struct spa_pod **params, /**< an array with params. The params * should ideally contain supported * formats. */ uint32_t n_params );
-```
-"""
-function pw_stream_connect(stream, direction, target_id, flags, params, n_params)
-    @ccall libpipewire_ao.pw_stream_connect(stream::Ptr{pw_stream}, direction::spa_direction, target_id::UInt32, flags::pw_stream_flags, params::Ptr{Ptr{spa_pod}}, n_params::UInt32)::Cint
-end
-
-"""
-    pw_stream_get_node_id(stream)
-
-Get the node ID of the stream.
-
-# Returns
-node ID.
-### Prototype
-```c
-uint32_t pw_stream_get_node_id(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_node_id(stream)
-    @ccall libpipewire_ao.pw_stream_get_node_id(stream::Ptr{pw_stream})::UInt32
-end
-
-"""
-    pw_stream_disconnect(stream)
-
-Disconnect *stream*
-
-### Prototype
-```c
-int pw_stream_disconnect(struct pw_stream *stream);
-```
-"""
-function pw_stream_disconnect(stream)
-    @ccall libpipewire_ao.pw_stream_disconnect(stream::Ptr{pw_stream})::Cint
-end
-
-# automatic type deduction for variadic arguments may not be what you want, please use with caution
-@generated function pw_stream_set_error(stream, res, error, va_list...)
-        :(@ccall(libpipewire_ao.pw_stream_set_error(stream::Ptr{pw_stream}, res::Cint, error::Cstring; $(to_c_type_pairs(va_list)...))::Cint))
-    end
-
-"""
-    pw_stream_update_params(stream, params, n_params)
-
-Update the param exposed on the stream.
-
-### Prototype
-```c
-int pw_stream_update_params(struct pw_stream *stream, const struct spa_pod **params, uint32_t n_params );
-```
-"""
-function pw_stream_update_params(stream, params, n_params)
-    @ccall libpipewire_ao.pw_stream_update_params(stream::Ptr{pw_stream}, params::Ptr{Ptr{spa_pod}}, n_params::UInt32)::Cint
-end
-
-"""
-    pw_stream_set_param(stream, id, param)
-
-Set a parameter on the stream. This is like [`pw_stream_set_control`](@ref)() but with a complete [`spa_pod`](@ref) param. It can also be called from the param\\_changed event handler to intercept and modify the param for the adapter. Since 0.3.70
-
-### Prototype
-```c
-int pw_stream_set_param(struct pw_stream *stream, uint32_t id, const struct spa_pod *param );
-```
-"""
-function pw_stream_set_param(stream, id, param)
-    @ccall libpipewire_ao.pw_stream_set_param(stream::Ptr{pw_stream}, id::UInt32, param::Ptr{spa_pod})::Cint
-end
-
-"""
-    pw_stream_get_control(stream, id)
-
-Get control values
-
-### Prototype
-```c
-const struct pw_stream_control *pw_stream_get_control(struct pw_stream *stream, uint32_t id);
-```
-"""
-function pw_stream_get_control(stream, id)
-    @ccall libpipewire_ao.pw_stream_get_control(stream::Ptr{pw_stream}, id::UInt32)::Ptr{pw_stream_control}
-end
-
-# automatic type deduction for variadic arguments may not be what you want, please use with caution
-@generated function pw_stream_set_control(stream, id, n_values, values, va_list...)
-        :(@ccall(libpipewire_ao.pw_stream_set_control(stream::Ptr{pw_stream}, id::UInt32, n_values::UInt32, values::Ptr{Cfloat}; $(to_c_type_pairs(va_list)...))::Cint))
-    end
-
-"""
-    pw_stream_get_time_n(stream, time, size)
-
-Query the time on the stream. Returns an error when the stream is not running. RT safe
-
-### Prototype
-```c
-int pw_stream_get_time_n(struct pw_stream *stream, struct pw_time *time, size_t size);
-```
-"""
-function pw_stream_get_time_n(stream, time, size)
-    @ccall libpipewire_ao.pw_stream_get_time_n(stream::Ptr{pw_stream}, time::Ptr{pw_time}, size::Csize_t)::Cint
-end
-
-"""
-    pw_stream_get_nsec(stream)
-
-Get the current time in nanoseconds. This value can be compared with the pw_time.now value. RT safe. Since 1.1.0
-
-### Prototype
-```c
-uint64_t pw_stream_get_nsec(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_nsec(stream)
-    @ccall libpipewire_ao.pw_stream_get_nsec(stream::Ptr{pw_stream})::UInt64
-end
-
-"""
-    pw_stream_get_data_loop(stream)
-
-Get the data loop that is doing the processing of this stream. This loop is assigned after [`pw_stream_connect`](@ref)(). * Since 1.1.0
-
-### Prototype
-```c
-struct pw_loop *pw_stream_get_data_loop(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_data_loop(stream)
-    @ccall libpipewire_ao.pw_stream_get_data_loop(stream::Ptr{pw_stream})::Ptr{pw_loop}
-end
-
-"""
-    pw_stream_get_time(stream, time)
-
-Query the time on the stream, deprecated since 0.3.50, use [`pw_stream_get_time_n`](@ref)() to get the fields added since 0.3.50. RT safe.
-
-### Prototype
-```c
-SPA_DEPRECATED int pw_stream_get_time(struct pw_stream *stream, struct pw_time *time);
-```
-"""
-function pw_stream_get_time(stream, time)
-    @ccall libpipewire_ao.pw_stream_get_time(stream::Ptr{pw_stream}, time::Ptr{pw_time})::Cint
-end
-
-"""
-    pw_stream_dequeue_buffer(stream)
-
-Get a buffer that can be filled for playback streams or consumed for capture streams. RT safe.
-
-### Prototype
-```c
-struct pw_buffer *pw_stream_dequeue_buffer(struct pw_stream *stream);
-```
-"""
-function pw_stream_dequeue_buffer(stream)
-    @ccall libpipewire_ao.pw_stream_dequeue_buffer(stream::Ptr{pw_stream})::Ptr{pw_buffer}
-end
-
-"""
-    pw_stream_try_dequeue_buffer_reusable(stream, buffer)
-
-Try to acquire an output buffer whose subscriber leases have completed. RT safe.
-
-Returns 1 with a reusable buffer, 0 without withdrawing a visible submission when no buffer is reusable, or a negative errno-style result. The caller must own the stream's exclusive latest-buffer worker.
-
-### Prototype
-```c
-int pw_stream_try_dequeue_buffer_reusable(struct pw_stream *stream, struct pw_buffer **buffer);
-```
-"""
-function pw_stream_try_dequeue_buffer_reusable(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_try_dequeue_buffer_reusable(stream::Ptr{pw_stream}, buffer::Ptr{Ptr{pw_buffer}})::Cint
-end
-
-"""
-    pw_stream_try_reclaim_buffer_latest(stream, buffer)
-
-Try to reclaim one visible, unclaimed latest-buffer submission. RT safe.
-
-Returns 1 with a reclaimed buffer, 0 when no submission can be reclaimed, or a negative errno-style result. Unlike pw_stream_try_dequeue_buffer_reusable, this operation deliberately shortens a subscriber's visibility window and is intended only for an explicitly selected lossy starvation policy. The caller must own the stream's exclusive latest-buffer worker.
-
-### Prototype
-```c
-int pw_stream_try_reclaim_buffer_latest(struct pw_stream *stream, struct pw_buffer **buffer);
-```
-"""
-function pw_stream_try_reclaim_buffer_latest(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_try_reclaim_buffer_latest(stream::Ptr{pw_stream}, buffer::Ptr{Ptr{pw_buffer}})::Cint
-end
-
-"""
-    pw_stream_try_dequeue_buffer_latest(stream, buffer, submission_sequence)
-
-Try to receive one graph-independent latest-buffer submission. RT safe.
-
-Returns 1 with a claimed buffer and nonzero submission sequence, 0 when no submission is visible, or a negative errno-style result. The caller must own the stream's exclusive latest-buffer worker.
-
-### Prototype
-```c
-int pw_stream_try_dequeue_buffer_latest(struct pw_stream *stream, struct pw_buffer **buffer, uint64_t *submission_sequence);
-```
-"""
-function pw_stream_try_dequeue_buffer_latest(stream, buffer, submission_sequence)
-    @ccall libpipewire_ao.pw_stream_try_dequeue_buffer_latest(stream::Ptr{pw_stream}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
-end
-
-"""
-    pw_stream_buffer_latest_poller
-
-Private state for one continuous latest-input polling interval.
-"""
-struct pw_stream_buffer_latest_poller
-    private_data::Ptr{Cvoid}
-    io::Ptr{spa_io_buffers_latest}
-    slot::UInt32
-    reserved::UInt32
-end
-
-"""
-    pw_stream_buffer_latest_poller_init(poller, stream)
-
-### Prototype
-```c
-int pw_stream_buffer_latest_poller_init( struct pw_stream_buffer_latest_poller *poller, struct pw_stream *stream);
-```
-"""
-function pw_stream_buffer_latest_poller_init(poller, stream)
-    @ccall libpipewire_ao.pw_stream_buffer_latest_poller_init(poller::Ptr{pw_stream_buffer_latest_poller}, stream::Ptr{pw_stream})::Cint
-end
-
-"""
-    pw_stream_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
-
-### Prototype
-```c
-int pw_stream_buffer_latest_poller_try_dequeue( struct pw_stream_buffer_latest_poller *poller, struct pw_buffer **buffer, uint64_t *submission_sequence);
-```
-"""
-function pw_stream_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
-    @ccall libpipewire_ao.pw_stream_buffer_latest_poller_try_dequeue(poller::Ptr{pw_stream_buffer_latest_poller}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
-end
-
-"""
-    pw_stream_buffer_latest_poller_clear(poller)
-
-### Prototype
-```c
-void pw_stream_buffer_latest_poller_clear( struct pw_stream_buffer_latest_poller *poller);
-```
-"""
-function pw_stream_buffer_latest_poller_clear(poller)
-    @ccall libpipewire_ao.pw_stream_buffer_latest_poller_clear(poller::Ptr{pw_stream_buffer_latest_poller})::Cvoid
-end
-
-"""
-    pw_stream_buffer_latest_worker_begin(stream)
-
-Begin exclusive graph-independent buffer ownership for this stream.
-
-### Prototype
-```c
-int pw_stream_buffer_latest_worker_begin(struct pw_stream *stream);
-```
-"""
-function pw_stream_buffer_latest_worker_begin(stream)
-    @ccall libpipewire_ao.pw_stream_buffer_latest_worker_begin(stream::Ptr{pw_stream})::Cint
-end
-
-"""
-    pw_stream_buffer_latest_worker_end(stream)
-
-End exclusive graph-independent buffer ownership for this stream.
-
-### Prototype
-```c
-int pw_stream_buffer_latest_worker_end(struct pw_stream *stream);
-```
-"""
-function pw_stream_buffer_latest_worker_end(stream)
-    @ccall libpipewire_ao.pw_stream_buffer_latest_worker_end(stream::Ptr{pw_stream})::Cint
-end
-
-"""
-    pw_stream_get_buffer_latest_stats(stream, stats, stats_size)
-
-Snapshot output latest-buffer accounting from its exclusive worker.
-
-### Prototype
-```c
-int pw_stream_get_buffer_latest_stats(struct pw_stream *stream, struct pw_buffer_latest_stats *stats, size_t stats_size);
-```
-"""
-function pw_stream_get_buffer_latest_stats(stream, stats, stats_size)
-    @ccall libpipewire_ao.pw_stream_get_buffer_latest_stats(stream::Ptr{pw_stream}, stats::Ptr{pw_buffer_latest_stats}, stats_size::Csize_t)::Cint
-end
-
-"""
-    pw_stream_get_buffer_latest_fd(stream)
-
-Get the borrowed advisory notification descriptor for a latest stream.
-
-### Prototype
-```c
-int pw_stream_get_buffer_latest_fd(struct pw_stream *stream);
-```
-"""
-function pw_stream_get_buffer_latest_fd(stream)
-    @ccall libpipewire_ao.pw_stream_get_buffer_latest_fd(stream::Ptr{pw_stream})::Cint
-end
-
-"""
-    pw_stream_queue_buffer(stream, buffer)
-
-Submit a buffer for playback or recycle a buffer for capture. RT safe.
-
-### Prototype
-```c
-int pw_stream_queue_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
-```
-"""
-function pw_stream_queue_buffer(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_queue_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_stream_begin_progressive_buffer(stream, buffer)
-
-Announce a progressive output buffer while retaining its producer lease.
-
-### Prototype
-```c
-int pw_stream_begin_progressive_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
-```
-"""
-function pw_stream_begin_progressive_buffer(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_begin_progressive_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_stream_end_progressive_buffer(stream, buffer)
-
-End the producer lease of an announced progressive output buffer.
-
-### Prototype
-```c
-int pw_stream_end_progressive_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
-```
-"""
-function pw_stream_end_progressive_buffer(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_end_progressive_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_stream_return_buffer(stream, buffer)
-
-Return a buffer to the queue without using it. This makes the buffer immediately available to dequeue again. RT safe.
-
-### Prototype
-```c
-int pw_stream_return_buffer(struct pw_stream *stream, struct pw_buffer *buffer);
-```
-"""
-function pw_stream_return_buffer(stream, buffer)
-    @ccall libpipewire_ao.pw_stream_return_buffer(stream::Ptr{pw_stream}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_stream_set_active(stream, active)
-
-Activate or deactivate the stream
-
-### Prototype
-```c
-int pw_stream_set_active(struct pw_stream *stream, bool active);
-```
-"""
-function pw_stream_set_active(stream, active)
-    @ccall libpipewire_ao.pw_stream_set_active(stream::Ptr{pw_stream}, active::Bool)::Cint
-end
-
-"""
-    pw_stream_flush(stream, drain)
-
-Flush a stream. When *drain* is true, the drained callback will be called when all data is played or recorded. The stream can be resumed after the drain by setting it active again with pw_stream_set_active(). A flush without a drain is mostly useful afer a state change to PAUSED, to flush any remaining data from the queues and the converters. RT safe.
-
-### Prototype
-```c
-int pw_stream_flush(struct pw_stream *stream, bool drain);
-```
-"""
-function pw_stream_flush(stream, drain)
-    @ccall libpipewire_ao.pw_stream_flush(stream::Ptr{pw_stream}, drain::Bool)::Cint
-end
-
-"""
-    pw_stream_is_driving(stream)
-
-Check if the stream is driving. The stream needs to have the PW\\_STREAM\\_FLAG\\_DRIVER set. When the stream is driving, [`pw_stream_trigger_process`](@ref)() needs to be called when data is available (output) or needed (input). Since 0.3.34
-
-### Prototype
-```c
-bool pw_stream_is_driving(struct pw_stream *stream);
-```
-"""
-function pw_stream_is_driving(stream)
-    @ccall libpipewire_ao.pw_stream_is_driving(stream::Ptr{pw_stream})::Bool
-end
-
-"""
-    pw_stream_is_lazy(stream)
-
-Check if the graph is using lazy scheduling. If the stream is driving according to pw_stream_is_driving(), then it should consider taking into account the RequestProcess commands when driving the graph.
-
-If the stream is not driving, it should send out RequestProcess events with pw_stream_emit_event() or indirectly with pw_stream_trigger_process() to suggest a new graph cycle to the driver.
-
-It is not a requirement that all RequestProcess events/commands need to start a graph cycle. Since 1.4.0
-
-### Prototype
-```c
-bool pw_stream_is_lazy(struct pw_stream *stream);
-```
-"""
-function pw_stream_is_lazy(stream)
-    @ccall libpipewire_ao.pw_stream_is_lazy(stream::Ptr{pw_stream})::Bool
-end
-
-"""
-    pw_stream_trigger_process(stream)
-
-Trigger a push/pull on the stream. One iteration of the graph will be scheduled when the stream is driving according to pw_stream_is_driving(). If it successfully finishes, process() will be called and the trigger\\_done event will be emitted. It is possible for the graph iteration to not finish, so [`pw_stream_trigger_process`](@ref)() needs to be called again even if process() and trigger\\_done is not called.
-
-If there is a deadline after which the stream will have xrun, [`pw_stream_trigger_process`](@ref)() should be called then, whether or not process()/trigger\\_done has been called. Sound hardware will xrun if there is any delay in audio processing, so the ALSA plugin triggers the graph every quantum to ensure audio keeps flowing. Drivers that do not have a deadline, such as the freewheel driver, should use a timeout to ensure that forward progress keeps being made. A reasonable choice of deadline is three times the quantum: if the graph is taking 3x longer than normal, it is likely that it is hung and should be retriggered.
-
-Streams that are not drivers according to pw_stream_is_driving() can also call this method. The result is that a RequestProcess event is sent to the driver. If the graph is lazy scheduling according to pw_stream_is_lazy(), this might result in a graph cycle by the driver. If the graph is not lazy scheduling and the stream is not a driver, this method will have no effect.
-
-RT safe.
-
-Since 0.3.34
-
-### Prototype
-```c
-int pw_stream_trigger_process(struct pw_stream *stream);
-```
-"""
-function pw_stream_trigger_process(stream)
-    @ccall libpipewire_ao.pw_stream_trigger_process(stream::Ptr{pw_stream})::Cint
-end
-
-"""
-    pw_stream_emit_event(stream, event)
-
-Emit an event from this stream. RT safe. Since 1.2.6
-
-### Prototype
-```c
-int pw_stream_emit_event(struct pw_stream *stream, const struct spa_event *event);
-```
-"""
-function pw_stream_emit_event(stream, event)
-    @ccall libpipewire_ao.pw_stream_emit_event(stream::Ptr{pw_stream}, event::Ptr{spa_event})::Cint
-end
-
-"""
-    pw_stream_set_rate(stream, rate)
-
-Adjust the rate of the stream. When the stream is using an adaptive resampler, adjust the resampler rate. When there is no resampler, -ENOTSUP is returned. Activating the adaptive resampler will add a small amount of delay to the samples, you can deactivate it again by setting a value <= 0.0. RT safe. Since 1.4.0
-
-### Prototype
-```c
-int pw_stream_set_rate(struct pw_stream *stream, double rate);
-```
-"""
-function pw_stream_set_rate(stream, rate)
-    @ccall libpipewire_ao.pw_stream_set_rate(stream::Ptr{pw_stream}, rate::Cdouble)::Cint
-end
-
-"""
-` pw_filter`
-
-\\{
-"""
-mutable struct pw_filter end
-
-"""
     pw_filter_state
 
 ` pw_filter_state The state of a filter  `
@@ -8113,9 +7363,7 @@ end
 """
     pw_filter_disconnect(filter)
 
-Disconnect *filter*.
-
-Returns -EBUSY while any latest-buffer worker ownership is active. Stop the worker, return every held buffer, end its ownership, and retry disconnect.
+Disconnect *filter*
 
 ### Prototype
 ```c
@@ -8143,9 +7391,7 @@ end
 """
     pw_filter_remove_port(port_data)
 
-Remove a port from the filter.
-
-Returns -EBUSY while latest-buffer worker ownership is active on the port.
+remove a port from the filter
 
 ### Prototype
 ```c
@@ -8250,8 +7496,6 @@ end
 
 Get a buffer that can be filled for output ports or consumed for input ports. RT safe.
 
-Calls that dequeue, queue, begin, or end buffers on the same port must be serialized by one worker. An input latest-buffer port may hold at most one dequeued consumer buffer at a time.
-
 ### Prototype
 ```c
 struct pw_buffer *pw_filter_dequeue_buffer(void *port_data);
@@ -8262,399 +7506,9 @@ function pw_filter_dequeue_buffer(port_data)
 end
 
 """
-    pw_filter_try_dequeue_buffer_latest(port_data, buffer, submission_sequence)
-
-Try to receive a buffer directly from an input latest-buffer submission channel. RT safe.
-
-This skips the ordinary port queue and does not read or write errno. Returns 1 and stores the claimed buffer and its nonzero transport sequence in *buffer* and *submission_sequence*, 0 when no submission is currently visible, or a negative errno-style result for invalid state. The caller must own the port's serialized buffer worker and must complete a claimed buffer before trying again.
-
-### Prototype
-```c
-int pw_filter_try_dequeue_buffer_latest(void *port_data, struct pw_buffer **buffer, uint64_t *submission_sequence);
-```
-"""
-function pw_filter_try_dequeue_buffer_latest(port_data, buffer, submission_sequence)
-    @ccall libpipewire_ao.pw_filter_try_dequeue_buffer_latest(port_data::Ptr{Cvoid}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
-end
-
-"""
-    pw_filter_buffer_latest_poller
-
-Caller-owned state for one continuous latest-input polling interval.
-
-Initialize this object with pw_filter_buffer_latest_poller_init and clear it on every cancellation or error exit. Do not copy or modify it while initialized. A poller may retain a live-link lifetime pin across empty polls, so its worker must continue polling and must not block between calls.
-"""
-struct pw_filter_buffer_latest_poller
-    port_data::Ptr{Cvoid}
-    io::Ptr{spa_io_buffers_latest}
-    slot::UInt32
-    reserved::UInt32
-end
-
-"""
-    pw_filter_buffer_latest_poller_init(poller, port_data)
-
-Initialize a continuous latest-input polling interval. RT safe.
-
-The exclusive input worker must not hold a dequeued buffer. Initialization performs all port-mode validation outside the empty-poll loop.
-
-### Prototype
-```c
-int pw_filter_buffer_latest_poller_init( struct pw_filter_buffer_latest_poller *poller, void *port_data);
-```
-"""
-function pw_filter_buffer_latest_poller_init(poller, port_data)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_init(poller::Ptr{pw_filter_buffer_latest_poller}, port_data::Ptr{Cvoid})::Cint
-end
-
-"""
-    pw_filter_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
-
-Try to claim one input publication through an initialized poller. RT safe.
-
-Returns 1 and stores a buffer, 0 for ordinary no-work, or a negative errno-style error. A successful claim or an error automatically releases the retained link pin and finishes the polling interval. Empty polls retain the pin while the link remains active. Link retirement is observed before dereferencing its shared channel and releases the pin before returning 0.
-
-### Prototype
-```c
-int pw_filter_buffer_latest_poller_try_dequeue( struct pw_filter_buffer_latest_poller *poller, struct pw_buffer **buffer, uint64_t *submission_sequence);
-```
-"""
-function pw_filter_buffer_latest_poller_try_dequeue(poller, buffer, submission_sequence)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_try_dequeue(poller::Ptr{pw_filter_buffer_latest_poller}, buffer::Ptr{Ptr{pw_buffer}}, submission_sequence::Ptr{UInt64})::Cint
-end
-
-"""
-    pw_filter_buffer_latest_poller_clear(poller)
-
-Finish a polling interval and release any retained live-link pin. RT safe.
-
-This operation is idempotent. Call it before a polling worker blocks, exits, or stops checking the link so synchronous live-link retirement can finish.
-
-### Prototype
-```c
-void pw_filter_buffer_latest_poller_clear( struct pw_filter_buffer_latest_poller *poller);
-```
-"""
-function pw_filter_buffer_latest_poller_clear(poller)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_poller_clear(poller::Ptr{pw_filter_buffer_latest_poller})::Cvoid
-end
-
-"""
-    pw_filter_buffer_latest_stats
-
-Producer-local accounting for bounded latest-buffer acquisition.
-
-These counters are written only by the exclusive latest-buffer output worker. They may be read by that worker after it has stopped publishing; concurrent control-thread reads are not supported.
-
-| Field                           | Note                                    |
-| :------------------------------ | :-------------------------------------- |
-| dequeue\\_attempts              | output acquisition duty cycles          |
-| completions                     | completed consumer leases examined      |
-| buffer\\_probes                 | reusable pool slots examined            |
-| pool\\_exhaustions              | attempts with no safe allocation        |
-| submission\\_reclaims           | unclaimed submissions reclaimed         |
-| submission\\_withdrawals        | subscriber submissions withdrawn        |
-| publications                    | output buffers offered to fan-out       |
-| subscriber\\_visits             | subscriber channels visited             |
-| subscriber\\_deliveries         | subscriber leases created               |
-| submission\\_overflows          | unclaimed submissions replaced          |
-| subscriber\\_retirements        | retired slots acknowledged by producer  |
-| retired\\_leases                | leases recovered during retirement      |
-| zero\\_recipient\\_publications | offers delivered to no active slot      |
-| max\\_buffer\\_probes           | largest single bounded scan             |
-| max\\_completions               | largest aggregate drain per attempt     |
-| max\\_submission\\_withdrawals  | largest reclaim fan-out per attempt     |
-| max\\_subscriber\\_visits       | largest publication fan-out             |
-"""
-struct pw_filter_buffer_latest_stats
-    dequeue_attempts::UInt64
-    completions::UInt64
-    buffer_probes::UInt64
-    pool_exhaustions::UInt64
-    submission_reclaims::UInt64
-    submission_withdrawals::UInt64
-    publications::UInt64
-    subscriber_visits::UInt64
-    subscriber_deliveries::UInt64
-    submission_overflows::UInt64
-    subscriber_retirements::UInt64
-    retired_leases::UInt64
-    zero_recipient_publications::UInt64
-    max_buffer_probes::UInt32
-    max_completions::UInt32
-    max_submission_withdrawals::UInt32
-    max_subscriber_visits::UInt32
-end
-
-"""
-    pw_filter_get_buffer_latest_stats(port_data, stats, stats_size)
-
-Snapshot bounded latest-buffer output acquisition accounting. RT safe.
-
-The caller must own the exclusive latest-buffer output worker and must not race this operation with publication. Returns -ENOTSUP for ordinary or input ports. `stats_size` must be the caller's allocation size; the function writes only the supported prefix that fits in that allocation.
-
-### Prototype
-```c
-int pw_filter_get_buffer_latest_stats(void *port_data, struct pw_filter_buffer_latest_stats *stats, size_t stats_size);
-```
-"""
-function pw_filter_get_buffer_latest_stats(port_data, stats, stats_size)
-    @ccall libpipewire_ao.pw_filter_get_buffer_latest_stats(port_data::Ptr{Cvoid}, stats::Ptr{pw_filter_buffer_latest_stats}, stats_size::Csize_t)::Cint
-end
-
-"""
-    pw_filter_buffer_latest_worker_begin(port_data)
-
-Begin exclusive latest-buffer worker ownership of a port. RT safe.
-
-This lifetime barrier prevents filter disconnect and port removal until the worker calls pw_filter_buffer_latest_worker_end. An unlinked input may replace its installed buffer pool after its outstanding claim is released; this permits live link recreation without stopping the worker. Other pool replacements remain blocked. It does not make concurrent buffer operations safe: the successful caller remains the port's only buffer worker. Returns -EBUSY for a second worker and -EPIPE while teardown is retiring the filter or port.
-
-### Prototype
-```c
-int pw_filter_buffer_latest_worker_begin(void *port_data);
-```
-"""
-function pw_filter_buffer_latest_worker_begin(port_data)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_worker_begin(port_data::Ptr{Cvoid})::Cint
-end
-
-"""
-    pw_filter_buffer_latest_worker_end(port_data)
-
-End exclusive latest-buffer worker ownership of a port. RT safe.
-
-Every successful pw_filter_buffer_latest_worker_begin must be matched exactly once after all dequeued and progressive buffers have been returned. Returns -EINVAL when no worker ownership is active.
-
-### Prototype
-```c
-int pw_filter_buffer_latest_worker_end(void *port_data);
-```
-"""
-function pw_filter_buffer_latest_worker_end(port_data)
-    @ccall libpipewire_ao.pw_filter_buffer_latest_worker_end(port_data::Ptr{Cvoid})::Cint
-end
-
-"""
-    pw_filter_rendezvous_release_policy
-
-Prepared release behavior for a client-side complete-buffer rendezvous.
-"""
-const pw_filter_rendezvous_release_policy = UInt32
-const PW_FILTER_RENDEZVOUS_RELEASE_COMPLETE_OR_DEADLINE = 0 % UInt32
-const PW_FILTER_RENDEZVOUS_RELEASE_FIXED = 1 % UInt32
-
-"""
-    pw_filter_rendezvous_release_cause
-
-Event that made one complete-buffer rendezvous result eligible.
-"""
-const pw_filter_rendezvous_release_cause = UInt32
-const PW_FILTER_RENDEZVOUS_CAUSE_COMPLETE = 0 % UInt32
-const PW_FILTER_RENDEZVOUS_CAUSE_DEADLINE = 1 % UInt32
-const PW_FILTER_RENDEZVOUS_CAUSE_FIXED = 2 % UInt32
-
-"""
-    pw_filter_rendezvous_result
-
-One immutable complete-buffer rendezvous result.
-"""
-struct pw_filter_rendezvous_result
-    data::NTuple{120, UInt8}
-end
-
-function Base.getproperty(x::Ptr{pw_filter_rendezvous_result}, f::Symbol)
-    f === :acquisition && return Ptr{spa_meta_acquisition}(x + 0)
-    f === :accepted_inputs && return Ptr{UInt64}(x + 96)
-    f === :missing_required_inputs && return Ptr{UInt64}(x + 104)
-    f === :cause && return Ptr{pw_filter_rendezvous_release_cause}(x + 112)
-    f === :reserved && return Ptr{UInt32}(x + 116)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::pw_filter_rendezvous_result, f::Symbol)
-    r = Ref{pw_filter_rendezvous_result}(x)
-    ptr = Base.unsafe_convert(Ptr{pw_filter_rendezvous_result}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{pw_filter_rendezvous_result}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::pw_filter_rendezvous_result, private::Bool = false)
-    (:acquisition, :accepted_inputs, :missing_required_inputs, :cause, :reserved, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
-
-"""
-    pw_filter_rendezvous_stats
-
-Single-writer accounting for one client-side buffer rendezvous.
-
-| Field     | Note                                                 |
-| :-------- | :--------------------------------------------------- |
-| reserved0 | Reserved for ABI-compatible extension. Always zero.  |
-"""
-struct pw_filter_rendezvous_stats
-    accepted::UInt64
-    reserved0::UInt64
-    stale::UInt64
-    future::UInt64
-    rejected::UInt64
-    complete_releases::UInt64
-    deadline_releases::UInt64
-    fixed_releases::UInt64
-    missing_required_inputs::UInt64
-    lease_returns::UInt64
-    cleanup_errors::UInt64
-end
-
-mutable struct pw_filter_rendezvous end
-
-"""
-    pw_filter_rendezvous_new(rendezvous, port_data, n_ports, required_inputs, policy)
-
-Prepare an explicitly selected client-side complete-buffer rendezvous.
-
-Preparation allocates the opaque state and begins exclusive latest-buffer worker ownership on every supplied input port. It performs no graph scheduling and does not infer activation from topology. Supplied input ports may be unlinked during preparation; they remain missing until a compatible latest-buffer link is installed. The caller must not perform another buffer operation on these ports until destroy succeeds.
-
-### Prototype
-```c
-int pw_filter_rendezvous_new(struct pw_filter_rendezvous **rendezvous, void *const *port_data, uint32_t n_ports, uint64_t required_inputs, enum pw_filter_rendezvous_release_policy policy);
-```
-"""
-function pw_filter_rendezvous_new(rendezvous, port_data, n_ports, required_inputs, policy)
-    @ccall libpipewire_ao.pw_filter_rendezvous_new(rendezvous::Ptr{Ptr{pw_filter_rendezvous}}, port_data::Ptr{Ptr{Cvoid}}, n_ports::UInt32, required_inputs::UInt64, policy::pw_filter_rendezvous_release_policy)::Cint
-end
-
-"""
-    pw_filter_rendezvous_begin(rendezvous, acquisition, release_at_nsec, discontinuity)
-
-Begin one expected acquisition after the previous result was finished.
-
-`release_at_nsec` is in the caller's local CLOCK\\_MONOTONIC domain. This operation copies the complete Version 1 acquisition metadata but uses only its valid identity tuple for matching. `discontinuity` is required when the acquisition domain changes across completed results.
-
-### Prototype
-```c
-int pw_filter_rendezvous_begin(struct pw_filter_rendezvous *rendezvous, const struct spa_meta_acquisition *acquisition, uint64_t release_at_nsec, bool discontinuity);
-```
-"""
-function pw_filter_rendezvous_begin(rendezvous, acquisition, release_at_nsec, discontinuity)
-    @ccall libpipewire_ao.pw_filter_rendezvous_begin(rendezvous::Ptr{pw_filter_rendezvous}, acquisition::Ptr{spa_meta_acquisition}, release_at_nsec::UInt64, discontinuity::Bool)::Cint
-end
-
-"""
-    pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result, result_size)
-
-Perform one bounded input scan and at most one release decision. RT safe.
-
-`monotonic_now_nsec` is supplied by the caller; this operation does not read a clock or wait. `result_size` must be the caller's allocation size. The operation returns 1 and writes the supported result prefix when release is eligible, 0 while the acquisition remains pending, or a negative errno-style result. Accepted input leases remain owned by the rendezvous until finish, cancel, reset, or destroy. Nonaccepted leases are returned before this call exits.
-
-### Prototype
-```c
-int pw_filter_rendezvous_poll(struct pw_filter_rendezvous *rendezvous, uint64_t monotonic_now_nsec, struct pw_filter_rendezvous_result *result, size_t result_size);
-```
-"""
-function pw_filter_rendezvous_poll(rendezvous, monotonic_now_nsec, result, result_size)
-    @ccall libpipewire_ao.pw_filter_rendezvous_poll(rendezvous::Ptr{pw_filter_rendezvous}, monotonic_now_nsec::UInt64, result::Ptr{pw_filter_rendezvous_result}, result_size::Csize_t)::Cint
-end
-
-"""
-    pw_filter_rendezvous_get_buffer(rendezvous, input_index)
-
-Borrow one accepted input buffer after a release decision. RT safe.
-
-The pointer remains valid only until the next finish, cancel, reset, or destroy operation. The caller must not queue it directly.
-
-### Prototype
-```c
-struct pw_buffer *pw_filter_rendezvous_get_buffer( struct pw_filter_rendezvous *rendezvous, uint32_t input_index);
-```
-"""
-function pw_filter_rendezvous_get_buffer(rendezvous, input_index)
-    @ccall libpipewire_ao.pw_filter_rendezvous_get_buffer(rendezvous::Ptr{pw_filter_rendezvous}, input_index::UInt32)::Ptr{pw_buffer}
-end
-
-"""
-    pw_filter_rendezvous_finish(rendezvous)
-
-Return all accepted leases and complete the released acquisition. RT safe.
-
-### Prototype
-```c
-int pw_filter_rendezvous_finish(struct pw_filter_rendezvous *rendezvous);
-```
-"""
-function pw_filter_rendezvous_finish(rendezvous)
-    @ccall libpipewire_ao.pw_filter_rendezvous_finish(rendezvous::Ptr{pw_filter_rendezvous})::Cint
-end
-
-"""
-    pw_filter_rendezvous_cancel(rendezvous)
-
-Return retained leases and cancel only the active acquisition. RT safe.
-
-### Prototype
-```c
-int pw_filter_rendezvous_cancel(struct pw_filter_rendezvous *rendezvous);
-```
-"""
-function pw_filter_rendezvous_cancel(rendezvous)
-    @ccall libpipewire_ao.pw_filter_rendezvous_cancel(rendezvous::Ptr{pw_filter_rendezvous})::Cint
-end
-
-"""
-    pw_filter_rendezvous_reset(rendezvous)
-
-Cancel active work and clear completed-acquisition ordering state. RT safe.
-
-### Prototype
-```c
-int pw_filter_rendezvous_reset(struct pw_filter_rendezvous *rendezvous);
-```
-"""
-function pw_filter_rendezvous_reset(rendezvous)
-    @ccall libpipewire_ao.pw_filter_rendezvous_reset(rendezvous::Ptr{pw_filter_rendezvous})::Cint
-end
-
-"""
-    pw_filter_rendezvous_get_stats(rendezvous, stats, stats_size)
-
-Snapshot the supported prefix of single-writer rendezvous accounting. RT safe.
-
-### Prototype
-```c
-int pw_filter_rendezvous_get_stats(struct pw_filter_rendezvous *rendezvous, struct pw_filter_rendezvous_stats *stats, size_t stats_size);
-```
-"""
-function pw_filter_rendezvous_get_stats(rendezvous, stats, stats_size)
-    @ccall libpipewire_ao.pw_filter_rendezvous_get_stats(rendezvous::Ptr{pw_filter_rendezvous}, stats::Ptr{pw_filter_rendezvous_stats}, stats_size::Csize_t)::Cint
-end
-
-"""
-    pw_filter_rendezvous_destroy(rendezvous)
-
-Return all leases, end every worker lifetime, and free the rendezvous.
-
-If returning a retained lease fails, this returns that error without ending worker ownership or freeing the rendezvous. The caller must restore the buffer-return path and retry. Once every lease has been returned, this visits every input, frees the rendezvous, and returns the first worker-lifetime invariant error, if any.
-
-### Prototype
-```c
-int pw_filter_rendezvous_destroy(struct pw_filter_rendezvous *rendezvous);
-```
-"""
-function pw_filter_rendezvous_destroy(rendezvous)
-    @ccall libpipewire_ao.pw_filter_rendezvous_destroy(rendezvous::Ptr{pw_filter_rendezvous})::Cint
-end
-
-"""
     pw_filter_queue_buffer(port_data, buffer)
 
-Submit a buffer for playback or recycle a buffer for capture. RT safe. The caller must own the port's serialized buffer worker.
+Submit a buffer for playback or recycle a buffer for capture. RT safe.
 
 ### Prototype
 ```c
@@ -8663,60 +7517,6 @@ int pw_filter_queue_buffer(void *port_data, struct pw_buffer *buffer);
 """
 function pw_filter_queue_buffer(port_data, buffer)
     @ccall libpipewire_ao.pw_filter_queue_buffer(port_data::Ptr{Cvoid}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_filter_begin_progressive_buffer(port_data, buffer)
-
-Announce an output buffer on a graph-independent latest-buffer port while retaining its producer lease. RT safe.
-
-The caller must initialize and publish its application-defined active state before this call. It may continue to write only storage that the negotiated progressive protocol still grants to the producer. The buffer must later be passed exactly once to pw_filter_end_progressive_buffer, not to pw_filter_queue_buffer.
-
-The caller must own the port's serialized output worker. Fan-out publication is latest-value delivery to independent subscribers, not an atomic multicast: subscribers may receive or overflow an offered buffer at different times. Per-subscriber leases keep the allocation unavailable for reuse until every subscriber has completed or overflowed it and the producer lease has ended.
-
-This operation is supported only on an output port configured with SPA\\_IO\\_BuffersLatest.
-
-### Prototype
-```c
-int pw_filter_begin_progressive_buffer(void *port_data, struct pw_buffer *buffer);
-```
-"""
-function pw_filter_begin_progressive_buffer(port_data, buffer)
-    @ccall libpipewire_ao.pw_filter_begin_progressive_buffer(port_data::Ptr{Cvoid}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_filter_end_progressive_buffer(port_data, buffer)
-
-End the producer lease of an announced progressive output buffer. RT safe.
-
-Before this call, the producer must stop writing and publish its negotiated terminal state. PipeWire makes the allocation reusable only after the input consumer has also returned its lease. Consumer return and this call may occur in either order.
-
-The caller must own the same serialized output worker that began the lease.
-
-### Prototype
-```c
-int pw_filter_end_progressive_buffer(void *port_data, struct pw_buffer *buffer);
-```
-"""
-function pw_filter_end_progressive_buffer(port_data, buffer)
-    @ccall libpipewire_ao.pw_filter_end_progressive_buffer(port_data::Ptr{Cvoid}, buffer::Ptr{pw_buffer})::Cint
-end
-
-"""
-    pw_filter_get_buffer_latest_fd(port_data)
-
-Get the borrowed advisory notification fd for a latest-buffer port. RT safe.
-
-The descriptor is owned by the filter and remains valid only while the port is connected. Callers must not close it. A readable descriptor is only a hint: consumers must always retry pw_filter_dequeue_buffer because notifications can coalesce or be stale. Returns -ENOTSUP when the port is not using SPA\\_IO\\_BuffersLatest and -ENODEV when its selected wait policy has no notification descriptor.
-
-### Prototype
-```c
-int pw_filter_get_buffer_latest_fd(void *port_data);
-```
-"""
-function pw_filter_get_buffer_latest_fd(port_data)
-    @ccall libpipewire_ao.pw_filter_get_buffer_latest_fd(port_data::Ptr{Cvoid})::Cint
 end
 
 """
@@ -9259,6 +8059,20 @@ function pw_data_loop_in_thread(loop)
 end
 
 """
+    pw_data_loop_is_polling(loop)
+
+Check whether the loop uses polling instead of blocking for graph work. May be called from any thread.
+
+### Prototype
+```c
+bool pw_data_loop_is_polling(struct pw_data_loop *loop);
+```
+"""
+function pw_data_loop_is_polling(loop)
+    @ccall libpipewire_ao.pw_data_loop_is_polling(loop::Ptr{pw_data_loop})::Bool
+end
+
+"""
     pw_data_loop_get_thread(loop)
 
 Get the thread object
@@ -9312,223 +8126,6 @@ void pw_data_loop_set_thread_utils(struct pw_data_loop *loop, struct spa_thread_
 """
 function pw_data_loop_set_thread_utils(loop, impl)
     @ccall libpipewire_ao.pw_data_loop_set_thread_utils(loop::Ptr{pw_data_loop}, impl::Ptr{spa_thread_utils})::Cvoid
-end
-
-mutable struct pw_rtc_data_loop end
-
-"""
-    pw_rtc_data_loop_idle
-
-Receiver idle behavior after the process function reports no work.
-
-| Enumerator                                  | Note                                                                     |
-| :------------------------------------------ | :----------------------------------------------------------------------- |
-| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_BUSY\\_SPIN | Poll again immediately. Requires a reserved physical core.               |
-| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_EVENTFD     | Block in the embedded PipeWire loop until a registered source wakes it.  |
-| PW\\_RTC\\_DATA\\_LOOP\\_IDLE\\_HYBRID      | Busy-spin for a fixed iteration count, then block like Eventfd.          |
-"""
-const pw_rtc_data_loop_idle = UInt32
-const PW_RTC_DATA_LOOP_IDLE_BUSY_SPIN = 0 % UInt32
-const PW_RTC_DATA_LOOP_IDLE_EVENTFD = 1 % UInt32
-const PW_RTC_DATA_LOOP_IDLE_HYBRID = 2 % UInt32
-
-"""
-    pw_rtc_data_loop_scheduler
-
-Scheduling policy requested through module-rt ThreadUtils.
-"""
-const pw_rtc_data_loop_scheduler = UInt32
-const PW_RTC_DATA_LOOP_SCHED_OTHER = 0 % UInt32
-const PW_RTC_DATA_LOOP_SCHED_FIFO = 1 % UInt32
-
-"""
-    pw_rtc_data_loop_config
-
-RTC data-loop configuration.
-
-| Field                      | Note                                                                  |
-| :------------------------- | :-------------------------------------------------------------------- |
-| priority                   | SCHED\\_FIFO priority. -1 selects the module-rt configured priority.  |
-| hybrid\\_spin\\_iterations | Busy-spin iterations before Hybrid blocks. Must be nonzero.           |
-"""
-struct pw_rtc_data_loop_config
-    version::UInt32
-    idle::pw_rtc_data_loop_idle
-    scheduler::pw_rtc_data_loop_scheduler
-    priority::Cint
-    hybrid_spin_iterations::UInt32
-end
-
-"""
-    pw_rtc_data_loop_events
-
-Loop events, used with pw_rtc_data_loop_add_listener.
-"""
-struct pw_rtc_data_loop_events
-    version::UInt32
-    destroy::Ptr{Cvoid}
-end
-
-# typedef int ( * pw_rtc_data_loop_process_t ) ( void * data )
-"""
-Execute one bounded RTC duty cycle.
-
-Return a positive work count when work was completed, zero when no work was available, or a negative errno-style value to terminate the loop. The function runs on the RTC thread and must be real-time safe. It must not allocate, perform file I/O, wait for a peer, or retain unbounded work.
-"""
-const pw_rtc_data_loop_process_t = Ptr{Cvoid}
-
-"""
-    pw_rtc_data_loop_new(context, props, config, process, data)
-
-Create an RTC data loop.
-
-The context and its module-rt ThreadUtils must outlive the data loop. The properties may contain [`SPA_KEY_THREAD_NAME`](@ref), [`SPA_KEY_THREAD_AFFINITY`](@ref), and [`SPA_KEY_THREAD_RESET_ON_FORK`](@ref). Notification sources for Eventfd or Hybrid must be installed on pw_rtc_data_loop_get_loop before starting.
-
-### Prototype
-```c
-struct pw_rtc_data_loop * pw_rtc_data_loop_new(struct pw_context *context, const struct spa_dict *props, const struct pw_rtc_data_loop_config *config, pw_rtc_data_loop_process_t process, void *data);
-```
-"""
-function pw_rtc_data_loop_new(context, props, config, process, data)
-    @ccall libpipewire_ao.pw_rtc_data_loop_new(context::Ptr{pw_context}, props::Ptr{spa_dict}, config::Ptr{pw_rtc_data_loop_config}, process::pw_rtc_data_loop_process_t, data::Ptr{Cvoid})::Ptr{pw_rtc_data_loop}
-end
-
-"""
-    pw_rtc_data_loop_add_listener(loop, listener, events, data)
-
-### Prototype
-```c
-void pw_rtc_data_loop_add_listener(struct pw_rtc_data_loop *loop, struct spa_hook *listener, const struct pw_rtc_data_loop_events *events, void *data);
-```
-"""
-function pw_rtc_data_loop_add_listener(loop, listener, events, data)
-    @ccall libpipewire_ao.pw_rtc_data_loop_add_listener(loop::Ptr{pw_rtc_data_loop}, listener::Ptr{spa_hook}, events::Ptr{pw_rtc_data_loop_events}, data::Ptr{Cvoid})::Cvoid
-end
-
-"""
-    pw_rtc_data_loop_get_loop(loop)
-
-Get the embedded event loop used by Eventfd and Hybrid idle policies.
-
-### Prototype
-```c
-struct pw_loop *pw_rtc_data_loop_get_loop(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_get_loop(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_get_loop(loop::Ptr{pw_rtc_data_loop})::Ptr{pw_loop}
-end
-
-"""
-    pw_rtc_data_loop_destroy(loop)
-
-Destroy the loop. The caller must serialize lifecycle operations.
-
-### Prototype
-```c
-void pw_rtc_data_loop_destroy(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_destroy(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_destroy(loop::Ptr{pw_rtc_data_loop})::Cvoid
-end
-
-"""
-    pw_rtc_data_loop_start(loop)
-
-Start the RTC thread and apply its requested scheduling policy.
-
-### Prototype
-```c
-int pw_rtc_data_loop_start(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_start(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_start(loop::Ptr{pw_rtc_data_loop})::Cint
-end
-
-"""
-    pw_rtc_data_loop_stop(loop)
-
-Stop and join the RTC thread. Must not be called from the RTC thread.
-
-### Prototype
-```c
-int pw_rtc_data_loop_stop(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_stop(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_stop(loop::Ptr{pw_rtc_data_loop})::Cint
-end
-
-"""
-    pw_rtc_data_loop_exit(loop)
-
-Request exit without joining. Safe to call from the process function.
-
-### Prototype
-```c
-void pw_rtc_data_loop_exit(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_exit(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_exit(loop::Ptr{pw_rtc_data_loop})::Cvoid
-end
-
-"""
-    pw_rtc_data_loop_in_thread(loop)
-
-Check whether the current thread is this RTC data loop's thread.
-
-### Prototype
-```c
-bool pw_rtc_data_loop_in_thread(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_in_thread(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_in_thread(loop::Ptr{pw_rtc_data_loop})::Bool
-end
-
-"""
-    pw_rtc_data_loop_get_thread(loop)
-
-Get the thread object, or NULL when the loop has not been started.
-
-### Prototype
-```c
-struct spa_thread *pw_rtc_data_loop_get_thread(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_get_thread(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_get_thread(loop::Ptr{pw_rtc_data_loop})::Ptr{spa_thread}
-end
-
-"""
-    pw_rtc_data_loop_get_result(loop)
-
-Get the terminal process or event-loop result.
-
-### Prototype
-```c
-int pw_rtc_data_loop_get_result(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_get_result(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_get_result(loop::Ptr{pw_rtc_data_loop})::Cint
-end
-
-"""
-    pw_rtc_data_loop_is_running(loop)
-
-Return true while the RTC duty-cycle loop is running.
-
-### Prototype
-```c
-bool pw_rtc_data_loop_is_running(struct pw_rtc_data_loop *loop);
-```
-"""
-function pw_rtc_data_loop_is_running(loop)
-    @ccall libpipewire_ao.pw_rtc_data_loop_is_running(loop::Ptr{pw_rtc_data_loop})::Bool
 end
 
 # typedef void ( * pw_timer_callback ) ( void * data )
@@ -10684,6 +9281,8 @@ properties for audio SPA\\_TYPE\\_OBJECT\\_Format
 | SPA\\_FORMAT\\_NDARRAY\\_shape             | positive logical dimensions (Array of Int)                                    |
 | SPA\\_FORMAT\\_NDARRAY\\_layout            | storage order (Id enum [`spa_ndarray_layout`](@ref))                          |
 | SPA\\_FORMAT\\_NDARRAY\\_rate              | optional sample rate (Fraction)                                               |
+| SPA\\_FORMAT\\_NDARRAY\\_schema            | semantic schema identifier (String)                                           |
+| SPA\\_FORMAT\\_NDARRAY\\_profile           | semantic interpretation profile (String)                                      |
 """
 const spa_format = UInt32
 const SPA_FORMAT_START = 0 % UInt32
@@ -10738,6 +9337,8 @@ const SPA_FORMAT_NDARRAY_elementType = 16777217 % UInt32
 const SPA_FORMAT_NDARRAY_shape = 16777218 % UInt32
 const SPA_FORMAT_NDARRAY_layout = 16777219 % UInt32
 const SPA_FORMAT_NDARRAY_rate = 16777220 % UInt32
+const SPA_FORMAT_NDARRAY_schema = 16777221 % UInt32
+const SPA_FORMAT_NDARRAY_profile = 16777222 % UInt32
 
 const spa_audio_format = UInt32
 const SPA_AUDIO_FORMAT_UNKNOWN = 0 % UInt32

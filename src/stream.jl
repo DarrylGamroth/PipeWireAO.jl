@@ -19,8 +19,6 @@ const STREAM_DONT_RECONNECT = LibPipeWire.PW_STREAM_FLAG_DONT_RECONNECT
 const STREAM_ALLOC_BUFFERS = LibPipeWire.PW_STREAM_FLAG_ALLOC_BUFFERS
 "Enable explicit stream processing triggers."
 const STREAM_TRIGGER = LibPipeWire.PW_STREAM_FLAG_TRIGGER
-"Require scheduler-independent latest-buffer transport on every stream link."
-const STREAM_BUFFER_LATEST = LibPipeWire.PW_STREAM_FLAG_BUFFER_LATEST
 "Dequeue and queue buffers outside the real-time process callback."
 const STREAM_ASYNC = LibPipeWire.PW_STREAM_FLAG_ASYNC
 "Request process callbacks as soon as playback buffers are available."
@@ -138,7 +136,6 @@ mutable struct Stream{CoreType<:CoreConnection,Callbacks}
     buffer_owners::Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}
     callbacks_active::Bool
     connected::Bool
-    image_source_count::Int
 end
 
 function _stream_control_info(
@@ -385,7 +382,6 @@ function Stream(
         Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}(),
         true,
         false,
-        0,
     )
     try
         events[] = _stream_events(stream)
@@ -430,12 +426,6 @@ end
 function Base.close(stream::Stream)
     handle = lock(stream.state_lock) do
         stream.handle == C_NULL && return C_NULL
-        stream.image_source_count == 0 || throw(
-            InvalidStateException(
-                "close every image source before closing its PipeWire stream",
-                :image_sources,
-            ),
-        )
         handle = stream.handle
         stream.handle = Ptr{LibPipeWire.pw_stream}(C_NULL)
         stream.connected = false
@@ -819,6 +809,11 @@ const StreamMetadata = BufferMetadata{StreamBuffer}
 
 "Number of bytes in an opaque PipeWireAO acquisition-domain identifier."
 const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_DOMAIN_SIZE)
+"Number of bytes in an IEEE 1588 PTP clock identity."
+const ACQUISITION_PTP_CLOCK_ID_SIZE =
+    Int(LibPipeWire.SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE)
+"Size of the canonical big-endian Version 2 acquisition wire record."
+const ACQUISITION_WIRE_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_WIRE_SIZE)
 
 """
     AcquisitionDomain(bytes)
@@ -846,18 +841,49 @@ struct AcquisitionIdentity
     sequence::UInt64
 end
 
+"The clock domain used for an acquisition exposure timestamp."
+@enum AcquisitionTimebase::UInt32 begin
+    ACQUISITION_TIMEBASE_MONOTONIC =
+        LibPipeWire.SPA_META_ACQUISITION_TIMEBASE_MONOTONIC
+    ACQUISITION_TIMEBASE_TAI = LibPipeWire.SPA_META_ACQUISITION_TIMEBASE_TAI
+end
+
+"A nonzero IEEE 1588 grandmaster clock identity."
+struct PtpClockIdentity
+    bytes::NTuple{ACQUISITION_PTP_CLOCK_ID_SIZE,UInt8}
+
+    function PtpClockIdentity(
+        bytes::NTuple{ACQUISITION_PTP_CLOCK_ID_SIZE,UInt8},
+    )
+        all(iszero, bytes) && throw(ArgumentError("the PTP clock identity must be nonzero"))
+        return new(bytes)
+    end
+end
+
+"The PTP authority that qualifies a cross-host exposure timestamp."
+struct AcquisitionPtpReference
+    grandmaster::PtpClockIdentity
+    domain_number::UInt8
+end
+
+function AcquisitionPtpReference(grandmaster::PtpClockIdentity, domain_number::Integer)
+    0 <= domain_number <= typemax(UInt8) ||
+        throw(ArgumentError("the PTP domain number is outside UInt8 range"))
+    return AcquisitionPtpReference(grandmaster, UInt8(domain_number))
+end
+
 """
     AcquisitionExposureStart(nanoseconds, uncertainty_nanoseconds)
 
-Represent exposure start in local `CLOCK_MONOTONIC` nanoseconds and its
-inclusive uncertainty bound.
+Represent exposure start in nanoseconds and its inclusive uncertainty bound.
+Use [`acquisition_timebase`](@ref) to determine its clock domain.
 """
 struct AcquisitionExposureStart
     nanoseconds::Int64
     uncertainty_nanoseconds::UInt64
 end
 
-"A borrowed Version 1 acquisition metadata allocation belonging to a buffer."
+"A borrowed versioned acquisition metadata allocation belonging to a buffer."
 struct AcquisitionMetadata{BufferType<:AbstractPipeWireBuffer}
     metadata::BufferMetadata{BufferType}
 end
@@ -871,10 +897,13 @@ const ACQUISITION_FLAG_EXPOSURE_START_VALID =
 "Exposure duration is valid."
 const ACQUISITION_FLAG_EXPOSURE_DURATION_VALID =
     LibPipeWire.SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID
+"A PTP grandmaster identity and domain qualify the exposure start."
+const ACQUISITION_FLAG_PTP_REFERENCE_VALID =
+    LibPipeWire.SPA_META_ACQUISITION_FLAG_PTP_REFERENCE_VALID
 
 const _ACQUISITION_SIZE = Int32(LibPipeWire.SPA_META_ACQUISITION_SIZE)
-const _ACQUISITION_FEATURE_VERSION_1 =
-    Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_VERSION_1)
+const _ACQUISITION_FEATURE_CURRENT =
+    Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_CURRENT)
 
 @inline function _acquisition_storage_pointer(metadata::AcquisitionMetadata)
     native = _native_metadata(metadata.metadata)
@@ -904,102 +933,6 @@ end
     0 <= value <= typemax(UInt64) ||
         throw(ArgumentError("$description is outside UInt64 range"))
     return UInt64(value)
-end
-
-"Producer lifecycle state carried by a progressive metadata snapshot."
-@enum ProgressiveState::UInt32 begin
-    PROGRESSIVE_PREPARED = LibPipeWire.SPA_META_PROGRESSIVE_STATE_PREPARED
-    PROGRESSIVE_ACTIVE = LibPipeWire.SPA_META_PROGRESSIVE_STATE_ACTIVE
-    PROGRESSIVE_COMPLETE = LibPipeWire.SPA_META_PROGRESSIVE_STATE_COMPLETE
-    PROGRESSIVE_ABORTED = LibPipeWire.SPA_META_PROGRESSIVE_STATE_ABORTED
-end
-
-"One atomic view of the immutable payload prefix and producer lifecycle state."
-struct ProgressiveSnapshot
-    committed_bytes::UInt32
-    state::ProgressiveState
-end
-
-"An acquire-observed progressive snapshot; flags are zero before producer quiescence."
-struct ProgressiveObservation
-    snapshot::ProgressiveSnapshot
-    terminal_flags::UInt32
-end
-
-"A borrowed Version 1 progressive metadata allocation belonging to a buffer."
-struct ProgressiveMetadata{BufferType<:AbstractPipeWireBuffer}
-    metadata::BufferMetadata{BufferType}
-end
-
-"The producer stopped before publishing the complete payload."
-const PROGRESSIVE_FLAG_INCOMPLETE = UInt32(1 << 0)
-"The producer detected an invalid negotiated payload layout."
-const PROGRESSIVE_FLAG_INVALID_LAYOUT = UInt32(1 << 1)
-"Progressive production was cancelled."
-const PROGRESSIVE_FLAG_CANCELLED = UInt32(1 << 2)
-"A device failed while producing the payload."
-const PROGRESSIVE_FLAG_DEVICE_ERROR = UInt32(1 << 3)
-"The producer detected corrupt payload data."
-const PROGRESSIVE_FLAG_CORRUPTED = UInt32(1 << 4)
-"The producer detected a progressive protocol violation."
-const PROGRESSIVE_FLAG_PROTOCOL_ERROR = UInt32(1 << 5)
-
-const _PROGRESSIVE_FLAG_ALL = UInt32((1 << 6) - 1)
-const _PROGRESSIVE_SIZE = UInt32(48)
-const _PROGRESSIVE_FEATURE_VERSION_1 = Int32(1 << 0)
-
-@inline function _progressive_storage_pointer(metadata::ProgressiveMetadata)
-    native = _native_metadata(metadata.metadata)
-    native.type == SPA.META_PROGRESSIVE || throw(
-        InvalidStateException("the metadata entry is not progressive metadata", :wrong_type),
-    )
-    native.size >= _PROGRESSIVE_SIZE || throw(
-        InvalidStateException("the progressive metadata payload is truncated", :truncated),
-    )
-    native.data == C_NULL && throw(
-        InvalidStateException("the progressive metadata payload is unavailable", :unavailable),
-    )
-    pointer = Ptr{LibPipeWire.spa_meta_progressive}(native.data)
-    UInt(pointer) & UInt(7) == 0 || throw(
-        InvalidStateException("the progressive metadata payload is misaligned", :misaligned),
-    )
-    return pointer
-end
-
-@inline function _decode_progressive_snapshot(value::UInt64)
-    committed = Ref{UInt32}()
-    state = Ref{UInt32}()
-    LibPipeWire.spa_meta_progressive_snapshot_decode(value, committed, state) || return nothing
-    return ProgressiveSnapshot(committed[], ProgressiveState(state[]))
-end
-
-@inline function _progressive_observation_pointer(
-    pointer::Ptr{LibPipeWire.spa_meta_progressive},
-)
-    value = LibPipeWire.spa_meta_progressive_load_acquire(pointer)
-    snapshot = _decode_progressive_snapshot(value)
-    snapshot === nothing && return nothing
-
-    terminal_flags = if snapshot.state in (PROGRESSIVE_COMPLETE, PROGRESSIVE_ABORTED)
-        unsafe_load(pointer.terminal_flags)
-    else
-        UInt32(0)
-    end
-    return ProgressiveObservation(snapshot, terminal_flags)
-end
-
-@inline function _checked_progressive_uint32(value::Integer, description::AbstractString)
-    0 <= value <= typemax(UInt32) || throw(
-        ArgumentError("$description is outside UInt32 range"),
-    )
-    return UInt32(value)
-end
-
-@inline function _progressive_snapshot_value(snapshot::ProgressiveSnapshot)
-    return LibPipeWire.spa_meta_progressive_snapshot_encode(
-        snapshot.committed_bytes,
-        UInt32(snapshot.state),
-    )
 end
 
 "An owned snapshot of a SPA buffer chunk."
@@ -1176,7 +1109,7 @@ metadata_pointer(metadata::BufferMetadata) = _native_metadata(metadata).data
 """
     buffer_acquisition(buffer)
 
-Return borrowed Version 1 acquisition metadata, or `nothing` when absent.
+Return borrowed Version 1 or Version 2 acquisition metadata, or `nothing` when absent.
 Reject a present allocation that is undersized, unavailable, or misaligned.
 """
 function buffer_acquisition(buffer::AbstractPipeWireBuffer)
@@ -1190,7 +1123,7 @@ end
 """
     acquisition_valid(metadata)
 
-Return whether acquisition metadata satisfies the native Version 1 contract.
+Return whether acquisition metadata satisfies the native Version 1 or Version 2 contract.
 """
 function acquisition_valid(metadata::AcquisitionMetadata)
     return LibPipeWire.spa_meta_acquisition_is_valid(
@@ -1230,7 +1163,7 @@ end
     acquisition_exposure_start(metadata)
 
 Return validated exposure start and uncertainty, or `nothing` when absent.
-The timestamp uses the local Linux `CLOCK_MONOTONIC` domain.
+Use [`acquisition_timebase`](@ref) to determine its clock domain.
 """
 function acquisition_exposure_start(metadata::AcquisitionMetadata)
     flags = acquisition_flags(metadata)
@@ -1239,6 +1172,39 @@ function acquisition_exposure_start(metadata::AcquisitionMetadata)
     return AcquisitionExposureStart(
         unsafe_load(pointer.exposure_start_nsec),
         unsafe_load(pointer.timestamp_uncertainty_nsec),
+    )
+end
+
+"""
+    acquisition_timebase(metadata)
+
+Return the exposure timestamp's clock domain, or `nothing` when exposure start
+is absent. Version 1 metadata is always host-local `CLOCK_MONOTONIC`; Version 2
+metadata records either `CLOCK_MONOTONIC` or PTP-qualified `CLOCK_TAI`.
+"""
+function acquisition_timebase(metadata::AcquisitionMetadata)
+    flags = acquisition_flags(metadata)
+    flags & ACQUISITION_FLAG_EXPOSURE_START_VALID == 0 && return nothing
+    pointer = _acquisition_storage_pointer(metadata)
+    version = unsafe_load(pointer.version)
+    version == LibPipeWire.SPA_META_ACQUISITION_VERSION_1 &&
+        return ACQUISITION_TIMEBASE_MONOTONIC
+    return AcquisitionTimebase(unsafe_load(pointer.timebase))
+end
+
+"""
+    acquisition_ptp_reference(metadata)
+
+Return the PTP grandmaster identity and PTP domain for a cross-host-comparable
+timestamp, or `nothing` when the timestamp is not PTP-qualified.
+"""
+function acquisition_ptp_reference(metadata::AcquisitionMetadata)
+    flags = acquisition_flags(metadata)
+    flags & ACQUISITION_FLAG_PTP_REFERENCE_VALID == 0 && return nothing
+    pointer = _acquisition_storage_pointer(metadata)
+    return AcquisitionPtpReference(
+        PtpClockIdentity(unsafe_load(pointer.ptp_grandmaster_id)),
+        unsafe_load(pointer.ptp_domain_number),
     )
 end
 
@@ -1256,7 +1222,7 @@ end
 """
     initialize_acquisition!(metadata)
 
-Clear reusable acquisition metadata to its valid, empty Version 1 state.
+Clear reusable acquisition metadata to its valid, empty current-version state.
 """
 function initialize_acquisition!(metadata::AcquisitionMetadata)
     LibPipeWire.spa_meta_acquisition_init(_acquisition_storage_pointer(metadata)) ||
@@ -1306,6 +1272,35 @@ function set_acquisition_exposure_start!(
 end
 
 """
+    set_acquisition_exposure_start_ptp!(metadata, nanoseconds,
+                                        uncertainty_nanoseconds, reference)
+
+Establish exposure start in Linux `CLOCK_TAI` nanoseconds, qualified by a PTP
+grandmaster identity and PTP domain. This form is comparable across hosts that
+carry the same valid PTP reference.
+"""
+function set_acquisition_exposure_start_ptp!(
+    metadata::AcquisitionMetadata,
+    nanoseconds::Integer,
+    uncertainty_nanoseconds::Integer,
+    reference::AcquisitionPtpReference,
+)
+    grandmaster = Ref(reference.grandmaster.bytes)
+    grandmaster_pointer = Ptr{UInt8}(
+        Base.unsafe_convert(Ptr{typeof(reference.grandmaster.bytes)}, grandmaster),
+    )
+    valid = GC.@preserve grandmaster LibPipeWire.spa_meta_acquisition_set_exposure_start_ptp(
+        _acquisition_storage_pointer(metadata),
+        _checked_acquisition_int64(nanoseconds, "exposure start"),
+        _checked_acquisition_uint64(uncertainty_nanoseconds, "timestamp uncertainty"),
+        grandmaster_pointer,
+        reference.domain_number,
+    )
+    valid || throw(ArgumentError("the PTP-qualified acquisition exposure start is invalid"))
+    return metadata
+end
+
+"""
     set_acquisition_exposure_duration!(metadata, nanoseconds)
 
 Establish a positive exposure duration in nanoseconds.
@@ -1335,204 +1330,85 @@ function acquisition_identity_equal(a::AcquisitionMetadata, b::AcquisitionMetada
     )
 end
 
-"Return borrowed Version 1 progressive metadata, or `nothing` when absent."
-function buffer_progressive(buffer::AbstractPipeWireBuffer)
-    metadata = buffer_metadata(buffer, SPA.META_PROGRESSIVE)
-    metadata === nothing && return nothing
-    progressive = ProgressiveMetadata(metadata)
-    _progressive_storage_pointer(progressive)
-    return progressive
-end
+"""
+    acquisition_time_difference(a, b)
 
-"Return the zero-based native data-plane index described by progressive metadata."
-progressive_data_index(metadata::ProgressiveMetadata) =
-    unsafe_load(_progressive_storage_pointer(metadata).data_index)
-
-"Return the byte offset of the progressive payload in its data plane."
-progressive_payload_offset(metadata::ProgressiveMetadata) =
-    unsafe_load(_progressive_storage_pointer(metadata).payload_offset)
-
-"Return the total byte length of the progressive payload."
-progressive_payload_size(metadata::ProgressiveMetadata) =
-    unsafe_load(_progressive_storage_pointer(metadata).payload_size)
-
-"Return the negotiated byte increment for non-final progressive commits."
-progressive_commit_granularity(metadata::ProgressiveMetadata) =
-    unsafe_load(_progressive_storage_pointer(metadata).commit_granularity)
-
-"Return whether a progressive metadata allocation contains a valid Version 1 state."
-function progressive_valid(metadata::ProgressiveMetadata)
-    return LibPipeWire.spa_meta_progressive_is_valid(
-        _native_metadata_pointer(metadata.metadata),
+Return `(difference_nanoseconds, combined_uncertainty_nanoseconds)` for `a - b`,
+or `nothing` unless both exposure timestamps carry the same valid PTP
+grandmaster identity and PTP domain. The uncertainty sum saturates at
+`typemax(UInt64)`.
+"""
+function acquisition_time_difference(a::AcquisitionMetadata, b::AcquisitionMetadata)
+    difference = Ref{Int64}()
+    uncertainty = Ref{UInt64}()
+    comparable = LibPipeWire.spa_meta_acquisition_time_difference(
+        _acquisition_storage_pointer(a),
+        _acquisition_storage_pointer(b),
+        difference,
+        uncertainty,
     )
-end
-
-"Acquire-load and validate the current progressive snapshot."
-function progressive_snapshot(metadata::ProgressiveMetadata)
-    progressive_valid(metadata) || throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    observation = _progressive_observation_pointer(_progressive_storage_pointer(metadata))
-    observation === nothing && throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    return observation.snapshot
-end
-
-"Acquire-load progressive state and read flags only after producer quiescence."
-function progressive_observation(metadata::ProgressiveMetadata)
-    progressive_valid(metadata) || throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    observation = _progressive_observation_pointer(_progressive_storage_pointer(metadata))
-    observation === nothing && throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    return observation
+    return comparable ? (difference[], uncertainty[]) : nothing
 end
 
 """
-    initialize_progressive!(metadata, data_index, payload_offset,
-                            payload_size, commit_granularity)
+    acquisition_times_match(a, b, tolerance_nanoseconds)
 
-Initialize a borrowed metadata allocation in `Prepared`. `data_index` is the
-zero-based native SPA data-plane index. Call this before announcing the buffer
-to a consumer.
+Return whether two comparable PTP exposure timestamps overlap after adding the
+given tolerance to their combined inclusive uncertainty bounds.
 """
-function initialize_progressive!(
-    metadata::ProgressiveMetadata,
-    data_index::Integer,
-    payload_offset::Integer,
-    payload_size::Integer,
-    commit_granularity::Integer,
+function acquisition_times_match(
+    a::AcquisitionMetadata,
+    b::AcquisitionMetadata,
+    tolerance_nanoseconds::Integer,
 )
-    return _initialize_progressive!(
-        metadata,
-        _checked_progressive_uint32(data_index, "progressive data index"),
-        _checked_progressive_uint32(payload_offset, "progressive payload offset"),
-        _checked_progressive_uint32(payload_size, "progressive payload size"),
-        _checked_progressive_uint32(
-            commit_granularity,
-            "progressive commit granularity",
+    return LibPipeWire.spa_meta_acquisition_times_match(
+        _acquisition_storage_pointer(a),
+        _acquisition_storage_pointer(b),
+        _checked_acquisition_uint64(tolerance_nanoseconds, "timestamp tolerance"),
+    )
+end
+
+"""
+    acquisition_wire(metadata) -> Vector{UInt8}
+
+Encode valid Version 2 acquisition metadata as the canonical fixed-size,
+big-endian wire record used at process and host boundaries.
+"""
+function acquisition_wire(metadata::AcquisitionMetadata)
+    wire = Vector{UInt8}(undef, ACQUISITION_WIRE_SIZE)
+    valid = GC.@preserve wire LibPipeWire.spa_meta_acquisition_serialize(
+        _acquisition_storage_pointer(metadata),
+        pointer(wire),
+        UInt32(length(wire)),
+    )
+    valid || throw(
+        InvalidStateException(
+            "the acquisition metadata cannot be serialized as Version 2",
+            :unsupported,
         ),
     )
-end
-
-@inline function _initialize_progressive!(
-    metadata::ProgressiveMetadata,
-    data_index::UInt32,
-    payload_offset::UInt32,
-    payload_size::UInt32,
-    commit_granularity::UInt32,
-)
-    pointer = _progressive_storage_pointer(metadata)
-    LibPipeWire.spa_meta_progressive_init(
-        pointer,
-        data_index,
-        payload_offset,
-        payload_size,
-        commit_granularity,
-    ) || throw(ArgumentError("the progressive metadata layout is invalid"))
-    return metadata
+    return wire
 end
 
 """
-    set_progressive_terminal_flags!(metadata, flags)
+    deserialize_acquisition!(metadata, wire)
 
-Set terminal outcome flags while the producer is in `Prepared` or `Active`.
-Publish `Complete` or `Aborted` afterward so the release-store makes these
-flags visible to consumers.
+Replace a borrowed allocation with a validated canonical Version 2 wire record.
+The destination is unchanged when decoding fails.
 """
-function set_progressive_terminal_flags!(metadata::ProgressiveMetadata, flags::Integer)
-    return _set_progressive_terminal_flags!(
-        metadata,
-        _checked_progressive_uint32(flags, "progressive terminal flags"),
-    )
-end
-
-@inline function _set_progressive_terminal_flags!(
-    metadata::ProgressiveMetadata,
-    flags::UInt32,
+function deserialize_acquisition!(
+    metadata::AcquisitionMetadata,
+    wire::Vector{UInt8},
 )
-    flags & ~_PROGRESSIVE_FLAG_ALL == 0 || throw(
-        ArgumentError("progressive terminal flags contain reserved bits"),
+    length(wire) == ACQUISITION_WIRE_SIZE || throw(
+        ArgumentError("the acquisition wire record has the wrong size"),
     )
-    progressive_valid(metadata) || throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
+    valid = GC.@preserve wire LibPipeWire.spa_meta_acquisition_deserialize(
+        _acquisition_storage_pointer(metadata),
+        pointer(wire),
+        UInt32(length(wire)),
     )
-    pointer = _progressive_storage_pointer(metadata)
-    observation = _progressive_observation_pointer(pointer)
-    observation === nothing && throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    observation.snapshot.state in (PROGRESSIVE_PREPARED, PROGRESSIVE_ACTIVE) || throw(
-        InvalidStateException("the progressive producer is already terminal", :terminal),
-    )
-    unsafe_store!(pointer.terminal_flags, flags)
-    return metadata
-end
-
-"""
-    publish_progressive!(metadata, committed, state=PROGRESSIVE_ACTIVE)
-
-Release-publish a monotonic committed byte prefix and lifecycle transition.
-The valid transitions are `Prepared -> Active` and `Active -> Active`,
-`Complete`, or `Aborted`. A `Complete` publication requires the whole payload.
-"""
-function publish_progressive!(
-    metadata::ProgressiveMetadata,
-    committed::Integer,
-    state::ProgressiveState=PROGRESSIVE_ACTIVE,
-)
-    return _publish_progressive!(
-        metadata,
-        _checked_progressive_uint32(committed, "progressive committed prefix"),
-        state,
-    )
-end
-
-@inline function _publish_progressive!(
-    metadata::ProgressiveMetadata,
-    committed::UInt32,
-    state::ProgressiveState,
-)
-    progressive_valid(metadata) || throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    pointer = _progressive_storage_pointer(metadata)
-    observation = _progressive_observation_pointer(pointer)
-    observation === nothing && throw(
-        InvalidStateException("the progressive metadata is malformed", :malformed),
-    )
-    current = observation.snapshot
-    if current.state == PROGRESSIVE_PREPARED
-        state == PROGRESSIVE_ACTIVE || throw(
-            InvalidStateException("progressive metadata must become active first", :prepared),
-        )
-    elseif current.state == PROGRESSIVE_ACTIVE
-        state in (PROGRESSIVE_ACTIVE, PROGRESSIVE_COMPLETE, PROGRESSIVE_ABORTED) || throw(
-            InvalidStateException("the progressive state transition is invalid", :invalid),
-        )
-    else
-        throw(InvalidStateException("the progressive producer is already terminal", :terminal))
-    end
-
-    payload_size = unsafe_load(pointer.payload_size)
-    granularity = unsafe_load(pointer.commit_granularity)
-    current.committed_bytes <= committed <= payload_size || throw(
-        InvalidStateException("the progressive prefix is not monotonic", :nonmonotonic),
-    )
-    (committed == payload_size || committed % granularity == 0) || throw(
-        InvalidStateException("the progressive prefix is not on a commit boundary", :unaligned),
-    )
-    state != PROGRESSIVE_COMPLETE || committed == payload_size || throw(
-        InvalidStateException("a complete progressive payload must be fully committed", :incomplete),
-    )
-
-    LibPipeWire.spa_meta_progressive_store_release(
-        pointer,
-        _progressive_snapshot_value(ProgressiveSnapshot(committed, state)),
-    )
+    valid || throw(ArgumentError("the acquisition wire record is invalid"))
     return metadata
 end
 

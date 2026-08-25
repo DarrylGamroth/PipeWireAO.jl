@@ -55,6 +55,8 @@ export Array,
     PAGE_SIZE_NORMAL,
     Parameter,
     PageSizeHint,
+    PropInfo,
+    Props,
     PROPERTY_DONT_FIXATE,
     PROPERTY_DROP,
     PROPERTY_HARDWARE,
@@ -369,6 +371,71 @@ end
 Parameter(type::Integer, id::Integer, properties) = Parameter(Object(type, id, properties))
 Parameter(type::Integer, id::Integer, properties::Property...) =
     Parameter(Object(type, id, properties))
+
+function _validate_prop_name(name::AbstractString)
+    owned = String(name)
+    isempty(owned) && throw(ArgumentError("an SPA property name must not be empty"))
+    occursin('\0', owned) && throw(ArgumentError("an SPA property name contains a null byte"))
+    return owned
+end
+
+function _optional_prop_id(value::Union{Nothing,Integer}, description::AbstractString)
+    value === nothing && return nothing
+    0 <= value <= typemax(UInt32) || throw(ArgumentError("$description is outside UInt32 range"))
+    return UInt32(value)
+end
+
+"A typed description carried by one `SPA_PARAM_PropInfo` object."
+struct PropInfo
+    name::String
+    type::Pod
+    description::String
+    labels::Vector{Pair{Int32,String}}
+    id::Union{Nothing,UInt32}
+    container::Union{Nothing,UInt32}
+    group::Union{Nothing,String}
+    params::Bool
+
+    function PropInfo(
+        name::AbstractString,
+        type::Pod;
+        description::AbstractString=name,
+        labels=Pair{Int32,String}[],
+        id::Union{Nothing,Integer}=nothing,
+        container::Union{Nothing,Integer}=nothing,
+        group::Union{Nothing,AbstractString}=nothing,
+        params::Bool=false,
+    )
+        owned_labels = Pair{Int32,String}[
+            Int32(key) => String(label) for (key, label) in labels
+        ]
+        return new(
+            _validate_prop_name(name),
+            type,
+            String(description),
+            owned_labels,
+            _optional_prop_id(id, "property ID"),
+            _optional_prop_id(container, "property container ID"),
+            group === nothing ? nothing : String(group),
+            params,
+        )
+    end
+end
+
+"A typed set of named values carried by one `SPA_PARAM_Props` object."
+struct Props
+    values::Vector{Pair{String,Pod}}
+
+    function Props(values)
+        owned = Pair{String,Pod}[]
+        for (name, value) in values
+            push!(owned, _validate_prop_name(name) => (value isa Pod ? value : Pod(value)))
+        end
+        return new(owned)
+    end
+end
+
+Props(values::Pair...) = Props(values)
 
 "An owned, validated SPA command object."
 struct Command

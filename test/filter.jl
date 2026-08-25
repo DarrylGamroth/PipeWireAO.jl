@@ -232,20 +232,6 @@ end
     @test reusable.port_data == C_NULL
     wrong_port = FilterBuffer(Ptr{PipeWireAO.LibPipeWire.pw_buffer}(1), input.handle)
     @test_throws ArgumentError queue_buffer!(wrong_port, output)
-    progressive = ProgressiveFilterBuffer(output)
-    @test isconcretetype(typeof(progressive))
-    @test all(isconcretetype, fieldtypes(typeof(progressive)))
-    @test !progressive_active(progressive)
-    @test !hasmethod(buffer_data, Tuple{typeof(progressive)})
-    @test_throws InvalidStateException unsafe_progressive_buffer_pointer(progressive)
-    @test_throws InvalidStateException end_progressive!(progressive)
-    @test_throws ArgumentError begin_progressive!(progressive, wrong_port)
-    input_progressive = ProgressiveFilterBuffer(input)
-    input_buffer = FilterBuffer(Ptr{PipeWireAO.LibPipeWire.pw_buffer}(1), input.handle)
-    @test_throws ArgumentError begin_progressive!(input_progressive, input_buffer)
-    @test_throws PipeWireError buffer_latest_fd(output)
-    @test BUFFER_LATEST_IO == PipeWireAO.LibPipeWire.SPA_IO_BuffersLatest
-    @test BUFFER_LATEST_NOTIFY_IO == PipeWireAO.LibPipeWire.SPA_IO_BuffersLatestNotify
     @test dsp_buffer(input, Float32, 0) == C_NULL
     @test_throws ArgumentError dsp_buffer(input, Float32, -1)
     @test_throws ArgumentError emit_event!(filter, Pod(Int32(1)))

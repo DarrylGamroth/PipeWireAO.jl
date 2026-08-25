@@ -546,6 +546,133 @@ pod_value(::Type{SPA.Parameter}, pod::Pod) = SPA.Parameter(pod_value(SPA.Object,
 pod_value(::Type{SPA.Command}, pod::Pod) = SPA.Command(pod_value(SPA.Object, pod))
 pod_value(::Type{SPA.Event}, pod::Pod) = SPA.Event(pod_value(SPA.Object, pod))
 
+function _required_property(object::SPA.Object, key::Integer, description::AbstractString)
+    property = get(object, key, nothing)
+    property === nothing && throw(ArgumentError("$description is missing"))
+    return property.value
+end
+
+function _optional_id_property(object::SPA.Object, key::Integer)
+    property = get(object, key, nothing)
+    property === nothing && return nothing
+    return pod_value(SPA.Id, property.value).value
+end
+
+function _prop_info_labels(pod::Pod)
+    values = pod_value(SPA.Struct, pod).values
+    iseven(length(values)) || throw(
+        ArgumentError("SPA property labels must contain integer/string pairs"),
+    )
+    labels = Pair{Int32,String}[]
+    sizehint!(labels, length(values) ÷ 2)
+    for index in 1:2:length(values)
+        push!(labels, pod_value(Int32, values[index]) => pod_value(String, values[index + 1]))
+    end
+    return labels
+end
+
+function SPA.PropInfo(pod::Pod)
+    object = pod_value(SPA.Parameter, pod).object
+    object.type == SPA.OBJECT_PROP_INFO || throw(
+        ArgumentError("the SPA parameter is not a PropInfo object"),
+    )
+    object.id == SPA.PARAM_PROP_INFO || throw(
+        ArgumentError("the SPA parameter does not have the PropInfo ID"),
+    )
+    name = pod_value(
+        String,
+        _required_property(object, SPA.PROP_INFO_NAME, "SPA property name"),
+    )
+    description_property = get(object, SPA.PROP_INFO_DESCRIPTION, nothing)
+    description = description_property === nothing ?
+        name : pod_value(String, description_property.value)
+    labels_property = get(object, SPA.PROP_INFO_LABELS, nothing)
+    labels = labels_property === nothing ?
+        Pair{Int32,String}[] : _prop_info_labels(labels_property.value)
+    group_property = get(object, SPA.PROP_INFO_GROUP, nothing)
+    group = group_property === nothing ? nothing : pod_value(String, group_property.value)
+    params_property = get(object, SPA.PROP_INFO_PARAMS, nothing)
+    params = params_property === nothing ? false : pod_value(Bool, params_property.value)
+    return SPA.PropInfo(
+        name,
+        _required_property(object, SPA.PROP_INFO_TYPE, "SPA property type");
+        description,
+        labels,
+        id=_optional_id_property(object, SPA.PROP_INFO_ID),
+        container=_optional_id_property(object, SPA.PROP_INFO_CONTAINER),
+        group,
+        params,
+    )
+end
+
+function SPA.Props(pod::Pod)
+    object = pod_value(SPA.Parameter, pod).object
+    object.type == SPA.OBJECT_PROPS || throw(
+        ArgumentError("the SPA parameter is not a Props object"),
+    )
+    object.id == SPA.PARAM_PROPS || throw(
+        ArgumentError("the SPA parameter does not have the Props ID"),
+    )
+    values = pod_value(
+        SPA.Struct,
+        _required_property(object, SPA.PROP_PARAMS, "SPA named property values"),
+    ).values
+    iseven(length(values)) || throw(
+        ArgumentError("SPA named property values must contain name/value pairs"),
+    )
+    pairs = Pair{String,Pod}[]
+    sizehint!(pairs, length(values) ÷ 2)
+    for index in 1:2:length(values)
+        push!(pairs, pod_value(String, values[index]) => values[index + 1])
+    end
+    return SPA.Props(pairs)
+end
+
+"Build one standard `SPA_PARAM_PropInfo` parameter."
+function prop_info_param(info::SPA.PropInfo)
+    properties = SPA.Property[
+        SPA.Property(SPA.PROP_INFO_NAME, info.name),
+        SPA.Property(SPA.PROP_INFO_DESCRIPTION, info.description),
+        SPA.Property(SPA.PROP_INFO_TYPE, info.type),
+    ]
+    info.id === nothing || push!(
+        properties,
+        SPA.Property(SPA.PROP_INFO_ID, SPA.Id(info.id)),
+    )
+    if !isempty(info.labels)
+        label_values = Pod[]
+        sizehint!(label_values, 2 * length(info.labels))
+        for (key, label) in info.labels
+            push!(label_values, Pod(key), Pod(label))
+        end
+        push!(properties, SPA.Property(SPA.PROP_INFO_LABELS, SPA.Struct(label_values)))
+    end
+    info.container === nothing || push!(
+        properties,
+        SPA.Property(SPA.PROP_INFO_CONTAINER, SPA.Id(info.container)),
+    )
+    info.group === nothing || push!(
+        properties,
+        SPA.Property(SPA.PROP_INFO_GROUP, info.group),
+    )
+    push!(properties, SPA.Property(SPA.PROP_INFO_PARAMS, info.params))
+    return SPA.Parameter(SPA.OBJECT_PROP_INFO, SPA.PARAM_PROP_INFO, properties)
+end
+
+"Build one standard `SPA_PARAM_Props` parameter containing named values."
+function props_param(props::SPA.Props)
+    values = Pod[]
+    sizehint!(values, 2 * length(props.values))
+    for (name, value) in props.values
+        push!(values, Pod(name), value)
+    end
+    return SPA.Parameter(
+        SPA.OBJECT_PROPS,
+        SPA.PARAM_PROPS,
+        SPA.Property(SPA.PROP_PARAMS, SPA.Struct(values)),
+    )
+end
+
 function _parameter_int(value, description::AbstractString)
     value isa Integer || return value
     typemin(Int32) <= value <= typemax(Int32) ||
@@ -651,23 +778,15 @@ header_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param
     id,
 )
 
-"Request native Version 1 progressive metadata on every negotiated buffer."
-progressive_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
-    SPA.META_PROGRESSIVE;
-    size=_PROGRESSIVE_SIZE,
-    features=_PROGRESSIVE_FEATURE_VERSION_1,
-    id,
-)
-
 """
     acquisition_metadata_param(; id=LibPipeWire.SPA_PARAM_Meta)
 
-Request native Version 1 acquisition metadata on every negotiated buffer.
+Request current native acquisition metadata on every negotiated buffer.
 """
 acquisition_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
     SPA.META_ACQUISITION;
     size=_ACQUISITION_SIZE,
-    features=_ACQUISITION_FEATURE_VERSION_1,
+    features=_ACQUISITION_FEATURE_CURRENT,
     id,
 )
 

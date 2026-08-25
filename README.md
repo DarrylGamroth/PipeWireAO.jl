@@ -238,23 +238,11 @@ The page-size choice is a hint: inspect `SPA.DATA_FLAG_HUGE_PAGES` and the
 size-specific data flags on the allocated buffer to determine what PipeWireAO
 actually obtained.
 
-Progressive endpoints negotiate `progressive_metadata_param()` and then borrow
-each allocation with `buffer_progressive`. Producers initialize it before
-announcement and release-publish only immutable byte prefixes. Consumers must
-call `progressive_valid` before payload access and acquire observations through
-`progressive_observation`. The warmed observation and publication methods have
-a zero-byte heap-allocation contract when called with concrete metadata and
-`UInt32` values.
-
-```julia
-metadata = buffer_progressive(buffer)
-metadata === nothing && error("progressive metadata was not negotiated")
-
-initialize_progressive!(metadata, 0, 0, 4096, 256)
-publish_progressive!(metadata, UInt32(0), PROGRESSIVE_ACTIVE)
-# Write only the unpublished suffix before advancing this prefix.
-publish_progressive!(metadata, UInt32(256), PROGRESSIVE_ACTIVE)
-```
+Low-latency partial-frame pipelines publish fixed row-block ndarrays as
+ordinary complete buffers. Shape, schema, rate, and layout identify the block
+artifact; standard Header sequence, offset, marker, and discontinuity fields
+identify its place in a frame. No consumer observes a buffer while its payload
+is changing.
 
 Negotiated format PODs can be converted into concrete owned snapshots. This is
 the usual operation inside `on_param_changed` after PipeWire fixates a stream
@@ -363,6 +351,13 @@ Data access masks are public as `SPA.DATA_FLAG_READABLE`,
 `SPA.DATA_FLAG_READWRITE`, and `SPA.DATA_FLAG_MAPPABLE`.
 Use `set_buffer_header!(buffer, BufferHeader(...))` to replace an existing
 complete `SPA_META_Header` payload without crossing into native bindings.
+Acquisition metadata carries a stable acquisition identity and either a
+host-local `CLOCK_MONOTONIC` exposure timestamp or a PTP-qualified `CLOCK_TAI`
+timestamp. Cross-host joins compare timestamps only when both records name the
+same PTP grandmaster and PTP domain. `acquisition_wire` and
+`deserialize_acquisition!` provide the canonical fixed-size, big-endian record
+for transport between processes or hosts; semantic join policy remains with
+the application.
 With `STREAM_ALLOC_BUFFERS`, call `allocate_buffer!` from `on_buffer_added` to
 install Julia-owned `MemPtr` planes. The stream roots those allocations until
 PipeWire removes the corresponding native buffer.
@@ -472,54 +467,18 @@ finally
 end
 ```
 
-## Scheduler-independent latest buffers
+## Scheduling and observer isolation
 
-PipeWireAO keeps PipeWire's port negotiation and shared `memfd`/DMA-BUF
-infrastructure while allowing a link to exchange buffers independently of the
-graph scheduler. Set `BUFFER_LATEST_LINK_PROPERTY => "true"` on the link. The
-handoff is deliberately lossy: an input claims the newest completed buffer,
-obsolete unclaimed buffers are superseded, and an output drops work instead of
-causing backpressure when every allocation is still claimed.
-Each endpoint must use exactly one latest-buffer link and one worker with
-exclusive access to its port. An input worker may hold at most one dequeued
-buffer at a time.
+Streams and filters use ordinary PipeWire buffers and dependency scheduling.
+Polling is configured on the data loop that owns a nonblocking graph driver;
+it does not introduce a different Julia buffer API. Telemetry and GUI branches
+that must not retain critical-path buffers should cross the plugin repository's
+bounded queue module, normally with capacity one, drop-oldest overflow, and
+observer-owned copy storage.
 
-An input port selects `BUFFER_LATEST_WAIT_BUSY_SPIN`,
-`BUFFER_LATEST_WAIT_EVENTFD`, or `BUFFER_LATEST_WAIT_HYBRID` with
-`BUFFER_LATEST_WAIT_PROPERTY`. `buffer_latest_fd(port)` returns PipeWireAO's
-borrowed advisory eventfd for the latter policies. Do not close it, and always
-retry `dequeue_buffer!` after a wakeup because notifications can coalesce or be
-stale. Busy-waiting can simply retry `dequeue_buffer!` without requesting an
-fd.
-
-Progressive output uses a separate reusable lease so that ordinary whole-buffer
-access is unavailable after publication:
-
-```julia
-buffer = FilterBuffer()
-lease = ProgressiveFilterBuffer(output)
-
-dequeue_buffer!(buffer, output) || return
-# Prepare the payload and publish the application's negotiated Active state.
-begin_progressive!(lease, buffer)
-try
-    native = unsafe_progressive_buffer_pointer(lease)
-    # Write only ranges still owned by the producer, publishing committed
-    # ranges with the memory ordering required by the application protocol.
-finally
-    # Stop writing and publish the application's terminal state first.
-    end_progressive!(lease)
-end
-```
-
-`begin_progressive!`, `end_progressive!`, and `buffer_latest_fd` allocate zero
-heap bytes on their successful steady-state paths after warm-up. Setup,
-compilation, validation and native error paths are outside that contract. The
-progressive range/commit metadata is application-defined and must be negotiated
-before use; PipeWireAO manages buffer ownership but does not invent that
-protocol. Rust remains strongly recommended for a strict real-time execution
-path. Julia is suitable for graph setup, control, analysis, and carefully
-pinned workers that are warmed, allocation-free, and do not invoke the GC.
+Rust remains strongly recommended for a strict real-time execution path. Julia
+is suitable for graph setup, control, analysis, and carefully pinned workers
+that are warmed, allocation-free, and do not invoke the GC.
 
 The generated `PipeWireAO.LibPipeWire` module remains available for client APIs
 that do not yet have a managed wrapper. `SPA.Pointer` is intentionally borrowed
@@ -554,7 +513,7 @@ Pkg.add("PipeWireAO")
 
 `PipeWireAO_jll` currently supports glibc-based Linux on aarch64 and x86_64.
 On x86_64, baseline, AVX2, and AVX-512 artifacts are selected from the host
-CPU capabilities. PipeWireAO 0.2 requires PipeWireAO_jll 1.7.0+2 or newer.
+CPU capabilities. PipeWireAO 0.4 requires PipeWireAO_jll 1.7.0+5 or newer.
 
 ## Regenerating the C bindings
 

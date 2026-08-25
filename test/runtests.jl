@@ -2,7 +2,6 @@ using PipeWireAO
 using Test
 
 include("aqua.jl")
-include("rtc_data_loop.jl")
 include("current_info.jl")
 include("object_callbacks.jl")
 
@@ -701,10 +700,7 @@ end
 include("loop.jl")
 include("spa.jl")
 include("acquisition_metadata.jl")
-include("progressive_metadata.jl")
-include("image_source.jl")
 include("filter.jl")
-include("progressive_filter.jl")
 include("listeners.jl")
 include("examples.jl")
 @testset "managed stream" begin

@@ -26,7 +26,6 @@ end
         SPA.DATA_FLAG_HUGE_2MB,
         SPA.DATA_FLAG_HUGE_1GB,
         SPA.META_HEADER,
-        SPA.META_PROGRESSIVE,
         SPA.META_HEADER_FLAG_CORRUPTED,
         SPA.META_HEADER_FLAG_GAP,
         SPA.META_TRANSFORM_90,
@@ -93,6 +92,52 @@ end
         joinpath(@__DIR__, "..", "examples", "video_capture.jl"),
     )
     @test all(path -> !occursin("PipeWireAO.LibPipeWire", read(path, String)), examples)
+end
+
+@testset "property parameters" begin
+    exposure_type = Pod(SPA.Choice(
+        SPA.CHOICE_RANGE,
+        Float64[1_000.0, 10.0, 1_000_000.0],
+    ))
+    info = SPA.PropInfo(
+        "genicam.ExposureTime",
+        exposure_type;
+        description="Camera exposure duration",
+        group="AcquisitionControl",
+        params=true,
+    )
+    info_parameter = @inferred prop_info_param(info)
+    parsed_info = @inferred SPA.PropInfo(Pod(info_parameter))
+    @test parsed_info.name == info.name
+    @test parsed_info.type == info.type
+    @test parsed_info.description == info.description
+    @test parsed_info.group == info.group
+    @test parsed_info.params
+
+    trigger = SPA.PropInfo(
+        "genicam.TriggerMode",
+        Pod(SPA.Choice(SPA.CHOICE_ENUM, Int32[0, 0, 1]));
+        labels=[Int32(0) => "Off", Int32(1) => "On"],
+        params=true,
+    )
+    @test SPA.PropInfo(Pod(prop_info_param(trigger))).labels == trigger.labels
+
+    values = SPA.Props(
+        "egrabber.enabled" => true,
+        "genicam.ExposureTime" => 2_500.0,
+        "genicam.TriggerMode" => Int32(1),
+    )
+    values_parameter = @inferred props_param(values)
+    parsed_values = @inferred SPA.Props(Pod(values_parameter))
+    @test first.(parsed_values.values) == first.(values.values)
+    @test pod_value(Bool, parsed_values.values[1].second)
+    @test pod_value(Float64, parsed_values.values[2].second) == 2_500.0
+    @test pod_value(Int32, parsed_values.values[3].second) == 1
+
+    @test_throws ArgumentError SPA.PropInfo("", Pod(false))
+    @test_throws ArgumentError SPA.Props("" => true)
+    @test_throws ArgumentError SPA.PropInfo(Pod(values_parameter))
+    @test_throws ArgumentError SPA.Props(Pod(info_parameter))
 end
 
 @testset "native ndarray format" begin
