@@ -4081,7 +4081,6 @@ const SPA_META_ACQUISITION_VERSION_1 = 1 % UInt32
 const SPA_META_ACQUISITION_VERSION_2 = 2 % UInt32
 const SPA_META_ACQUISITION_VERSION = 2 % UInt32
 const SPA_META_ACQUISITION_SIZE = 96 % UInt32
-const SPA_META_ACQUISITION_WIRE_SIZE = 96 % UInt32
 const SPA_META_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
 const SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE = 8 % UInt32
 const SPA_META_FEATURE_ACQUISITION_VERSION_1 = 1 % UInt32
@@ -4234,34 +4233,6 @@ bool spa_meta_acquisition_is_valid(const struct spa_meta *meta);
 """
 function spa_meta_acquisition_is_valid(meta)
     @ccall libpipewire_ao.spa_meta_acquisition_is_valid(meta::Ptr{spa_meta})::Bool
-end
-
-"""
-    spa_meta_acquisition_serialize(acquisition, wire, wire_size)
-
-Serialize Version 2 metadata to the canonical big-endian wire record.
-
-### Prototype
-```c
-bool spa_meta_acquisition_serialize( const struct spa_meta_acquisition *acquisition, uint8_t *wire, uint32_t wire_size);
-```
-"""
-function spa_meta_acquisition_serialize(acquisition, wire, wire_size)
-    @ccall libpipewire_ao.spa_meta_acquisition_serialize(acquisition::Ptr{spa_meta_acquisition}, wire::Ptr{UInt8}, wire_size::UInt32)::Bool
-end
-
-"""
-    spa_meta_acquisition_deserialize(acquisition, wire, wire_size)
-
-Deserialize and validate a canonical big-endian Version 2 wire record.
-
-### Prototype
-```c
-bool spa_meta_acquisition_deserialize( struct spa_meta_acquisition *acquisition, const uint8_t *wire, uint32_t wire_size);
-```
-"""
-function spa_meta_acquisition_deserialize(acquisition, wire, wire_size)
-    @ccall libpipewire_ao.spa_meta_acquisition_deserialize(acquisition::Ptr{spa_meta_acquisition}, wire::Ptr{UInt8}, wire_size::UInt32)::Bool
 end
 
 """

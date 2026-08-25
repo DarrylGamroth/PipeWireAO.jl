@@ -85,7 +85,6 @@ end
     @test ACQUISITION_DOMAIN_SIZE == Int(native.SPA_META_ACQUISITION_DOMAIN_SIZE) == 16
     @test ACQUISITION_PTP_CLOCK_ID_SIZE ==
           Int(native.SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE) == 8
-    @test ACQUISITION_WIRE_SIZE == Int(native.SPA_META_ACQUISITION_WIRE_SIZE) == 96
     @test ACQUISITION_FLAG_IDENTITY_VALID ==
           native.SPA_META_ACQUISITION_FLAG_IDENTITY_VALID
     @test ACQUISITION_FLAG_EXPOSURE_START_VALID ==
@@ -165,20 +164,6 @@ end
         @test acquisition_times_match(metadata_a, metadata_b, 24)
         @test_throws ArgumentError acquisition_times_match(metadata_a, metadata_b, -1)
 
-        wire = acquisition_wire(metadata_a)
-        @test length(wire) == ACQUISITION_WIRE_SIZE
-        @test wire[1:4] == UInt8[0, 0, 0, 2]
-        @test deserialize_acquisition!(metadata_b, wire) === metadata_b
-        @test acquisition_identity(metadata_b) == identity
-        @test acquisition_ptp_reference(metadata_b) == reference
-        @test acquisition_time_difference(metadata_b, metadata_a) == (Int64(0), UInt64(18))
-
-        malformed_wire = copy(wire)
-        malformed_wire[82] = 1
-        @test_throws ArgumentError deserialize_acquisition!(metadata_b, malformed_wire)
-        @test acquisition_ptp_reference(metadata_b) == reference
-        @test_throws ArgumentError deserialize_acquisition!(metadata_b, wire[1:(end - 1)])
-
         other_reference = AcquisitionPtpReference(
             PtpClockIdentity(other_grandmaster_bytes),
             7,
@@ -196,8 +181,6 @@ end
         @test acquisition_valid(metadata_a)
         set_acquisition_exposure_start!(metadata_a, 123_456, 9)
         @test acquisition_timebase(metadata_a) == ACQUISITION_TIMEBASE_MONOTONIC
-        @test_throws InvalidStateException acquisition_wire(metadata_a)
-
         initialize_acquisition!(metadata_a)
         set_acquisition_identity!(metadata_a, identity)
         unsafe_store!(

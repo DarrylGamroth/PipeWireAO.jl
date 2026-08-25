@@ -812,8 +812,6 @@ const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_DOMAIN_SIZE
 "Number of bytes in an IEEE 1588 PTP clock identity."
 const ACQUISITION_PTP_CLOCK_ID_SIZE =
     Int(LibPipeWire.SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE)
-"Size of the canonical big-endian Version 2 acquisition wire record."
-const ACQUISITION_WIRE_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_WIRE_SIZE)
 
 """
     AcquisitionDomain(bytes)
@@ -1366,50 +1364,6 @@ function acquisition_times_match(
         _acquisition_storage_pointer(b),
         _checked_acquisition_uint64(tolerance_nanoseconds, "timestamp tolerance"),
     )
-end
-
-"""
-    acquisition_wire(metadata) -> Vector{UInt8}
-
-Encode valid Version 2 acquisition metadata as the canonical fixed-size,
-big-endian wire record used at process and host boundaries.
-"""
-function acquisition_wire(metadata::AcquisitionMetadata)
-    wire = Vector{UInt8}(undef, ACQUISITION_WIRE_SIZE)
-    valid = GC.@preserve wire LibPipeWire.spa_meta_acquisition_serialize(
-        _acquisition_storage_pointer(metadata),
-        pointer(wire),
-        UInt32(length(wire)),
-    )
-    valid || throw(
-        InvalidStateException(
-            "the acquisition metadata cannot be serialized as Version 2",
-            :unsupported,
-        ),
-    )
-    return wire
-end
-
-"""
-    deserialize_acquisition!(metadata, wire)
-
-Replace a borrowed allocation with a validated canonical Version 2 wire record.
-The destination is unchanged when decoding fails.
-"""
-function deserialize_acquisition!(
-    metadata::AcquisitionMetadata,
-    wire::Vector{UInt8},
-)
-    length(wire) == ACQUISITION_WIRE_SIZE || throw(
-        ArgumentError("the acquisition wire record has the wrong size"),
-    )
-    valid = GC.@preserve wire LibPipeWire.spa_meta_acquisition_deserialize(
-        _acquisition_storage_pointer(metadata),
-        pointer(wire),
-        UInt32(length(wire)),
-    )
-    valid || throw(ArgumentError("the acquisition wire record is invalid"))
-    return metadata
 end
 
 "Return a borrowed byte view of a metadata payload."
