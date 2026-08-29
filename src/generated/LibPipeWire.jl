@@ -7589,6 +7589,280 @@ function pw_filter_emit_event(filter, event)
 end
 
 """
+    pw_ndarray_filter_flags
+
+Standalone ndarray filter execution options.
+
+| Enumerator                                  | Note                                                                                                                                                                                                                                                                                                                                                                     |
+| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_RT\\_PROCESS | Invoke processing directly on a PipeWire real-time data-loop thread.  Leave this unset when a runtime requires callbacks on the thread that runs the owned main loop. Runtimes that adopt foreign-created threads, including Julia callbacks created by its cfunction macro, may opt in after ensuring no exception or language unwind can cross the callback boundary.  |
+"""
+const pw_ndarray_filter_flags = UInt32
+const PW_NDARRAY_FILTER_FLAG_NONE = 0 % UInt32
+const PW_NDARRAY_FILTER_FLAG_RT_PROCESS = 1 % UInt32
+
+"""
+    pw_ndarray_filter_metadata
+
+Metadata stored by value in one callback buffer.
+"""
+const pw_ndarray_filter_metadata = UInt32
+const PW_NDARRAY_FILTER_METADATA_NONE = 0 % UInt32
+const PW_NDARRAY_FILTER_METADATA_HEADER = 1 % UInt32
+const PW_NDARRAY_FILTER_METADATA_ACQUISITION = 2 % UInt32
+
+"""
+    pw_ndarray_filter_buffer
+
+One borrowed packed ndarray supplied to a process callback.
+
+`data` is borrowed only until the callback returns. An input payload is read-only even though the common C layout uses `void *`; an output payload is exclusively writable. `size` is the exact declared payload size and `capacity` is the mapped capacity beginning at `data`.
+
+`metadata_available` reports which destination metadata records exist for an output and which records were present and valid for an input. A callback sets `metadata_valid` on outputs after filling the corresponding by-value record. It must not change any other structural field.
+
+| Field                | Note                                               |
+| :------------------- | :------------------------------------------------- |
+| flags                | reserved; zero                                     |
+| metadata\\_available | mask of enum [`pw_ndarray_filter_metadata`](@ref)  |
+| metadata\\_valid     | subset of metadata\\_available                     |
+"""
+struct pw_ndarray_filter_buffer
+    data::NTuple{160, UInt8}
+end
+
+function Base.getproperty(x::Ptr{pw_ndarray_filter_buffer}, f::Symbol)
+    f === :struct_size && return Ptr{UInt32}(x + 0)
+    f === :flags && return Ptr{UInt32}(x + 4)
+    f === :data && return Ptr{Ptr{Cvoid}}(x + 8)
+    f === :size && return Ptr{UInt32}(x + 16)
+    f === :capacity && return Ptr{UInt32}(x + 20)
+    f === :metadata_available && return Ptr{UInt32}(x + 24)
+    f === :metadata_valid && return Ptr{UInt32}(x + 28)
+    f === :header && return Ptr{spa_meta_header}(x + 32)
+    f === :acquisition && return Ptr{spa_meta_acquisition}(x + 64)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::pw_ndarray_filter_buffer, f::Symbol)
+    r = Ref{pw_ndarray_filter_buffer}(x)
+    ptr = Base.unsafe_convert(Ptr{pw_ndarray_filter_buffer}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{pw_ndarray_filter_buffer}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::pw_ndarray_filter_buffer, private::Bool = false)
+    (:struct_size, :flags, :data, :size, :capacity, :metadata_available, :metadata_valid, :header, :acquisition, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+"""
+    pw_ndarray_filter_format
+
+One exact packed ndarray format.
+
+`shape` and `schema` are borrowed during construction and copied by [`pw_ndarray_filter_new`](@ref)(). Integer fields keep the ABI straightforward for generated and foreign-language bindings.
+
+| Field          | Note                                      |
+| :------------- | :---------------------------------------- |
+| element\\_type | one of enum [`spa_element_type`](@ref)    |
+| layout         | one of enum [`spa_ndarray_layout`](@ref)  |
+| rate\\_num     | zero with rate\\_denom zero when absent   |
+| schema         | optional semantic schema                  |
+"""
+struct pw_ndarray_filter_format
+    element_type::UInt32
+    layout::UInt32
+    rate_num::UInt32
+    rate_denom::UInt32
+    n_dimensions::UInt32
+    shape::Ptr{UInt32}
+    schema::Cstring
+end
+
+"""
+    pw_ndarray_filter_port
+
+Static description of one external node port.
+
+| Field     | Note                                 |
+| :-------- | :----------------------------------- |
+| flags     | reserved; zero                       |
+| direction | one of enum [`spa_direction`](@ref)  |
+| reserved  | zero                                 |
+| name      | non-empty local name                 |
+"""
+struct pw_ndarray_filter_port
+    struct_size::UInt32
+    flags::UInt32
+    direction::UInt32
+    reserved::UInt32
+    name::Cstring
+    format::pw_ndarray_filter_format
+end
+
+"""
+    pw_ndarray_filter_events
+
+Callbacks for one standalone ndarray filter.
+
+Lifecycle callbacks are serialized and never overlap `process`. `prepare_process_thread` runs on the exact data-loop thread after streaming starts and before the first process call. It may allocate, compile, block, and touch pages. `deactivate` runs after the data loop has stopped and is also called after a failed preparation attempt.
+
+`process` runs on the PipeWire data loop. It receives every input and output in direction-local declaration order. It returns zero on success or a negative errno-style value. The optional lifecycle callbacks use the same return convention. Callbacks must not retain borrowed pointers or let an exception unwind across the callback boundary.
+"""
+struct pw_ndarray_filter_events
+    version::UInt32
+    prepare_process_thread::Ptr{Cvoid}
+    process::Ptr{Cvoid}
+    deactivate::Ptr{Cvoid}
+end
+
+"""
+    pw_ndarray_filter_config
+
+Immutable construction configuration. All strings and shapes are copied.
+
+| Field         | Note                                            |
+| :------------ | :---------------------------------------------- |
+| remote\\_name | optional PipeWire remote                        |
+| flags         | mask of enum [`pw_ndarray_filter_flags`](@ref)  |
+"""
+struct pw_ndarray_filter_config
+    struct_size::UInt32
+    version::UInt32
+    node_name::Cstring
+    remote_name::Cstring
+    n_ports::UInt32
+    flags::UInt32
+    ports::Ptr{pw_ndarray_filter_port}
+    events::Ptr{pw_ndarray_filter_events}
+    user_data::Ptr{Cvoid}
+end
+
+"""Opaque owner of one main loop, PipeWire filter, and copied declaration."""
+mutable struct pw_ndarray_filter end
+
+"""
+    pw_ndarray_filter_new(config, filter)
+
+Construct an unconnected filter. Calls [`pw_init`](@ref)() once on success.
+
+### Prototype
+```c
+int pw_ndarray_filter_new(const struct pw_ndarray_filter_config *config, struct pw_ndarray_filter **filter);
+```
+"""
+function pw_ndarray_filter_new(config, filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_new(config::Ptr{pw_ndarray_filter_config}, filter::Ptr{Ptr{pw_ndarray_filter}})::Cint
+end
+
+"""
+    pw_ndarray_filter_connect(filter)
+
+Add the configured node and ports to the selected PipeWire remote.
+
+### Prototype
+```c
+int pw_ndarray_filter_connect(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_connect(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_connect(filter::Ptr{pw_ndarray_filter})::Cint
+end
+
+"""
+    pw_ndarray_filter_run(filter)
+
+Run the owned main loop until quit or a filter/process error.
+
+### Prototype
+```c
+int pw_ndarray_filter_run(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_run(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_run(filter::Ptr{pw_ndarray_filter})::Cint
+end
+
+"""
+    pw_ndarray_filter_quit(filter)
+
+Request main-loop termination. This operation may be called by another thread.
+
+### Prototype
+```c
+int pw_ndarray_filter_quit(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_quit(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_quit(filter::Ptr{pw_ndarray_filter})::Cint
+end
+
+"""
+    pw_ndarray_filter_get_state(filter)
+
+Return the most recently observed state without entering the main loop.
+
+### Prototype
+```c
+enum pw_filter_state pw_ndarray_filter_get_state( const struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_get_state(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_get_state(filter::Ptr{pw_ndarray_filter})::pw_filter_state
+end
+
+"""
+    pw_ndarray_filter_get_error(filter)
+
+Return the first asynchronous lifecycle or process error, or zero.
+
+### Prototype
+```c
+int pw_ndarray_filter_get_error(const struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_get_error(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_get_error(filter::Ptr{pw_ndarray_filter})::Cint
+end
+
+"""
+    pw_ndarray_filter_get_node_id(filter)
+
+Return the PipeWire node id, or [`SPA_ID_INVALID`](@ref) before registration.
+
+### Prototype
+```c
+uint32_t pw_ndarray_filter_get_node_id(const struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_get_node_id(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_get_node_id(filter::Ptr{pw_ndarray_filter})::UInt32
+end
+
+"""
+    pw_ndarray_filter_destroy(filter)
+
+Disconnect and destroy the filter, then pair its successful [`pw_init`](@ref)().
+
+The caller must ensure `run` has returned and must destroy on the same thread that constructed and ran the main loop. Passing NULL is allowed.
+
+### Prototype
+```c
+void pw_ndarray_filter_destroy(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_destroy(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_destroy(filter::Ptr{pw_ndarray_filter})::Cvoid
+end
+
+"""
 ` pw_thread_loop`
 
 \\{
@@ -8831,7 +9105,8 @@ properties of SPA\\_TYPE\\_OBJECT\\_PropInfo
 | SPA\\_PROP\\_INFO\\_container   | (Id) type of container if any                                                                                                                                                         |
 | SPA\\_PROP\\_INFO\\_params      | (Bool) is part of params property                                                                                                                                                     |
 | SPA\\_PROP\\_INFO\\_description | (String) User readable description                                                                                                                                                    |
-| SPA\\_PROP\\_INFO\\_group       | (String) the property group name                                                                                                                                                      |
+| SPA\\_PROP\\_INFO\\_group       | (String) the property group path; '/' separates nested UI groups                                                                                                                      |
+| SPA\\_PROP\\_INFO\\_visibility  | (String) UI visibility level, for example "Beginner", "Expert", "Guru", or "Invisible"                                                                                                |
 """
 const spa_prop_info = UInt32
 const SPA_PROP_INFO_START = 0 % UInt32
@@ -8843,6 +9118,7 @@ const SPA_PROP_INFO_container = 5 % UInt32
 const SPA_PROP_INFO_params = 6 % UInt32
 const SPA_PROP_INFO_description = 7 % UInt32
 const SPA_PROP_INFO_group = 8 % UInt32
+const SPA_PROP_INFO_visibility = 9 % UInt32
 
 """
     spa_prop
@@ -9206,54 +9482,54 @@ const SPA_NDARRAY_LAYOUT_COLUMN_MAJOR = 2 % UInt32
 
 properties for audio SPA\\_TYPE\\_OBJECT\\_Format
 
-| Enumerator                                 | Note                                                                          |
-| :----------------------------------------- | :---------------------------------------------------------------------------- |
-| SPA\\_FORMAT\\_mediaType                   | media type (Id enum [`spa_media_type`](@ref))                                 |
-| SPA\\_FORMAT\\_mediaSubtype                | media subtype (Id enum [`spa_media_subtype`](@ref))                           |
-| SPA\\_FORMAT\\_AUDIO\\_format              | audio format, (Id enum [`spa_audio_format`](@ref))                            |
-| SPA\\_FORMAT\\_AUDIO\\_flags               | optional flags (Int)                                                          |
-| SPA\\_FORMAT\\_AUDIO\\_rate                | sample rate (Int)                                                             |
-| SPA\\_FORMAT\\_AUDIO\\_channels            | number of audio channels (Int)                                                |
-| SPA\\_FORMAT\\_AUDIO\\_position            | channel positions (Id enum spa\\_audio\\_position)                            |
-| SPA\\_FORMAT\\_AUDIO\\_iec958Codec         | codec used (IEC958) (Id enum [`spa_audio_iec958_codec`](@ref))                |
-| SPA\\_FORMAT\\_AUDIO\\_bitorder            | bit order (Id enum [`spa_param_bitorder`](@ref))                              |
-| SPA\\_FORMAT\\_AUDIO\\_interleave          | Interleave bytes (Int)                                                        |
-| SPA\\_FORMAT\\_AUDIO\\_bitrate             | bit rate (Int)                                                                |
-| SPA\\_FORMAT\\_AUDIO\\_blockAlign          | audio data block alignment (Int)                                              |
-| SPA\\_FORMAT\\_AUDIO\\_AAC\\_streamFormat  | AAC stream format, (Id enum [`spa_audio_aac_stream_format`](@ref))            |
-| SPA\\_FORMAT\\_AUDIO\\_WMA\\_profile       | WMA profile (Id enum [`spa_audio_wma_profile`](@ref))                         |
-| SPA\\_FORMAT\\_AUDIO\\_AMR\\_bandMode      | AMR band mode (Id enum [`spa_audio_amr_band_mode`](@ref))                     |
-| SPA\\_FORMAT\\_AUDIO\\_MP3\\_channelMode   | MP3 channel mode, (Id enum [`spa_audio_mp3_channel_mode`](@ref))              |
-| SPA\\_FORMAT\\_AUDIO\\_DTS\\_extType       | DTS extension type (Id enum [`spa_audio_dts_ext_type`](@ref))                 |
-| SPA\\_FORMAT\\_VIDEO\\_format              | video format (Id enum [`spa_video_format`](@ref))                             |
-| SPA\\_FORMAT\\_VIDEO\\_modifier            | format modifier (Long) use only with DMA-BUF and omit for other buffer types  |
-| SPA\\_FORMAT\\_VIDEO\\_size                | size (Rectangle)                                                              |
-| SPA\\_FORMAT\\_VIDEO\\_framerate           | frame rate (Fraction)                                                         |
-| SPA\\_FORMAT\\_VIDEO\\_maxFramerate        | maximum frame rate (Fraction)                                                 |
-| SPA\\_FORMAT\\_VIDEO\\_views               | number of views (Int)                                                         |
-| SPA\\_FORMAT\\_VIDEO\\_interlaceMode       | (Id enum [`spa_video_interlace_mode`](@ref))                                  |
-| SPA\\_FORMAT\\_VIDEO\\_pixelAspectRatio    | (Rectangle)                                                                   |
-| SPA\\_FORMAT\\_VIDEO\\_multiviewMode       | (Id enum [`spa_video_multiview_mode`](@ref))                                  |
-| SPA\\_FORMAT\\_VIDEO\\_multiviewFlags      | (Id enum [`spa_video_multiview_flags`](@ref))                                 |
-| SPA\\_FORMAT\\_VIDEO\\_chromaSite          | /Id enum [`spa_video_chroma_site`](@ref))                                     |
-| SPA\\_FORMAT\\_VIDEO\\_colorRange          | /Id enum [`spa_video_color_range`](@ref))                                     |
-| SPA\\_FORMAT\\_VIDEO\\_colorMatrix         | /Id enum [`spa_video_color_matrix`](@ref))                                    |
-| SPA\\_FORMAT\\_VIDEO\\_transferFunction    | /Id enum [`spa_video_transfer_function`](@ref))                               |
-| SPA\\_FORMAT\\_VIDEO\\_colorPrimaries      | /Id enum [`spa_video_color_primaries`](@ref))                                 |
-| SPA\\_FORMAT\\_VIDEO\\_profile             | (Int)                                                                         |
-| SPA\\_FORMAT\\_VIDEO\\_level               |                                                                               |
-| SPA\\_FORMAT\\_VIDEO\\_H264\\_streamFormat | (Id enum [`spa_h264_stream_format`](@ref))                                    |
-| SPA\\_FORMAT\\_VIDEO\\_H264\\_alignment    | (Id enum [`spa_h264_alignment`](@ref))                                        |
-| SPA\\_FORMAT\\_VIDEO\\_H265\\_streamFormat | (Id enum spa\\_h265\\_stream\\_format)                                        |
-| SPA\\_FORMAT\\_VIDEO\\_H265\\_alignment    | (Id enum spa\\_h265\\_alignment)                                              |
-| SPA\\_FORMAT\\_VIDEO\\_deviceId            | dev\\_t identifier (Bytes)                                                    |
-| SPA\\_FORMAT\\_CONTROL\\_types             | possible control types (flags choice Int, mask of enum spa\\_control\\_type)  |
-| SPA\\_FORMAT\\_NDARRAY\\_elementType       | element type (Id enum [`spa_element_type`](@ref))                             |
-| SPA\\_FORMAT\\_NDARRAY\\_shape             | positive logical dimensions (Array of Int)                                    |
-| SPA\\_FORMAT\\_NDARRAY\\_layout            | storage order (Id enum [`spa_ndarray_layout`](@ref))                          |
-| SPA\\_FORMAT\\_NDARRAY\\_rate              | optional sample rate (Fraction)                                               |
-| SPA\\_FORMAT\\_NDARRAY\\_schema            | semantic schema identifier (String)                                           |
-| SPA\\_FORMAT\\_NDARRAY\\_profile           | semantic interpretation profile (String)                                      |
+| Enumerator                                 | Note                                                                                                |
+| :----------------------------------------- | :-------------------------------------------------------------------------------------------------- |
+| SPA\\_FORMAT\\_mediaType                   | media type (Id enum [`spa_media_type`](@ref))                                                       |
+| SPA\\_FORMAT\\_mediaSubtype                | media subtype (Id enum [`spa_media_subtype`](@ref))                                                 |
+| SPA\\_FORMAT\\_AUDIO\\_format              | audio format, (Id enum [`spa_audio_format`](@ref))                                                  |
+| SPA\\_FORMAT\\_AUDIO\\_flags               | optional flags (Int)                                                                                |
+| SPA\\_FORMAT\\_AUDIO\\_rate                | sample rate (Int)                                                                                   |
+| SPA\\_FORMAT\\_AUDIO\\_channels            | number of audio channels (Int)                                                                      |
+| SPA\\_FORMAT\\_AUDIO\\_position            | channel positions (Id enum spa\\_audio\\_position)                                                  |
+| SPA\\_FORMAT\\_AUDIO\\_iec958Codec         | codec used (IEC958) (Id enum [`spa_audio_iec958_codec`](@ref))                                      |
+| SPA\\_FORMAT\\_AUDIO\\_bitorder            | bit order (Id enum [`spa_param_bitorder`](@ref))                                                    |
+| SPA\\_FORMAT\\_AUDIO\\_interleave          | Interleave bytes (Int)                                                                              |
+| SPA\\_FORMAT\\_AUDIO\\_bitrate             | bit rate (Int)                                                                                      |
+| SPA\\_FORMAT\\_AUDIO\\_blockAlign          | audio data block alignment (Int)                                                                    |
+| SPA\\_FORMAT\\_AUDIO\\_AAC\\_streamFormat  | AAC stream format, (Id enum [`spa_audio_aac_stream_format`](@ref))                                  |
+| SPA\\_FORMAT\\_AUDIO\\_WMA\\_profile       | WMA profile (Id enum [`spa_audio_wma_profile`](@ref))                                               |
+| SPA\\_FORMAT\\_AUDIO\\_AMR\\_bandMode      | AMR band mode (Id enum [`spa_audio_amr_band_mode`](@ref))                                           |
+| SPA\\_FORMAT\\_AUDIO\\_MP3\\_channelMode   | MP3 channel mode, (Id enum [`spa_audio_mp3_channel_mode`](@ref))                                    |
+| SPA\\_FORMAT\\_AUDIO\\_DTS\\_extType       | DTS extension type (Id enum [`spa_audio_dts_ext_type`](@ref))                                       |
+| SPA\\_FORMAT\\_VIDEO\\_format              | video format (Id enum [`spa_video_format`](@ref))                                                   |
+| SPA\\_FORMAT\\_VIDEO\\_modifier            | format modifier (Long) use only with DMA-BUF and omit for other buffer types                        |
+| SPA\\_FORMAT\\_VIDEO\\_size                | size (Rectangle)                                                                                    |
+| SPA\\_FORMAT\\_VIDEO\\_framerate           | frame rate (Fraction)                                                                               |
+| SPA\\_FORMAT\\_VIDEO\\_maxFramerate        | maximum frame rate (Fraction)                                                                       |
+| SPA\\_FORMAT\\_VIDEO\\_views               | number of views (Int)                                                                               |
+| SPA\\_FORMAT\\_VIDEO\\_interlaceMode       | (Id enum [`spa_video_interlace_mode`](@ref))                                                        |
+| SPA\\_FORMAT\\_VIDEO\\_pixelAspectRatio    | (Rectangle)                                                                                         |
+| SPA\\_FORMAT\\_VIDEO\\_multiviewMode       | (Id enum [`spa_video_multiview_mode`](@ref))                                                        |
+| SPA\\_FORMAT\\_VIDEO\\_multiviewFlags      | (Id enum [`spa_video_multiview_flags`](@ref))                                                       |
+| SPA\\_FORMAT\\_VIDEO\\_chromaSite          | /Id enum [`spa_video_chroma_site`](@ref))                                                           |
+| SPA\\_FORMAT\\_VIDEO\\_colorRange          | /Id enum [`spa_video_color_range`](@ref))                                                           |
+| SPA\\_FORMAT\\_VIDEO\\_colorMatrix         | /Id enum [`spa_video_color_matrix`](@ref))                                                          |
+| SPA\\_FORMAT\\_VIDEO\\_transferFunction    | /Id enum [`spa_video_transfer_function`](@ref))                                                     |
+| SPA\\_FORMAT\\_VIDEO\\_colorPrimaries      | /Id enum [`spa_video_color_primaries`](@ref))                                                       |
+| SPA\\_FORMAT\\_VIDEO\\_profile             | (Int)                                                                                               |
+| SPA\\_FORMAT\\_VIDEO\\_level               |                                                                                                     |
+| SPA\\_FORMAT\\_VIDEO\\_H264\\_streamFormat | (Id enum [`spa_h264_stream_format`](@ref))                                                          |
+| SPA\\_FORMAT\\_VIDEO\\_H264\\_alignment    | (Id enum [`spa_h264_alignment`](@ref))                                                              |
+| SPA\\_FORMAT\\_VIDEO\\_H265\\_streamFormat | (Id enum spa\\_h265\\_stream\\_format)                                                              |
+| SPA\\_FORMAT\\_VIDEO\\_H265\\_alignment    | (Id enum spa\\_h265\\_alignment)                                                                    |
+| SPA\\_FORMAT\\_VIDEO\\_deviceId            | dev\\_t identifier (Bytes)                                                                          |
+| SPA\\_FORMAT\\_CONTROL\\_types             | possible control types (flags choice Int, mask of enum spa\\_control\\_type)                        |
+| SPA\\_FORMAT\\_NDARRAY\\_elementType       | element type (Id enum [`spa_element_type`](@ref))                                                   |
+| SPA\\_FORMAT\\_NDARRAY\\_shape             | positive logical dimensions (Array of Int)                                                          |
+| SPA\\_FORMAT\\_NDARRAY\\_layout            | storage order (Id enum [`spa_ndarray_layout`](@ref))                                                |
+| SPA\\_FORMAT\\_NDARRAY\\_rate              | optional sample rate (Fraction)                                                                     |
+| SPA\\_FORMAT\\_NDARRAY\\_schema            | semantic schema identifier (String)                                                                 |
+| SPA\\_FORMAT\\_NDARRAY\\_profile           | optional exact per-port interpretation profile (String); changing it requires format renegotiation  |
 """
 const spa_format = UInt32
 const SPA_FORMAT_START = 0 % UInt32

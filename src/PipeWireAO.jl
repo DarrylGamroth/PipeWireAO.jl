@@ -67,6 +67,11 @@ export CoreConnection,
     Node,
     NodeInfo,
     NodeState,
+    NdArrayFilter,
+    NdArrayFilterBuffer,
+    NdArrayFilterBuffers,
+    NdArrayFilterPort,
+    NdArrayFilterState,
     NdArrayFormat,
     NdArrayEnumFormat,
     NdArrayRateChoice,
@@ -206,6 +211,7 @@ export CoreConnection,
     interface_type,
     library_version,
     latency_param,
+    last_error,
     map_data,
     main_loop,
     node_id,
@@ -225,6 +231,7 @@ export CoreConnection,
     pod_value,
     pong!,
     position_snapshot,
+    propagate_metadata!,
     payload_size,
     process_latency_param,
     prop_info_param,
@@ -296,11 +303,12 @@ include("proxy.jl")
 include("spa_types.jl")
 include("spa.jl")
 include("objects.jl")
+include("ndarray_filter.jl")
 include("stream.jl")
 include("filter.jl")
 include("listeners.jl")
 
-const _MINIMUM_JLL_VERSION = v"1.7.0+5"
+const _MINIMUM_JLL_VERSION = v"1.7.0+6"
 
 function __init__()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)

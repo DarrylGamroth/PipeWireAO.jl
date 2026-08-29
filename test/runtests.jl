@@ -3,6 +3,7 @@ using Test
 
 include("aqua.jl")
 include("current_info.jl")
+include("ndarray_filter.jl")
 include("object_callbacks.jl")
 
 struct CountProcess

@@ -4,4 +4,5 @@ PipeWireAO_jll = "cde84cf6-9a21-5ce0-b5e3-1526e778c30b"
 
 [compat]
 Clang = "0.19"
+PipeWireAO_jll = "1.7"
 julia = "1.10"
