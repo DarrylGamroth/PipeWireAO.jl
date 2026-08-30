@@ -730,3 +730,11 @@ end
 const DSP_F32 = RGBA_F32
 
 end # module Video
+"An owned snapshot of SPA header metadata."
+struct BufferHeader
+    flags::UInt32
+    offset::UInt32
+    pts::Int64
+    dts_offset::Int64
+    sequence::UInt64
+end

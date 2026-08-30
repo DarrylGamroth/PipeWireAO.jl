@@ -11,18 +11,20 @@ const _NDARRAY_FILTER_INVALID_ID = typemax(UInt32)
 end
 
 """
-    NdArrayFilterPort(name, direction, format; schema=nothing)
+    NdArrayFilterPort(name, direction, format; schema=nothing, profile=nothing)
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
 the semantic meaning of the ndarray independently of its element type, shape,
-layout, and rate.
+layout, and rate. `profile` identifies the interpretation profile used for
+delivery geometry or another schema-specific mapping.
 """
 struct NdArrayFilterPort{N}
     name::String
     direction::Direction
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
+    profile::Union{Nothing,String}
 end
 
 function NdArrayFilterPort(
@@ -30,6 +32,7 @@ function NdArrayFilterPort(
     direction::Direction,
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
+    profile::Union{Nothing,AbstractString}=nothing,
 ) where {N}
     port_name = _validate_c_string(String(name), "ndarray filter port name")
     isempty(port_name) && throw(ArgumentError("an ndarray filter port name cannot be empty"))
@@ -40,7 +43,20 @@ function NdArrayFilterPort(
         isempty(value) && throw(ArgumentError("an ndarray filter port schema cannot be empty"))
         value
     end
-    return NdArrayFilterPort{N}(port_name, direction, format, semantic_schema)
+    interpretation_profile = if profile === nothing
+        nothing
+    else
+        value = _validate_c_string(String(profile), "ndarray filter port profile")
+        isempty(value) && throw(ArgumentError("an ndarray filter port profile cannot be empty"))
+        value
+    end
+    return NdArrayFilterPort{N}(
+        port_name,
+        direction,
+        format,
+        semantic_schema,
+        interpretation_profile,
+    )
 end
 
 """
@@ -104,6 +120,66 @@ capacity(buffer::NdArrayFilterBuffer) = Int(unsafe_load(_native_buffer(buffer).c
 "Return a borrowed byte view of an ndarray callback payload."
 function bytes(buffer::NdArrayFilterBuffer)
     return UnsafeArray(data_pointer(buffer), (payload_size(buffer),))
+end
+
+"Return copied SPA header metadata, or `nothing` when absent or invalid."
+function buffer_header(buffer::NdArrayFilterBuffer)
+    native = _native_buffer(buffer)
+    valid = unsafe_load(native.metadata_valid)
+    iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && return nothing
+    header = unsafe_load(native.header)
+    return BufferHeader(
+        header.flags,
+        header.offset,
+        header.pts,
+        header.dts_offset,
+        header.seq,
+    )
+end
+
+"""
+    set_buffer_header!(buffer, header)
+
+Set valid SPA header metadata on a writable ndarray callback buffer. The
+destination buffer must provide header metadata.
+"""
+function set_buffer_header!(buffer::NdArrayFilterBuffer{true}, header::BufferHeader)
+    native = _native_buffer(buffer)
+    available = unsafe_load(native.metadata_available)
+    iszero(available & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && throw(
+        InvalidStateException("the ndarray callback buffer has no header metadata", :no_metadata),
+    )
+    unsafe_store!(
+        native.header,
+        LibPipeWire.spa_meta_header(
+            header.flags,
+            header.offset,
+            header.pts,
+            header.dts_offset,
+            header.sequence,
+        ),
+    )
+    unsafe_store!(
+        native.metadata_valid,
+        unsafe_load(native.metadata_valid) |
+        LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER,
+    )
+    return buffer
+end
+
+"""
+    set_output_available!(buffer, available)
+
+Choose whether the standalone ndarray filter publishes this output after the
+current callback. An unavailable output buffer is retained and presented to a
+later callback. Outputs are available by default on every callback.
+"""
+function set_output_available!(buffer::NdArrayFilterBuffer{true}, available::Bool)
+    native = _native_buffer(buffer)
+    flags = unsafe_load(native.flags)
+    unavailable = LibPipeWire.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE
+    unsafe_store!(native.flags, available ? flags & ~unavailable : flags | unavailable)
+    return buffer
 end
 
 """
@@ -233,18 +309,20 @@ end
 function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
     names = getfield.(ports, :name)
     schemas = getfield.(ports, :schema)
+    profiles = getfield.(ports, :profile)
     shapes = Vector{Vector{UInt32}}(undef, length(ports))
     native = Vector{LibPipeWire.pw_ndarray_filter_port}(undef, length(ports))
     for index in eachindex(ports)
         shapes[index] = collect(UInt32, ports[index].format.shape)
     end
-    GC.@preserve names schemas shapes begin
+    GC.@preserve names schemas profiles shapes begin
         for index in eachindex(ports)
             port = ports[index]
             format = port.format
             rate_num, rate_denom = format.rate === nothing ?
                 (UInt32(0), UInt32(0)) : (format.rate.num, format.rate.denom)
             schema = schemas[index]
+            profile = profiles[index]
             native[index] = LibPipeWire.pw_ndarray_filter_port(
                 UInt32(sizeof(LibPipeWire.pw_ndarray_filter_port)),
                 UInt32(0),
@@ -259,11 +337,12 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
                     UInt32(length(shapes[index])),
                     pointer(shapes[index]),
                     schema === nothing ? C_NULL : pointer(schema),
+                    profile === nothing ? C_NULL : pointer(profile),
                 ),
             )
         end
     end
-    return (; names, schemas, shapes, native)
+    return (; names, schemas, profiles, shapes, native)
 end
 
 function NdArrayFilter(

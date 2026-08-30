@@ -208,12 +208,14 @@ end
     native = PipeWireAO.LibPipeWire
 
     @test sizeof(native.pw_ndarray_filter_buffer) == 160
-    @test sizeof(native.pw_ndarray_filter_format) == 40
-    @test sizeof(native.pw_ndarray_filter_port) == 64
+    @test sizeof(native.pw_ndarray_filter_format) == 48
+    @test sizeof(native.pw_ndarray_filter_port) == 72
     @test sizeof(native.pw_ndarray_filter_events) == 32
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_NONE == UInt32(0)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE == UInt32(1)
     @test native.PW_NDARRAY_FILTER_METADATA_HEADER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_METADATA_ACQUISITION == UInt32(2)
 
@@ -244,6 +246,7 @@ end
                 UInt32(1),
                 pointer(shape),
                 pointer(schemas[1]),
+                C_NULL,
             ),
         )
     end
@@ -270,6 +273,59 @@ end
     @test native.pw_ndarray_filter_get_error(result[]) == 0
     @test native.pw_ndarray_filter_get_node_id(result[]) == typemax(UInt32)
     native.pw_ndarray_filter_destroy(result[])
+end
+
+@testset "ndarray callback metadata and conditional output" begin
+    native = PipeWireAO.LibPipeWire
+    metadata = native.PW_NDARRAY_FILTER_METADATA_HEADER
+    input_data = UInt8[1]
+    output_data = UInt8[0]
+    input = native_ndarray_filter_buffer(
+        input_data;
+        available=metadata,
+        valid=metadata,
+        sequence=29,
+    )
+    output = native_ndarray_filter_buffer(output_data; available=metadata)
+    GC.@preserve input_data output_data input output begin
+        inputs = NdArrayFilterBuffers{false}(Ptr{Cvoid}(pointer(input)), UInt32(1))
+        outputs = NdArrayFilterBuffers{true}(Ptr{Cvoid}(pointer(output)), UInt32(1))
+        input_buffer = inputs[1]
+        output_buffer = outputs[1]
+
+        @test buffer_header(input_buffer) == BufferHeader(UInt32(0), UInt32(0), 10, 0, 29)
+        @test buffer_header(output_buffer) === nothing
+        replacement = BufferHeader(UInt32(3), UInt32(0), 12, -2, 31)
+        @test set_buffer_header!(output_buffer, replacement) === output_buffer
+        @test buffer_header(output_buffer) == replacement
+
+        @test set_output_available!(output_buffer, false) === output_buffer
+        @test unsafe_load(pointer(output).flags) ==
+              native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE
+        @test set_output_available!(output_buffer, true) === output_buffer
+        @test unsafe_load(pointer(output).flags) == UInt32(0)
+
+        buffer_header(input_buffer)
+        set_buffer_header!(output_buffer, replacement)
+        set_output_available!(output_buffer, false)
+        @test @allocated(buffer_header(input_buffer)) == 0
+        @test @allocated(set_buffer_header!(output_buffer, replacement)) == 0
+        @test @allocated(set_output_available!(output_buffer, true)) == 0
+        @test_throws MethodError set_buffer_header!(input_buffer, replacement)
+        @test_throws MethodError set_output_available!(input_buffer, false)
+    end
+
+    unavailable_output = native_ndarray_filter_buffer(output_data)
+    GC.@preserve output_data unavailable_output begin
+        outputs = NdArrayFilterBuffers{true}(
+            Ptr{Cvoid}(pointer(unavailable_output)),
+            UInt32(1),
+        )
+        @test_throws InvalidStateException set_buffer_header!(
+            outputs[1],
+            BufferHeader(UInt32(0), UInt32(0), 0, 0, 0),
+        )
+    end
 end
 
 @testset "idiomatic ndarray filter wrapper" begin

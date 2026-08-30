@@ -7612,19 +7612,32 @@ const PW_NDARRAY_FILTER_METADATA_HEADER = 1 % UInt32
 const PW_NDARRAY_FILTER_METADATA_ACQUISITION = 2 % UInt32
 
 """
+    pw_ndarray_filter_buffer_flags
+
+Per-callback buffer state controlled by an output callback.
+
+| Enumerator                                                   | Note                                                                                                                                                                                                                                                                     |
+| :----------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_NDARRAY\\_FILTER\\_BUFFER\\_FLAG\\_OUTPUT\\_UNAVAILABLE | Keep this output buffer for a later callback without publishing it.  The helper clears this flag before every callback. It is valid only on output buffers. This permits progressive algorithms to consume several input blocks before publishing one completed output.  |
+"""
+const pw_ndarray_filter_buffer_flags = UInt32
+const PW_NDARRAY_FILTER_BUFFER_FLAG_NONE = 0 % UInt32
+const PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE = 1 % UInt32
+
+"""
     pw_ndarray_filter_buffer
 
 One borrowed packed ndarray supplied to a process callback.
 
 `data` is borrowed only until the callback returns. An input payload is read-only even though the common C layout uses `void *`; an output payload is exclusively writable. `size` is the exact declared payload size and `capacity` is the mapped capacity beginning at `data`.
 
-`metadata_available` reports which destination metadata records exist for an output and which records were present and valid for an input. A callback sets `metadata_valid` on outputs after filling the corresponding by-value record. It must not change any other structural field.
+`metadata_available` reports which destination metadata records exist for an output and which records were present and valid for an input. A callback sets `metadata_valid` on outputs after filling the corresponding by-value record. It may set `PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE` on an output to retain that buffer without publishing it. It must not change any other structural field.
 
-| Field                | Note                                               |
-| :------------------- | :------------------------------------------------- |
-| flags                | reserved; zero                                     |
-| metadata\\_available | mask of enum [`pw_ndarray_filter_metadata`](@ref)  |
-| metadata\\_valid     | subset of metadata\\_available                     |
+| Field                | Note                                                   |
+| :------------------- | :----------------------------------------------------- |
+| flags                | mask of enum [`pw_ndarray_filter_buffer_flags`](@ref)  |
+| metadata\\_available | mask of enum [`pw_ndarray_filter_metadata`](@ref)      |
+| metadata\\_valid     | subset of metadata\\_available                         |
 """
 struct pw_ndarray_filter_buffer
     data::NTuple{160, UInt8}
@@ -7667,7 +7680,7 @@ end
 
 One exact packed ndarray format.
 
-`shape` and `schema` are borrowed during construction and copied by [`pw_ndarray_filter_new`](@ref)(). Integer fields keep the ABI straightforward for generated and foreign-language bindings.
+`shape`, `schema`, and `profile` are borrowed during construction and copied by [`pw_ndarray_filter_new`](@ref)(). Integer fields keep the ABI straightforward for generated and foreign-language bindings.
 
 | Field          | Note                                      |
 | :------------- | :---------------------------------------- |
@@ -7675,6 +7688,7 @@ One exact packed ndarray format.
 | layout         | one of enum [`spa_ndarray_layout`](@ref)  |
 | rate\\_num     | zero with rate\\_denom zero when absent   |
 | schema         | optional semantic schema                  |
+| profile        | optional interpretation profile identity  |
 """
 struct pw_ndarray_filter_format
     element_type::UInt32
@@ -7684,6 +7698,7 @@ struct pw_ndarray_filter_format
     n_dimensions::UInt32
     shape::Ptr{UInt32}
     schema::Cstring
+    profile::Cstring
 end
 
 """
@@ -7714,7 +7729,7 @@ Callbacks for one standalone ndarray filter.
 
 Lifecycle callbacks are serialized and never overlap `process`. `prepare_process_thread` runs on the exact data-loop thread after streaming starts and before the first process call. It may allocate, compile, block, and touch pages. `deactivate` runs after the data loop has stopped and is also called after a failed preparation attempt.
 
-`process` runs on the PipeWire data loop. It receives every input and output in direction-local declaration order. It returns zero on success or a negative errno-style value. The optional lifecycle callbacks use the same return convention. Callbacks must not retain borrowed pointers or let an exception unwind across the callback boundary.
+`process` runs on the PipeWire data loop. It receives every input and output in direction-local declaration order. It returns zero on success or a negative errno-style value. The optional lifecycle callbacks use the same return convention. Callbacks must not retain borrowed pointers or let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
 """
 struct pw_ndarray_filter_events
     version::UInt32
