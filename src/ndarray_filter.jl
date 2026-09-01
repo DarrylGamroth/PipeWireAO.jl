@@ -13,13 +13,13 @@ end
 
 """
     NdArrayFilterPort(name, direction, format;
-                      schema=nothing, profile=nothing, parameter=false)
+                      schema=nothing, parameter=false)
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
 the semantic meaning of the ndarray independently of its element type, shape,
-layout, and rate. `profile` identifies the interpretation profile used for
-delivery geometry or another schema-specific mapping.
+layout, and rate. It must include every schema-specific coordinate or ordering
+meaning needed to interpret the payload.
 
 Set `parameter=true` for a sparse input Parameter Port. A Parameter Port must
 have input direction and a format without a repeated rate. Its buffers are
@@ -30,7 +30,6 @@ struct NdArrayFilterPort{N}
     direction::Direction
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
-    profile::Union{Nothing,String}
     parameter::Bool
 end
 
@@ -39,7 +38,6 @@ function NdArrayFilterPort(
     direction::Direction,
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
-    profile::Union{Nothing,AbstractString}=nothing,
     parameter::Bool=false,
 ) where {N}
     port_name = _validate_c_string(String(name), "ndarray filter port name")
@@ -49,13 +47,6 @@ function NdArrayFilterPort(
     else
         value = _validate_c_string(String(schema), "ndarray filter port schema")
         isempty(value) && throw(ArgumentError("an ndarray filter port schema cannot be empty"))
-        value
-    end
-    interpretation_profile = if profile === nothing
-        nothing
-    else
-        value = _validate_c_string(String(profile), "ndarray filter port profile")
-        isempty(value) && throw(ArgumentError("an ndarray filter port profile cannot be empty"))
         value
     end
     if parameter
@@ -69,7 +60,6 @@ function NdArrayFilterPort(
         direction,
         format,
         semantic_schema,
-        interpretation_profile,
         parameter,
     )
 end
@@ -386,20 +376,18 @@ end
 function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
     names = getfield.(ports, :name)
     schemas = getfield.(ports, :schema)
-    profiles = getfield.(ports, :profile)
     shapes = Vector{Vector{UInt32}}(undef, length(ports))
     native = Vector{LibPipeWire.pw_ndarray_filter_port}(undef, length(ports))
     for index in eachindex(ports)
         shapes[index] = collect(UInt32, ports[index].format.shape)
     end
-    GC.@preserve names schemas profiles shapes begin
+    GC.@preserve names schemas shapes begin
         for index in eachindex(ports)
             port = ports[index]
             format = port.format
             rate_num, rate_denom = format.rate === nothing ?
                 (UInt32(0), UInt32(0)) : (format.rate.num, format.rate.denom)
             schema = schemas[index]
-            profile = profiles[index]
             flags = port.parameter ?
                 LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER : UInt32(0)
             native[index] = LibPipeWire.pw_ndarray_filter_port(
@@ -416,12 +404,11 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
                     UInt32(length(shapes[index])),
                     pointer(shapes[index]),
                     schema === nothing ? C_NULL : pointer(schema),
-                    profile === nothing ? C_NULL : pointer(profile),
                 ),
             )
         end
     end
-    return (; names, schemas, profiles, shapes, native)
+    return (; names, schemas, shapes, native)
 end
 
 function NdArrayFilter(

@@ -243,8 +243,9 @@ end
     native = PipeWireAO.LibPipeWire
 
     @test sizeof(native.pw_ndarray_filter_buffer) == 160
-    @test sizeof(native.pw_ndarray_filter_format) == 48
-    @test sizeof(native.pw_ndarray_filter_port) == 72
+    @test sizeof(native.pw_ndarray_filter_format) == 40
+    @test sizeof(native.pw_ndarray_filter_port) == 64
+    @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
     @test sizeof(native.pw_ndarray_filter_events) == 40
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
@@ -286,7 +287,6 @@ end
                 UInt32(1),
                 pointer(shape),
                 pointer(schemas[1]),
-                C_NULL,
             ),
         )
     end
@@ -486,6 +486,7 @@ end
         format;
         schema,
     )
+    @test !hasproperty(input_port, :profile)
     prepare_count = Ref(0)
     process_count = Ref(0)
     deactivate_count = Ref(0)

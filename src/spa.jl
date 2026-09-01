@@ -1330,7 +1330,7 @@ function NdArrayFormat(
     )
 end
 
-"A rank-one ndarray profile with canonical row-major layout."
+"A rank-one ndarray format with canonical row-major layout."
 struct VectorFormat
     element_type::NdArray.ElementType
     length::Int32
@@ -1346,7 +1346,7 @@ struct VectorFormat
     end
 end
 
-"A rank-two ndarray profile whose shape is `(rows, columns)`."
+"A rank-two ndarray format whose shape is `(rows, columns)`."
 struct MatrixFormat
     element_type::NdArray.ElementType
     rows::Int32
@@ -1474,7 +1474,7 @@ end
 """
     VectorEnumFormat(default; element_type_alternatives=[], rate_choice=nothing)
 
-Describe an enumerated vector profile. Its layout remains canonical row-major;
+Describe an enumerated vector format. Its layout remains canonical row-major;
 only element type and rate can vary.
 """
 struct VectorEnumFormat
@@ -1498,7 +1498,7 @@ end
     MatrixEnumFormat(default; element_type_alternatives=[],
                      layout_alternatives=[], rate_choice=nothing)
 
-Describe an enumerated matrix profile with explicit row- or column-major
+Describe an enumerated matrix format with explicit row- or column-major
 layout alternatives.
 """
 struct MatrixEnumFormat
