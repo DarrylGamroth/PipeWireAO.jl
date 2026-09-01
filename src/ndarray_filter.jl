@@ -1,4 +1,5 @@
 const _NDARRAY_FILTER_CALLBACK_ERROR = Cint(-Base.Libc.EFAULT)
+const _NDARRAY_FILTER_PARAMETER_BUSY = Cint(-Base.Libc.EBUSY)
 const _NDARRAY_FILTER_INVALID_ID = typemax(UInt32)
 
 "The lifecycle state of a standalone [`NdArrayFilter`](@ref)."
@@ -11,13 +12,18 @@ const _NDARRAY_FILTER_INVALID_ID = typemax(UInt32)
 end
 
 """
-    NdArrayFilterPort(name, direction, format; schema=nothing, profile=nothing)
+    NdArrayFilterPort(name, direction, format;
+                      schema=nothing, profile=nothing, parameter=false)
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
 the semantic meaning of the ndarray independently of its element type, shape,
 layout, and rate. `profile` identifies the interpretation profile used for
 delivery geometry or another schema-specific mapping.
+
+Set `parameter=true` for a sparse input Parameter Port. A Parameter Port must
+have input direction and a format without a repeated rate. Its buffers are
+prepared by `on_parameter` rather than passed to the repeated process callback.
 """
 struct NdArrayFilterPort{N}
     name::String
@@ -25,6 +31,7 @@ struct NdArrayFilterPort{N}
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
     profile::Union{Nothing,String}
+    parameter::Bool
 end
 
 function NdArrayFilterPort(
@@ -33,6 +40,7 @@ function NdArrayFilterPort(
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
     profile::Union{Nothing,AbstractString}=nothing,
+    parameter::Bool=false,
 ) where {N}
     port_name = _validate_c_string(String(name), "ndarray filter port name")
     isempty(port_name) && throw(ArgumentError("an ndarray filter port name cannot be empty"))
@@ -50,22 +58,29 @@ function NdArrayFilterPort(
         isempty(value) && throw(ArgumentError("an ndarray filter port profile cannot be empty"))
         value
     end
+    if parameter
+        direction == DIRECTION_INPUT ||
+            throw(ArgumentError("an ndarray Parameter Port must be an input"))
+        format.rate === nothing ||
+            throw(ArgumentError("an ndarray Parameter Port cannot declare a repeated rate"))
+    end
     return NdArrayFilterPort{N}(
         port_name,
         direction,
         format,
         semantic_schema,
         interpretation_profile,
+        parameter,
     )
 end
 
 """
     NdArrayFilterBuffer
 
-A borrowed ndarray buffer supplied to an [`NdArrayFilter`](@ref) process
-callback. The buffer and its payload are valid only until that callback
-returns. Input buffers are read-only and output buffers are exclusively
-writable.
+A borrowed ndarray buffer supplied to an [`NdArrayFilter`](@ref) process or
+Parameter callback. The buffer and its payload are valid only until that
+callback returns. Input buffers are read-only and output buffers are
+exclusively writable.
 """
 struct NdArrayFilterBuffer{Writable}
     handle::Ptr{Cvoid}
@@ -208,7 +223,7 @@ end
 
 """
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
-                  on_process, on_deactivate=nothing)
+                  on_process, on_parameter=nothing, on_deactivate=nothing)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
 callbacks are ordinary Julia callables:
@@ -216,13 +231,22 @@ callbacks are ordinary Julia callables:
 - `on_prepare(filter)` runs on the process thread before its first frame and
   may perform warmup, compilation, allocation, and page touching.
 - `on_process(filter, inputs, outputs)` receives borrowed direction-local
-  buffer collections. It must not retain them after returning.
+  frame-data buffer collections. Parameter Ports are excluded. It must not
+  retain them after returning.
+- `on_parameter(filter, input_port, parameter)` runs on an owned serial worker
+  for a sparse Parameter Port. `input_port` is its one-based direction-local
+  input index. The callback may allocate and block while copying or preparing
+  a replacement, but it must not retain the borrowed buffer. It returns `true`
+  when accepted or `false` to retain and retry the buffer after a later
+  data-loop cycle. It may overlap `on_process`.
 - `on_deactivate(filter)` runs after processing has stopped.
+
+`on_parameter` is required when any declaration has `parameter=true`.
 
 Callback exceptions are contained at the C boundary and rethrown by
 [`run!`](@ref). The warmed successful process path introduces no locks or
 allocations in this wrapper. `@cfunction` automatically adopts the PipeWire
-data-loop thread before entering Julia. No exception is permitted to escape
+callback thread before entering Julia. No exception is permitted to escape
 back into C; an exceptional callback is contained, terminates processing, and
 is reported by `run!`. This API does not by itself claim hard-real-time Julia
 execution.
@@ -243,8 +267,31 @@ mutable struct NdArrayFilter{Callbacks}
 end
 
 function _record_ndarray_filter_callback_error(filter::NdArrayFilter, error)
-    filter.callback_error[] === nothing && (filter.callback_error[] = error)
+    lock(filter.state_lock) do
+        filter.callback_error[] === nothing && (filter.callback_error[] = error)
+    end
     return nothing
+end
+
+function _ndarray_filter_update_parameter(
+    filter::NdArrayFilter,
+    input_port::UInt32,
+    parameter::Ptr{LibPipeWire.pw_ndarray_filter_buffer},
+)::Cint
+    try
+        accepted = filter.callbacks.on_parameter(
+            filter,
+            Int(input_port) + 1,
+            NdArrayFilterBuffer{false}(Ptr{Cvoid}(parameter)),
+        )
+        accepted isa Bool || throw(
+            ArgumentError("an ndarray Parameter callback must return Bool"),
+        )
+        return accepted ? Cint(0) : _NDARRAY_FILTER_PARAMETER_BUSY
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
 end
 
 function _ndarray_filter_prepare(filter::NdArrayFilter)::Cint
@@ -303,7 +350,18 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         ),
     )
     deactivate = @cfunction(_ndarray_filter_deactivate, Cint, (Ref{T},))
-    return LibPipeWire.pw_ndarray_filter_events(UInt32(0), prepare, process, deactivate)
+    update_parameter = @cfunction(
+        _ndarray_filter_update_parameter,
+        Cint,
+        (Ref{T}, UInt32, Ptr{LibPipeWire.pw_ndarray_filter_buffer}),
+    )
+    return LibPipeWire.pw_ndarray_filter_events(
+        UInt32(1),
+        prepare,
+        process,
+        deactivate,
+        update_parameter,
+    )
 end
 
 function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
@@ -323,9 +381,11 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
                 (UInt32(0), UInt32(0)) : (format.rate.num, format.rate.denom)
             schema = schemas[index]
             profile = profiles[index]
+            flags = port.parameter ?
+                LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER : UInt32(0)
             native[index] = LibPipeWire.pw_ndarray_filter_port(
                 UInt32(sizeof(LibPipeWire.pw_ndarray_filter_port)),
-                UInt32(0),
+                flags,
                 UInt32(port.direction),
                 UInt32(0),
                 pointer(names[index]),
@@ -351,6 +411,7 @@ function NdArrayFilter(
     remote::Union{Nothing,AbstractString}=nothing,
     on_prepare=nothing,
     on_process,
+    on_parameter=nothing,
     on_deactivate=nothing,
 )
     node_name = _validate_c_string(String(name), "ndarray filter name")
@@ -364,7 +425,10 @@ function NdArrayFilter(
     end
     ports = NdArrayFilterPort[port for port in port_declarations]
     isempty(ports) && throw(ArgumentError("an ndarray filter must declare at least one port"))
-    callbacks = (; on_prepare, on_process, on_deactivate)
+    any(port -> port.parameter, ports) && on_parameter === nothing && throw(
+        ArgumentError("on_parameter is required for an ndarray Parameter Port"),
+    )
+    callbacks = (; on_prepare, on_process, on_parameter, on_deactivate)
     filter = NdArrayFilter(
         Ptr{Cvoid}(C_NULL),
         node_name,
@@ -466,7 +530,9 @@ function run!(filter::NdArrayFilter)
             filter.running = false
         end
     end
-    callback_error = filter.callback_error[]
+    callback_error = lock(filter.state_lock) do
+        filter.callback_error[]
+    end
     callback_error === nothing || throw(callback_error)
     _check_result(:pw_ndarray_filter_run, result)
     return filter

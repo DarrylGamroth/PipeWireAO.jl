@@ -7602,6 +7602,19 @@ const PW_NDARRAY_FILTER_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_FLAG_RT_PROCESS = 1 % UInt32
 
 """
+    pw_ndarray_filter_port_flags
+
+Static ndarray-filter Port roles.
+
+| Enumerator                                      | Note                                                                                                                                                                                                                                                          |
+| :---------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_PARAMETER | Sparse input Parameter Port prepared away from repeated processing.  Parameter Ports must be inputs and must not declare a repeated rate. Their buffers are delivered to update\\_parameter() on a bounded worker rather than to the frame process callback.  |
+"""
+const pw_ndarray_filter_port_flags = UInt32
+const PW_NDARRAY_FILTER_PORT_FLAG_NONE = 0 % UInt32
+const PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER = 1 % UInt32
+
+"""
     pw_ndarray_filter_metadata
 
 Metadata stored by value in one callback buffer.
@@ -7706,12 +7719,12 @@ end
 
 Static description of one external node port.
 
-| Field     | Note                                 |
-| :-------- | :----------------------------------- |
-| flags     | reserved; zero                       |
-| direction | one of enum [`spa_direction`](@ref)  |
-| reserved  | zero                                 |
-| name      | non-empty local name                 |
+| Field     | Note                                                 |
+| :-------- | :--------------------------------------------------- |
+| flags     | mask of enum [`pw_ndarray_filter_port_flags`](@ref)  |
+| direction | one of enum [`spa_direction`](@ref)                  |
+| reserved  | zero                                                 |
+| name      | non-empty local name                                 |
 """
 struct pw_ndarray_filter_port
     struct_size::UInt32
@@ -7729,13 +7742,16 @@ Callbacks for one standalone ndarray filter.
 
 Lifecycle callbacks are serialized and never overlap `process`. `prepare_process_thread` runs on the exact data-loop thread after streaming starts and before the first process call. It may allocate, compile, block, and touch pages. `deactivate` runs after the data loop has stopped and is also called after a failed preparation attempt.
 
-`process` runs on the PipeWire data loop. It receives every input and output in direction-local declaration order. It returns zero on success or a negative errno-style value. The optional lifecycle callbacks use the same return convention. Callbacks must not retain borrowed pointers or let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
+`process` runs on the PipeWire data loop. It receives every frame-data input and output in direction-local declaration order, excluding Parameter Ports. `update_parameter` runs on one owned serial worker and receives the original direction-local input-port index. It may allocate and block while copying or preparing a replacement, but it must not retain the borrowed buffer. A return of -EBUSY retains the Parameter buffer and retries it after a later data-loop cycle; any other negative result terminates the filter. At most one buffer is retained per Parameter Port. Newer buffers that arrive while it is retained are immediately returned to their producer.
+
+Callbacks return zero on success or a negative errno-style value, must not retain borrowed pointers, and must not let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
 """
 struct pw_ndarray_filter_events
     version::UInt32
     prepare_process_thread::Ptr{Cvoid}
     process::Ptr{Cvoid}
     deactivate::Ptr{Cvoid}
+    update_parameter::Ptr{Cvoid}
 end
 
 """
