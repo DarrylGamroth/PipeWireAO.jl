@@ -54,6 +54,8 @@ end
 
 function native_ndarray_filter_buffer(
     data::Vector{UInt8};
+    flags=UInt32(0),
+    present::Bool=true,
     available=UInt32(0),
     valid=UInt32(0),
     sequence=UInt64(0),
@@ -67,10 +69,10 @@ function native_ndarray_filter_buffer(
     GC.@preserve storage data begin
         buffer = pointer(storage)
         unsafe_store!(buffer.struct_size, UInt32(sizeof(native.pw_ndarray_filter_buffer)))
-        unsafe_store!(buffer.flags, UInt32(0))
-        unsafe_store!(buffer.data, Ptr{Cvoid}(pointer(data)))
-        unsafe_store!(buffer.size, UInt32(length(data)))
-        unsafe_store!(buffer.capacity, UInt32(length(data)))
+        unsafe_store!(buffer.flags, flags)
+        unsafe_store!(buffer.data, present ? Ptr{Cvoid}(pointer(data)) : C_NULL)
+        unsafe_store!(buffer.size, present ? UInt32(length(data)) : UInt32(0))
+        unsafe_store!(buffer.capacity, present ? UInt32(length(data)) : UInt32(0))
         unsafe_store!(buffer.metadata_available, available)
         unsafe_store!(buffer.metadata_valid, valid)
         unsafe_store!(
@@ -247,10 +249,12 @@ end
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS == UInt32(2)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE == UInt32(2)
     @test native.PW_NDARRAY_FILTER_METADATA_HEADER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_METADATA_ACQUISITION == UInt32(2)
 
@@ -407,6 +411,7 @@ end
         input_buffer = inputs[1]
         output_buffer = outputs[1]
 
+        @test input_available(input_buffer)
         @test buffer_header(input_buffer) == BufferHeader(UInt32(0), UInt32(0), 10, 0, 29)
         @test buffer_header(output_buffer) === nothing
         replacement = BufferHeader(UInt32(3), UInt32(0), 12, -2, 31)
@@ -420,13 +425,32 @@ end
         @test unsafe_load(pointer(output).flags) == UInt32(0)
 
         buffer_header(input_buffer)
+        input_available(input_buffer)
         set_buffer_header!(output_buffer, replacement)
         set_output_available!(output_buffer, false)
         @test @allocated(buffer_header(input_buffer)) == 0
+        @test @allocated(input_available(input_buffer)) == 0
         @test @allocated(set_buffer_header!(output_buffer, replacement)) == 0
         @test @allocated(set_output_available!(output_buffer, true)) == 0
         @test_throws MethodError set_buffer_header!(input_buffer, replacement)
         @test_throws MethodError set_output_available!(input_buffer, false)
+    end
+
+    unavailable_input = native_ndarray_filter_buffer(
+        input_data;
+        flags=native.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE,
+        present=false,
+    )
+    GC.@preserve input_data unavailable_input begin
+        inputs = NdArrayFilterBuffers{false}(
+            Ptr{Cvoid}(pointer(unavailable_input)),
+            UInt32(1),
+        )
+        input_buffer = inputs[1]
+        @test !input_available(input_buffer)
+        input_available(input_buffer)
+        @test @allocated(input_available(input_buffer)) == 0
+        @test_throws InvalidStateException data_pointer(input_buffer)
     end
 
     unavailable_output = native_ndarray_filter_buffer(output_data)
@@ -528,6 +552,15 @@ end
     @test_throws InvalidStateException run!(remote_filter)
     close(remote_filter)
     @test_throws InvalidStateException connect!(remote_filter)
+
+    independent_filter = NdArrayFilter(
+        "test.idiomatic.ndarray.independent-inputs",
+        (input_port, output_port);
+        on_process=NdArrayFilterProcessRecorder(Ref(0)),
+        independent_inputs=true,
+    )
+    @test isopen(independent_filter)
+    close(independent_filter)
 end
 
 @testset "ndarray callback adopts a foreign data-loop thread" begin

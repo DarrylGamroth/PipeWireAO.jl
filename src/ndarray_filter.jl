@@ -98,6 +98,19 @@ struct NdArrayFilterBuffers{Writable} <: AbstractVector{NdArrayFilterBuffer{Writ
     count::UInt32
 end
 
+"""
+    input_available(buffer::NdArrayFilterBuffer{false}) -> Bool
+
+Return whether this input has a newly arrived buffer in the current callback.
+An unavailable input appears only when the filter was constructed with
+`independent_inputs=true`; its payload must not be accessed.
+"""
+@inline function input_available(buffer::NdArrayFilterBuffer{false})
+    native = _native_buffer(buffer)
+    unavailable = LibPipeWire.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE
+    return iszero(unsafe_load(native.flags) & unavailable)
+end
+
 Base.size(buffers::NdArrayFilterBuffers) = (Int(buffers.count),)
 Base.length(buffers::NdArrayFilterBuffers) = Int(buffers.count)
 Base.axes(buffers::NdArrayFilterBuffers) = (Base.OneTo(length(buffers)),)
@@ -223,7 +236,8 @@ end
 
 """
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
-                  on_process, on_parameter=nothing, on_deactivate=nothing)
+                  on_process, on_parameter=nothing, on_deactivate=nothing,
+                  independent_inputs=false)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
 callbacks are ordinary Julia callables:
@@ -240,6 +254,11 @@ callbacks are ordinary Julia callables:
   when accepted or `false` to retain and retry the buffer after a later
   data-loop cycle. It may overlap `on_process`.
 - `on_deactivate(filter)` runs after processing has stopped.
+
+With `independent_inputs=true`, `on_process` runs when any frame-data input
+arrives. Every declared input remains present in the collection; call
+[`input_available`](@ref) before accessing its payload. The default preserves
+the lockstep all-input admission contract.
 
 `on_parameter` is required when any declaration has `parameter=true`.
 
@@ -413,6 +432,7 @@ function NdArrayFilter(
     on_process,
     on_parameter=nothing,
     on_deactivate=nothing,
+    independent_inputs::Bool=false,
 )
     node_name = _validate_c_string(String(name), "ndarray filter name")
     isempty(node_name) && throw(ArgumentError("an ndarray filter name cannot be empty"))
@@ -450,7 +470,9 @@ function NdArrayFilter(
                 pointer(node_name),
                 remote_name === nothing ? C_NULL : pointer(remote_name),
                 UInt32(length(storage.native)),
-                LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS,
+                LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
+                (independent_inputs ?
+                 LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS : UInt32(0)),
                 pointer(storage.native),
                 pointer(events),
                 pointer_from_objref(filter),

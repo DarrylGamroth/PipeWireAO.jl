@@ -7600,6 +7600,7 @@ Standalone ndarray filter execution options.
 const pw_ndarray_filter_flags = UInt32
 const PW_NDARRAY_FILTER_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_FLAG_RT_PROCESS = 1 % UInt32
+const PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS = 2 % UInt32
 
 """
     pw_ndarray_filter_port_flags
@@ -7636,6 +7637,7 @@ Per-callback buffer state controlled by an output callback.
 const pw_ndarray_filter_buffer_flags = UInt32
 const PW_NDARRAY_FILTER_BUFFER_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE = 1 % UInt32
+const PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE = 2 % UInt32
 
 """
     pw_ndarray_filter_buffer
