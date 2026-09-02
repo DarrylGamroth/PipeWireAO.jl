@@ -941,15 +941,6 @@ struct BufferChunk
     flags::Int32
 end
 
-"An owned snapshot of SPA header metadata."
-struct BufferHeader
-    flags::UInt32
-    offset::UInt32
-    pts::Int64
-    dts_offset::Int64
-    sequence::UInt64
-end
-
 "An owned rectangular metadata region."
 struct BufferRegion
     x::Int32

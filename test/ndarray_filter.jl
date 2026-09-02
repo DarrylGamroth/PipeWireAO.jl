@@ -54,6 +54,8 @@ end
 
 function native_ndarray_filter_buffer(
     data::Vector{UInt8};
+    flags=UInt32(0),
+    present::Bool=true,
     available=UInt32(0),
     valid=UInt32(0),
     sequence=UInt64(0),
@@ -67,10 +69,10 @@ function native_ndarray_filter_buffer(
     GC.@preserve storage data begin
         buffer = pointer(storage)
         unsafe_store!(buffer.struct_size, UInt32(sizeof(native.pw_ndarray_filter_buffer)))
-        unsafe_store!(buffer.flags, UInt32(0))
-        unsafe_store!(buffer.data, Ptr{Cvoid}(pointer(data)))
-        unsafe_store!(buffer.size, UInt32(length(data)))
-        unsafe_store!(buffer.capacity, UInt32(length(data)))
+        unsafe_store!(buffer.flags, flags)
+        unsafe_store!(buffer.data, present ? Ptr{Cvoid}(pointer(data)) : C_NULL)
+        unsafe_store!(buffer.size, present ? UInt32(length(data)) : UInt32(0))
+        unsafe_store!(buffer.capacity, present ? UInt32(length(data)) : UInt32(0))
         unsafe_store!(buffer.metadata_available, available)
         unsafe_store!(buffer.metadata_valid, valid)
         unsafe_store!(
@@ -112,6 +114,22 @@ end
 
 function invoke_ndarray_filter_deactivate(events, filter::T) where {T<:NdArrayFilter}
     return ccall(events.deactivate, Cint, (Ref{T},), filter)
+end
+
+function invoke_ndarray_filter_parameter(
+    events,
+    filter::T,
+    input_port::UInt32,
+    parameter::Vector{NativeNdArrayFilterBuffer},
+) where {T<:NdArrayFilter}
+    return GC.@preserve parameter ccall(
+        events.update_parameter,
+        Cint,
+        (Ref{T}, UInt32, Ptr{NativeNdArrayFilterBuffer}),
+        filter,
+        input_port,
+        pointer(parameter),
+    )
 end
 
 mutable struct ForeignNdArrayFilterInvocation{T<:NdArrayFilter}
@@ -175,6 +193,23 @@ struct NdArrayFilterThreadRecorder
     pool::Base.RefValue{Symbol}
 end
 
+struct NdArrayFilterParameterRecorder
+    count::Base.RefValue{Int}
+    input_port::Base.RefValue{Int}
+    value::Base.RefValue{UInt8}
+end
+
+function (callback::NdArrayFilterParameterRecorder)(
+    ::NdArrayFilter,
+    input_port::Int,
+    parameter::NdArrayFilterBuffer{false},
+)
+    callback.count[] += 1
+    callback.input_port[] = input_port
+    callback.value[] = bytes(parameter)[1]
+    return callback.count[] > 1
+end
+
 function (callback::NdArrayFilterThreadRecorder)(
     ::NdArrayFilter,
     inputs::NdArrayFilterBuffers{false},
@@ -210,10 +245,17 @@ end
     @test sizeof(native.pw_ndarray_filter_buffer) == 160
     @test sizeof(native.pw_ndarray_filter_format) == 40
     @test sizeof(native.pw_ndarray_filter_port) == 64
-    @test sizeof(native.pw_ndarray_filter_events) == 32
+    @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
+    @test sizeof(native.pw_ndarray_filter_events) == 40
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS == UInt32(2)
+    @test native.PW_NDARRAY_FILTER_PORT_FLAG_NONE == UInt32(0)
+    @test native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_NONE == UInt32(0)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE == UInt32(1)
+    @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE == UInt32(2)
     @test native.PW_NDARRAY_FILTER_METADATA_HEADER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_METADATA_ACQUISITION == UInt32(2)
 
@@ -222,9 +264,10 @@ end
     schemas = ["org.pipewireao.test.ndarray/1"]
     events = [
         native.pw_ndarray_filter_events(
-            UInt32(0),
+            UInt32(1),
             C_NULL,
             NDARRAY_FILTER_TEST_PROCESS,
+            C_NULL,
             C_NULL,
         ),
     ]
@@ -272,6 +315,157 @@ end
     native.pw_ndarray_filter_destroy(result[])
 end
 
+@testset "ndarray Parameter Port callback" begin
+    native = PipeWireAO.LibPipeWire
+    format = NdArrayFormat(NdArray.U8, (1,); layout=NdArray.COLUMN_MAJOR)
+    repeated_format = NdArrayFormat(
+        NdArray.U8,
+        (1,);
+        layout=NdArray.COLUMN_MAJOR,
+        rate=SPA.Fraction(UInt32(1), UInt32(1)),
+    )
+    @test_throws ArgumentError NdArrayFilterPort(
+        "parameter",
+        PipeWireAO.DIRECTION_OUTPUT,
+        format;
+        parameter=true,
+    )
+    @test_throws ArgumentError NdArrayFilterPort(
+        "parameter",
+        PipeWireAO.DIRECTION_INPUT,
+        repeated_format;
+        parameter=true,
+    )
+    parameter_port = NdArrayFilterPort(
+        "parameter",
+        PipeWireAO.DIRECTION_INPUT,
+        format;
+        parameter=true,
+    )
+    @test parameter_port.parameter
+    @test_throws ArgumentError NdArrayFilter(
+        "test.ndarray.parameter.missing-callback",
+        (parameter_port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+    )
+
+    recorder = NdArrayFilterParameterRecorder(Ref(0), Ref(0), Ref(UInt8(0)))
+    filter = NdArrayFilter(
+        "test.ndarray.parameter",
+        (parameter_port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        on_parameter=recorder,
+    )
+    events = PipeWireAO._ndarray_filter_events(filter)
+    storage = PipeWireAO._native_ndarray_filter_ports(NdArrayFilterPort[parameter_port])
+    @test events.version == UInt32(1)
+    @test events.update_parameter != C_NULL
+    @test only(storage.native).flags == native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER
+
+    parameter_data = UInt8[23]
+    parameter = native_ndarray_filter_buffer(parameter_data)
+    GC.@preserve parameter_data parameter begin
+        @test invoke_ndarray_filter_parameter(events, filter, UInt32(0), parameter) ==
+              -Base.Libc.EBUSY
+        @test invoke_ndarray_filter_parameter(events, filter, UInt32(0), parameter) == 0
+    end
+    @test recorder.count[] == 2
+    @test recorder.input_port[] == 1
+    @test recorder.value[] == 23
+    close(filter)
+
+    invalid_filter = NdArrayFilter(
+        "test.ndarray.parameter.invalid-result",
+        (parameter_port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        on_parameter=(filter, input_port, parameter) -> nothing,
+    )
+    invalid_events = PipeWireAO._ndarray_filter_events(invalid_filter)
+    GC.@preserve parameter_data parameter begin
+        @test invoke_ndarray_filter_parameter(
+            invalid_events,
+            invalid_filter,
+            UInt32(0),
+            parameter,
+        ) == -Base.Libc.EFAULT
+    end
+    @test invalid_filter.callback_error[] isa ArgumentError
+    close(invalid_filter)
+end
+
+@testset "ndarray callback metadata and conditional output" begin
+    native = PipeWireAO.LibPipeWire
+    metadata = native.PW_NDARRAY_FILTER_METADATA_HEADER
+    input_data = UInt8[1]
+    output_data = UInt8[0]
+    input = native_ndarray_filter_buffer(
+        input_data;
+        available=metadata,
+        valid=metadata,
+        sequence=29,
+    )
+    output = native_ndarray_filter_buffer(output_data; available=metadata)
+    GC.@preserve input_data output_data input output begin
+        inputs = NdArrayFilterBuffers{false}(Ptr{Cvoid}(pointer(input)), UInt32(1))
+        outputs = NdArrayFilterBuffers{true}(Ptr{Cvoid}(pointer(output)), UInt32(1))
+        input_buffer = inputs[1]
+        output_buffer = outputs[1]
+
+        @test input_available(input_buffer)
+        @test buffer_header(input_buffer) == BufferHeader(UInt32(0), UInt32(0), 10, 0, 29)
+        @test buffer_header(output_buffer) === nothing
+        replacement = BufferHeader(UInt32(3), UInt32(0), 12, -2, 31)
+        @test set_buffer_header!(output_buffer, replacement) === output_buffer
+        @test buffer_header(output_buffer) == replacement
+
+        @test set_output_available!(output_buffer, false) === output_buffer
+        @test unsafe_load(pointer(output).flags) ==
+              native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE
+        @test set_output_available!(output_buffer, true) === output_buffer
+        @test unsafe_load(pointer(output).flags) == UInt32(0)
+
+        buffer_header(input_buffer)
+        input_available(input_buffer)
+        set_buffer_header!(output_buffer, replacement)
+        set_output_available!(output_buffer, false)
+        @test @allocated(buffer_header(input_buffer)) == 0
+        @test @allocated(input_available(input_buffer)) == 0
+        @test @allocated(set_buffer_header!(output_buffer, replacement)) == 0
+        @test @allocated(set_output_available!(output_buffer, true)) == 0
+        @test_throws MethodError set_buffer_header!(input_buffer, replacement)
+        @test_throws MethodError set_output_available!(input_buffer, false)
+    end
+
+    unavailable_input = native_ndarray_filter_buffer(
+        input_data;
+        flags=native.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE,
+        present=false,
+    )
+    GC.@preserve input_data unavailable_input begin
+        inputs = NdArrayFilterBuffers{false}(
+            Ptr{Cvoid}(pointer(unavailable_input)),
+            UInt32(1),
+        )
+        input_buffer = inputs[1]
+        @test !input_available(input_buffer)
+        input_available(input_buffer)
+        @test @allocated(input_available(input_buffer)) == 0
+        @test_throws InvalidStateException data_pointer(input_buffer)
+    end
+
+    unavailable_output = native_ndarray_filter_buffer(output_data)
+    GC.@preserve output_data unavailable_output begin
+        outputs = NdArrayFilterBuffers{true}(
+            Ptr{Cvoid}(pointer(unavailable_output)),
+            UInt32(1),
+        )
+        @test_throws InvalidStateException set_buffer_header!(
+            outputs[1],
+            BufferHeader(UInt32(0), UInt32(0), 0, 0, 0),
+        )
+    end
+end
+
 @testset "idiomatic ndarray filter wrapper" begin
     schema = "org.pipewireao.test.vector/1"
     format = NdArrayFormat(
@@ -292,6 +486,7 @@ end
         format;
         schema,
     )
+    @test !hasproperty(input_port, :profile)
     prepare_count = Ref(0)
     process_count = Ref(0)
     deactivate_count = Ref(0)
@@ -358,6 +553,15 @@ end
     @test_throws InvalidStateException run!(remote_filter)
     close(remote_filter)
     @test_throws InvalidStateException connect!(remote_filter)
+
+    independent_filter = NdArrayFilter(
+        "test.idiomatic.ndarray.independent-inputs",
+        (input_port, output_port);
+        on_process=NdArrayFilterProcessRecorder(Ref(0)),
+        independent_inputs=true,
+    )
+    @test isopen(independent_filter)
+    close(independent_filter)
 end
 
 @testset "ndarray callback adopts a foreign data-loop thread" begin
@@ -378,6 +582,7 @@ end
     input = native_ndarray_filter_buffer(input_data)
     output = native_ndarray_filter_buffer(output_data)
     GC.@preserve input_data output_data input output begin
+        @test invoke_ndarray_filter_process(events, filter, input, output) == 0
         @test invoke_ndarray_filter_process_on_foreign_thread(
             events,
             filter,
