@@ -3,6 +3,7 @@ module PipeWireAO
 using UnsafeArrays: UnsafeArray
 
 export CoreConnection,
+    ContextModule,
     AcquisitionDomain,
     AcquisitionExposureStart,
     AcquisitionIdentity,
@@ -212,6 +213,7 @@ export CoreConnection,
     library_version,
     latency_param,
     last_error,
+    load_module,
     map_data,
     main_loop,
     node_id,

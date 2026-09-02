@@ -28,6 +28,7 @@ mutable struct Context{LoopType<:AbstractPipeWireLoop}
     state_lock::ReentrantLock
     loaded_modules::Dict{String,Ptr{LibPipeWire.pw_impl_module}}
     core_count::Int
+    module_count::Int
     owns_loop::Bool
 end
 
@@ -53,6 +54,7 @@ function _new_context(loop::AbstractPipeWireLoop, owns_loop::Bool, properties)
         loop,
         ReentrantLock(),
         Dict{String,Ptr{LibPipeWire.pw_impl_module}}(),
+        0,
         0,
         owns_loop,
     )
@@ -153,6 +155,12 @@ function Base.close(context::Context)
                 :open_cores,
             ),
         )
+        context.module_count == 0 || throw(
+            InvalidStateException(
+                "cannot close a PipeWire context while context modules are open",
+                :open_modules,
+            ),
+        )
         handle = context.handle
         context.handle = Ptr{LibPipeWire.pw_context}(C_NULL)
         return handle
@@ -162,6 +170,163 @@ function Base.close(context::Context)
     LibPipeWire.pw_context_destroy(handle)
     _release_context(context.loop)
     context.owns_loop && close(context.loop)
+    return nothing
+end
+
+function _retain_module(context::Context)
+    return lock(context.state_lock) do
+        handle = _require_open(context)
+        context.module_count += 1
+        return handle
+    end
+end
+
+function _release_module(context::Context)
+    return lock(context.state_lock) do
+        context.module_count -= 1
+        @assert context.module_count >= 0
+        return nothing
+    end
+end
+
+"""
+    ContextModule
+
+An owning context-side PipeWire module loaded with [`load_module`](@ref).
+This differs from [`PipeWireModule`](@ref), which is a client proxy bound to
+a module global advertised by a PipeWire core.
+"""
+mutable struct ContextModule{ContextType<:Context}
+    handle::Ptr{LibPipeWire.pw_impl_module}
+    context::ContextType
+    state_lock::ReentrantLock
+    listener::Base.RefValue{LibPipeWire.spa_hook}
+    events::Base.RefValue{LibPipeWire.pw_impl_module_events}
+    retained_context::Bool
+end
+
+function _context_module_freed(context_module::ContextModule)::Cvoid
+    release_context = lock(context_module.state_lock) do
+        context_module.handle = Ptr{LibPipeWire.pw_impl_module}(C_NULL)
+        context_module.retained_context || return false
+        context_module.retained_context = false
+        return true
+    end
+    release_context && _release_module(context_module.context)
+    return nothing
+end
+
+function _context_module_events(::T) where {T<:ContextModule}
+    freed = @cfunction(_context_module_freed, Cvoid, (Ref{T},))
+    return LibPipeWire.pw_impl_module_events(
+        UInt32(0),
+        C_NULL,
+        freed,
+        C_NULL,
+        C_NULL,
+    )
+end
+
+"""
+    load_module(context, name; arguments=nothing, properties=nothing) -> ContextModule
+
+Load a PipeWire implementation module into `context` and return its owning
+handle. `arguments` is the module's PipeWire property serialization; the
+optional `properties` argument supplies extra module-global properties as a
+[`Properties`](@ref) value or an iterable of string pairs.
+
+Call `close` to unload the module deterministically. A module may also destroy
+itself after a runtime failure; in that case `isopen` becomes false and `close`
+remains safe. Close every context module before closing its context.
+"""
+function load_module(
+    context::Context,
+    name::AbstractString;
+    arguments::Union{Nothing,AbstractString}=nothing,
+    properties=nothing,
+)
+    module_name = _validate_c_string(String(name), "PipeWire module name")
+    module_arguments = if arguments === nothing
+        nothing
+    else
+        _validate_c_string(String(arguments), "PipeWire module arguments")
+    end
+    context_handle = _retain_module(context)
+    try
+        return _with_loop_lock(context.loop) do _
+            native_properties = _owned_native_properties(properties)
+            handle = GC.@preserve module_name module_arguments begin
+                LibPipeWire.pw_context_load_module(
+                    context_handle,
+                    pointer(module_name),
+                    module_arguments === nothing ? C_NULL : pointer(module_arguments),
+                    native_properties,
+                )
+            end
+            handle == C_NULL && throw(
+                PipeWireError(:pw_context_load_module, -Base.Libc.errno()),
+            )
+
+            context_module = ContextModule(
+                handle,
+                context,
+                ReentrantLock(),
+                Ref(_zero_hook()),
+                Ref{LibPipeWire.pw_impl_module_events}(),
+                false,
+            )
+            try
+                context_module.events[] = _context_module_events(context_module)
+                GC.@preserve context_module begin
+                    LibPipeWire.pw_impl_module_add_listener(
+                        handle,
+                        Base.unsafe_convert(
+                            Ptr{LibPipeWire.spa_hook},
+                            context_module.listener,
+                        ),
+                        Base.unsafe_convert(
+                            Ptr{LibPipeWire.pw_impl_module_events},
+                            context_module.events,
+                        ),
+                        pointer_from_objref(context_module),
+                    )
+                end
+                context_module.retained_context = true
+                finalizer(close, context_module)
+                return context_module
+            catch
+                LibPipeWire.pw_impl_module_destroy(handle)
+                rethrow()
+            end
+        end
+    catch
+        _release_module(context)
+        rethrow()
+    end
+end
+
+function Base.isopen(context_module::ContextModule)
+    return lock(context_module.state_lock) do
+        context_module.handle != C_NULL
+    end
+end
+
+function Base.close(context_module::ContextModule)
+    handle, release_context = lock(context_module.state_lock) do
+        context_module.handle == C_NULL &&
+            return Ptr{LibPipeWire.pw_impl_module}(C_NULL), false
+        handle = context_module.handle
+        context_module.handle = Ptr{LibPipeWire.pw_impl_module}(C_NULL)
+        release_context = context_module.retained_context
+        context_module.retained_context = false
+        return handle, release_context
+    end
+    handle == C_NULL && return nothing
+
+    _with_loop_lock(context_module.context.loop) do _
+        LibPipeWire.pw_impl_module_destroy(handle)
+    end
+    release_context && _release_module(context_module.context)
     return nothing
 end
 

@@ -432,6 +432,33 @@ end
     @test scoped_name == "PipeWireAO.jl scoped context"
 end
 
+@testset "context modules" begin
+    context = Context()
+    context_module = load_module(
+        context,
+        "libpipewire-module-profiler";
+        properties=Dict("module.description" => "managed module test"),
+    )
+    @test isopen(context_module)
+    @test isconcretetype(typeof(context_module))
+    @test all(isconcretetype, fieldtypes(typeof(context_module)))
+    @test_throws InvalidStateException close(context)
+    close(context_module)
+    @test !isopen(context_module)
+    close(context_module)
+    close(context)
+
+    invalid_context = Context()
+    @test_throws ArgumentError load_module(invalid_context, "bad\0module")
+    @test_throws ArgumentError load_module(
+        invalid_context,
+        "libpipewire-module-profiler";
+        arguments="bad\0arguments",
+    )
+    @test_throws PipeWireError load_module(invalid_context, "module-that-does-not-exist")
+    close(invalid_context)
+end
+
 @testset "properties" begin
     properties = Properties(Dict("media.type" => "Audio", "node.name" => "julia-test"))
     @test isopen(properties)

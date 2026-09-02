@@ -24,6 +24,23 @@ and mapped buffers.
 Native resources follow Julia's `close`/`isopen` conventions and enforce
 PipeWire's parent-before-child lifetime rules.
 
+Context-side modules can be loaded without a command-line helper. The returned
+`ContextModule` owns the module and unloads it on `close`; it is distinct from
+the `PipeWireModule` proxy used to inspect a module global on a connected core.
+
+```julia
+queue = load_module(
+    context,
+    "libpipewire-module-queue";
+    arguments="queue.max-buffers=1 queue.overflow=drop-oldest queue.storage=lease",
+)
+try
+    # Use the queue nodes advertised on the connected PipeWire core.
+finally
+    close(queue)
+end
+```
+
 ```julia
 using PipeWireAO
 
