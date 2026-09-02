@@ -1,6 +1,6 @@
 name = "PipeWireAO"
 uuid = "5d815c25-fdf3-4508-8205-db8be38ea5d0"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
 
 [deps]

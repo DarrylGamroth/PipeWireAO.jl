@@ -532,7 +532,7 @@ Pkg.add("PipeWireAO")
 
 `PipeWireAO_jll` currently supports glibc-based Linux on aarch64 and x86_64.
 On x86_64, baseline, AVX2, and AVX-512 artifacts are selected from the host
-CPU capabilities. PipeWireAO 0.5 requires PipeWireAO_jll 1.7.0+6 or newer.
+CPU capabilities. PipeWireAO 0.6 requires PipeWireAO_jll 1.7.0+8 or newer.
 
 ## Regenerating the C bindings
 
