@@ -184,8 +184,9 @@ end
 
     rate = SPA.Fraction(1_000, 1)
     matrix = MatrixFormat(NdArray.F32_LE, 8, 12; rate)
+    schema = "org.pipewireao.test.wfs-frame/1"
     @test matrix.layout == NdArray.COLUMN_MAJOR
-    matrix_pod = matrix_format(matrix)
+    matrix_pod = matrix_format(matrix; schema)
     parsed_matrix = @inferred MatrixFormat(matrix_pod)
     @test parsed_matrix.element_type == matrix.element_type
     @test parsed_matrix.rows == matrix.rows
@@ -193,6 +194,31 @@ end
     @test parsed_matrix.layout == matrix.layout
     @test parsed_matrix.rate == matrix.rate
     @test payload_size(parsed_matrix) == 8 * 12 * sizeof(Float32)
+    @test ndarray_schema(matrix_pod) == schema
+    @test ndarray_schema(matrix_format(matrix)) === nothing
+    @test_throws ArgumentError matrix_format(matrix; schema="")
+    @test_throws ArgumentError matrix_format(matrix; schema="bad\0schema")
+
+    direct_parameter = pod_value(SPA.Parameter, matrix_pod)
+    choice_body = UInt8[]
+    PipeWireAO._append_bits!(choice_body, UInt32(SPA.CHOICE_NONE))
+    PipeWireAO._append_bits!(choice_body, UInt32(0))
+    append!(choice_body, Pod(schema).data)
+    fixed_schema = PipeWireAO._pod_from_body(
+        UInt32(PipeWireAO.LibPipeWire.SPA_TYPE_Choice),
+        choice_body,
+    )
+    negotiated_properties = SPA.Property[
+        property.key == SPA.FORMAT_NDARRAY_SCHEMA ?
+        SPA.Property(property.key, fixed_schema; flags=property.flags) : property for
+        property in direct_parameter.object.properties
+    ]
+    negotiated_parameter = SPA.Parameter(
+        direct_parameter.object.type,
+        SPA.PARAM_FORMAT,
+        negotiated_properties,
+    )
+    @test ndarray_schema(negotiated_parameter) == schema
 
     row_major = MatrixFormat(NdArray.F64_LE, 3, 5; layout=NdArray.ROW_MAJOR)
     @test MatrixFormat(matrix_format_param(row_major)).layout == NdArray.ROW_MAJOR
@@ -230,8 +256,9 @@ end
             [SPA.Fraction(500, 1), SPA.Fraction(2_000, 1)],
         ),
     )
-    enum_matrix_parameter = matrix_format_param(enum_matrix)
+    enum_matrix_parameter = matrix_format_param(enum_matrix; schema)
     @test enum_matrix_parameter.object.id == SPA.PARAM_ENUM_FORMAT
+    @test ndarray_schema(enum_matrix_parameter) == schema
     element_choice = pod_value(
         SPA.Choice{SPA.Id},
         enum_matrix_parameter.object[SPA.FORMAT_NDARRAY_ELEMENT_TYPE].value,

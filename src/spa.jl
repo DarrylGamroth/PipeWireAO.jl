@@ -1532,8 +1532,7 @@ function _ndarray_property(object::SPA.Object, key::UInt32; required::Bool=true)
     return isempty(matching) ? nothing : only(matching)
 end
 
-"Parse a fixed native ndarray format parameter. Application properties are ignored."
-function NdArrayFormat(parameter::SPA.Parameter)
+function _require_ndarray_format_object(parameter::SPA.Parameter)
     object = parameter.object
     object.type == LibPipeWire.SPA_TYPE_OBJECT_Format ||
         throw(ArgumentError("the SPA parameter is not a format object"))
@@ -1543,6 +1542,12 @@ function NdArrayFormat(parameter::SPA.Parameter)
     media_subtype = pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_MEDIA_SUBTYPE).value)
     media_subtype.value == SPA.MEDIA_SUBTYPE_NDARRAY ||
         throw(ArgumentError("the format media subtype is not ndarray"))
+    return object
+end
+
+"Parse a fixed native ndarray format parameter. Application properties are ignored."
+function NdArrayFormat(parameter::SPA.Parameter)
+    object = _require_ndarray_format_object(parameter)
     element_type = NdArray.ElementType(
         pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_NDARRAY_ELEMENT_TYPE).value).value,
     )
@@ -1579,7 +1584,24 @@ MatrixFormat(format::NdArrayFormat{2}) = MatrixFormat(
 MatrixFormat(parameter::SPA.Parameter) = MatrixFormat(NdArrayFormat(parameter))
 MatrixFormat(pod::Pod) = MatrixFormat(NdArrayFormat(pod))
 
-function ndarray_format(format::NdArrayFormat; id::Integer=LibPipeWire.SPA_PARAM_EnumFormat)
+function _ndarray_schema_property(schema::Union{Nothing,AbstractString})
+    schema === nothing && return nothing
+    value = _validate_c_string(String(schema), "ndarray schema")
+    isempty(value) && throw(ArgumentError("an ndarray schema cannot be empty"))
+    return SPA.Property(SPA.FORMAT_NDARRAY_SCHEMA, value)
+end
+
+"""
+    ndarray_format(format; id=SPA.PARAM_ENUM_FORMAT, schema=nothing)
+
+Build a native ndarray format POD. `schema` optionally identifies the semantic
+meaning and ordering of the payload independently of its representation.
+"""
+function ndarray_format(
+    format::NdArrayFormat;
+    id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+    schema::Union{Nothing,AbstractString}=nothing,
+)
     properties = SPA.Property[
         SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
         SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
@@ -1589,6 +1611,8 @@ function ndarray_format(format::NdArrayFormat; id::Integer=LibPipeWire.SPA_PARAM
     ]
     format.rate === nothing ||
         push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, format.rate))
+    schema_property = _ndarray_schema_property(schema)
+    schema_property === nothing || push!(properties, schema_property)
     return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
 end
 
@@ -1610,6 +1634,7 @@ end
 function ndarray_format(
     format::NdArrayEnumFormat;
     id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
+    schema::Union{Nothing,AbstractString}=nothing,
 )
     default = format.default
     element_type = isempty(format.element_type_alternatives) ?
@@ -1634,8 +1659,50 @@ function ndarray_format(
                _ndarray_enum_rate(default.rate, format.rate_choice)
         push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, rate))
     end
+    schema_property = _ndarray_schema_property(schema)
+    schema_property === nothing || push!(properties, schema_property)
     return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
 end
+
+function _choice_none_value(::Type{T}, pod::Pod) where {T}
+    kind, _, child, values_size = _pod_choice_header(pod)
+    kind == SPA.CHOICE_NONE || throw(
+        ArgumentError("expected a fixed SPA choice, received $kind"),
+    )
+    Int(child.size) == values_size || throw(
+        ArgumentError("a fixed SPA choice must contain exactly one complete value"),
+    )
+    body_offset = 3 * sizeof(LibPipeWire.spa_pod)
+    body = @view pod.data[(body_offset + 1):end]
+    return pod_value(T, _pod_from_body(UInt32(child.type), body))
+end
+
+"""
+    ndarray_schema(parameter) -> Union{Nothing,String}
+
+Return the semantic schema from a native ndarray format parameter. Accept the
+direct string used in an offered format and the fixed `SPA_CHOICE_None` string
+used by negotiated formats. Return `nothing` when no schema is present.
+"""
+function ndarray_schema(parameter::SPA.Parameter)
+    object = _require_ndarray_format_object(parameter)
+    property = _ndarray_property(
+        object,
+        SPA.FORMAT_NDARRAY_SCHEMA;
+        required=false,
+    )
+    property === nothing && return nothing
+    value = property.value
+    type = pod_type(value)
+    if type == LibPipeWire.SPA_TYPE_String
+        return pod_value(String, value)
+    elseif type == LibPipeWire.SPA_TYPE_Choice
+        return _choice_none_value(String, value)
+    end
+    throw(ArgumentError("an ndarray schema must be a string or fixed string choice"))
+end
+
+ndarray_schema(pod::Pod) = ndarray_schema(pod_value(SPA.Parameter, pod))
 
 ndarray_format(format::Union{VectorEnumFormat,MatrixEnumFormat}; kwargs...) =
     ndarray_format(format.format; kwargs...)

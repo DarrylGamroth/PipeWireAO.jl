@@ -181,6 +181,7 @@ end
     FORMAT_NDARRAY_SHAPE = LibPipeWire.SPA_FORMAT_NDARRAY_shape
     FORMAT_NDARRAY_LAYOUT = LibPipeWire.SPA_FORMAT_NDARRAY_layout
     FORMAT_NDARRAY_RATE = LibPipeWire.SPA_FORMAT_NDARRAY_rate
+    FORMAT_NDARRAY_SCHEMA = LibPipeWire.SPA_FORMAT_NDARRAY_schema
 end
 
 # Property keys in SPA properties objects.
