@@ -227,7 +227,7 @@ end
 """
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
                   on_process, on_parameter=nothing, on_deactivate=nothing,
-                  independent_inputs=false)
+                  independent_inputs=false, run_control=false)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
 callbacks are ordinary Julia callables:
@@ -249,6 +249,12 @@ With `independent_inputs=true`, `on_process` runs when any frame-data input
 arrives. Every declared input remains present in the collection; call
 [`input_available`](@ref) before accessing its payload. The default preserves
 the lockstep all-input admission contract.
+
+With `run_control=true`, the node starts stopped and accepts Version 1
+owner-mediated run-control requests through its public PipeWire Props
+parameter. The native owner applies each tokened request and publishes the
+matching completion status. This is intended for an RTC or another explicit
+session controller; the default remains application-controlled execution.
 
 `on_parameter` is required when any declaration has `parameter=true`.
 
@@ -420,6 +426,7 @@ function NdArrayFilter(
     on_parameter=nothing,
     on_deactivate=nothing,
     independent_inputs::Bool=false,
+    run_control::Bool=false,
 )
     node_name = _validate_c_string(String(name), "ndarray filter name")
     isempty(node_name) && throw(ArgumentError("an ndarray filter name cannot be empty"))
@@ -457,9 +464,7 @@ function NdArrayFilter(
                 pointer(node_name),
                 remote_name === nothing ? C_NULL : pointer(remote_name),
                 UInt32(length(storage.native)),
-                LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
-                (independent_inputs ?
-                 LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS : UInt32(0)),
+                _ndarray_filter_flags(independent_inputs, run_control),
                 pointer(storage.native),
                 pointer(events),
                 pointer_from_objref(filter),
@@ -476,6 +481,14 @@ function NdArrayFilter(
     )
     filter.handle = Ptr{Cvoid}(result[])
     return filter
+end
+
+function _ndarray_filter_flags(independent_inputs::Bool, run_control::Bool)
+    return LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
+           (independent_inputs ?
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS : UInt32(0)) |
+           (run_control ?
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL : UInt32(0))
 end
 
 function _require_open(filter::NdArrayFilter)
