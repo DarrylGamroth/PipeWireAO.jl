@@ -389,6 +389,7 @@ end
 struct PropInfo
     name::String
     type::Pod
+    flags::UInt32
     description::String
     labels::Vector{Pair{Int32,String}}
     id::Union{Nothing,UInt32}
@@ -399,6 +400,7 @@ struct PropInfo
     function PropInfo(
         name::AbstractString,
         type::Pod;
+        flags::Integer=0,
         description::AbstractString=name,
         labels=Pair{Int32,String}[],
         id::Union{Nothing,Integer}=nothing,
@@ -409,9 +411,12 @@ struct PropInfo
         owned_labels = Pair{Int32,String}[
             Int32(key) => String(label) for (key, label) in labels
         ]
+        0 <= flags <= typemax(UInt32) ||
+            throw(ArgumentError("property type flags are outside UInt32 range"))
         return new(
             _validate_prop_name(name),
             type,
+            UInt32(flags),
             String(description),
             owned_labels,
             _optional_prop_id(id, "property ID"),

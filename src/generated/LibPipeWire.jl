@@ -3680,6 +3680,22 @@ function pw_conf_section_match_rules(conf, section, props, callback, data)
     @ccall libpipewire_ao.pw_conf_section_match_rules(conf::Ptr{spa_dict}, section::Cstring, props::Ptr{spa_dict}, callback::Ptr{Cvoid}, data::Ptr{Cvoid})::Cint
 end
 
+"""
+    spa_command_body
+
+` spa_pod`
+
+\\{
+"""
+struct spa_command_body
+    body::spa_pod_object_body
+end
+
+struct spa_command
+    pod::spa_pod
+    body::spa_command_body
+end
+
 mutable struct pw_device end
 
 """
@@ -3771,6 +3787,7 @@ Device methods
 | subscribe\\_params | Subscribe to parameter changes  Automatically emit param events for the given ids when they are changed.  This requires X permissions on the device.  # Arguments * `ids`: an array of param ids * `n_ids`: the number of ids in *ids*                                                                                                                                                                                                 |
 | enum\\_params      | Enumerate device parameters  Start enumeration of device parameters. For each param, a param event will be emitted.  This requires X permissions on the device.  # Arguments * `seq`: a sequence number to place in the reply * `id`: the parameter id to enum or [`PW_ID_ANY`](@ref) for all * `start`: the start index or 0 for the first param * `num`: the maximum number of params to retrieve * `filter`: a param filter or NULL |
 | set\\_param        | Set a parameter on the device  This requires W and X permissions on the device.  # Arguments * `id`: the parameter id to set * `flags`: extra parameter flags * `param`: the parameter to set                                                                                                                                                                                                                                          |
+| send\\_command     | Send a command to the device  This requires X and W permissions on the device.  # Arguments * `command`: the command to send                                                                                                                                                                                                                                                                                                           |
 """
 struct pw_device_methods
     version::UInt32
@@ -3778,6 +3795,7 @@ struct pw_device_methods
     subscribe_params::Ptr{Cvoid}
     enum_params::Ptr{Cvoid}
     set_param::Ptr{Cvoid}
+    send_command::Ptr{Cvoid}
 end
 
 """
@@ -3846,6 +3864,23 @@ int pw_device_set_param(struct pw_device *object, uint32_t id, uint32_t flags, c
 """
 function pw_device_set_param(object, id, flags, param)
     @ccall libpipewire_ao.pw_device_set_param(object::Ptr{pw_device}, id::UInt32, flags::UInt32, param::Ptr{spa_pod})::Cint
+end
+
+"""
+    pw_device_send_command(object, command)
+
+pw_device_methods.send_command
+
+# See also
+[`pw_device_methods`](@ref).send\\_command
+
+### Prototype
+```c
+int pw_device_send_command(struct pw_device *object, const struct spa_command *command);
+```
+"""
+function pw_device_send_command(object, command)
+    @ccall libpipewire_ao.pw_device_send_command(object::Ptr{pw_device}, command::Ptr{spa_command})::Cint
 end
 
 """
@@ -4409,22 +4444,6 @@ const SPA_EVENT_NODE_START = 0 % UInt32
 const SPA_EVENT_NODE_START_User = 4096 % UInt32
 const SPA_EVENT_NODE_extra = 4097 % UInt32
 const SPA_EVENT_NODE_START_CUSTOM = 16777216 % UInt32
-
-"""
-    spa_command_body
-
-` spa_pod`
-
-\\{
-"""
-struct spa_command_body
-    body::spa_pod_object_body
-end
-
-struct spa_command
-    pod::spa_pod
-    body::spa_command_body
-end
 
 """
     spa_node_command
@@ -5899,6 +5918,194 @@ int pw_node_send_command(struct pw_node *object, const struct spa_command *comma
 """
 function pw_node_send_command(object, command)
     @ccall libpipewire_ao.pw_node_send_command(object::Ptr{pw_node}, command::Ptr{spa_command})::Cint
+end
+
+"""
+    spa_pod_frame
+
+` spa_pod`
+
+\\{
+"""
+struct spa_pod_frame
+    pod::spa_pod
+    parent::Ptr{spa_pod_frame}
+    offset::UInt32
+    flags::UInt32
+end
+
+struct spa_pod_builder_state
+    offset::UInt32
+    flags::UInt32
+    frame::Ptr{spa_pod_frame}
+end
+
+struct spa_pod_builder_callbacks
+    version::UInt32
+    overflow::Ptr{Cvoid}
+end
+
+struct spa_pod_builder
+    data::Ptr{Cvoid}
+    size::UInt32
+    _padding::UInt32
+    state::spa_pod_builder_state
+    callbacks::spa_callbacks
+end
+
+const pw_ao_run_control_state = UInt32
+const PW_AO_RUN_CONTROL_STATE_UNKNOWN = 0 % UInt32
+const PW_AO_RUN_CONTROL_STATE_STOPPED = 1 % UInt32
+const PW_AO_RUN_CONTROL_STATE_RUNNING = 2 % UInt32
+
+struct pw_ao_run_control_request
+    version::UInt32
+    token::Int64
+    requested_state::pw_ao_run_control_state
+end
+
+struct pw_ao_run_control_status
+    version::UInt32
+    completed_token::Int64
+    result::Int32
+    actual_state::pw_ao_run_control_state
+end
+
+struct pw_ao_reset_control_request
+    version::UInt32
+    token::Int64
+end
+
+struct pw_ao_reset_control_status
+    version::UInt32
+    completed_token::Int64
+    result::Int32
+end
+
+"""
+    pw_ao_run_control_state_as_string(state)
+
+Return the stable wire spelling for a run-control state.
+
+### Prototype
+```c
+const char *pw_ao_run_control_state_as_string( enum pw_ao_run_control_state state);
+```
+"""
+function pw_ao_run_control_state_as_string(state)
+    @ccall libpipewire_ao.pw_ao_run_control_state_as_string(state::pw_ao_run_control_state)::Cstring
+end
+
+"""
+    pw_ao_run_control_build_request(builder, token, requested_state)
+
+Build one complete Version 1 request as SPA\\_PARAM\\_Props.
+
+### Prototype
+```c
+struct spa_pod *pw_ao_run_control_build_request( struct spa_pod_builder *builder, int64_t token, enum pw_ao_run_control_state requested_state);
+```
+"""
+function pw_ao_run_control_build_request(builder, token, requested_state)
+    @ccall libpipewire_ao.pw_ao_run_control_build_request(builder::Ptr{spa_pod_builder}, token::Int64, requested_state::pw_ao_run_control_state)::Ptr{spa_pod}
+end
+
+"""
+    pw_ao_run_control_parse_request(props, request)
+
+Parse one complete request. Unknown non-run-control Props return -ENOENT.
+
+### Prototype
+```c
+int pw_ao_run_control_parse_request( const struct spa_pod *props, struct pw_ao_run_control_request *request);
+```
+"""
+function pw_ao_run_control_parse_request(props, request)
+    @ccall libpipewire_ao.pw_ao_run_control_parse_request(props::Ptr{spa_pod}, request::Ptr{pw_ao_run_control_request})::Cint
+end
+
+"""
+    pw_ao_run_control_build_status(builder, completed_token, result, actual_state)
+
+Build one complete Version 1 status as SPA\\_PARAM\\_Props.
+
+### Prototype
+```c
+struct spa_pod *pw_ao_run_control_build_status( struct spa_pod_builder *builder, int64_t completed_token, int32_t result, enum pw_ao_run_control_state actual_state);
+```
+"""
+function pw_ao_run_control_build_status(builder, completed_token, result, actual_state)
+    @ccall libpipewire_ao.pw_ao_run_control_build_status(builder::Ptr{spa_pod_builder}, completed_token::Int64, result::Int32, actual_state::pw_ao_run_control_state)::Ptr{spa_pod}
+end
+
+"""
+    pw_ao_run_control_parse_status(props, status)
+
+Parse one complete Version 1 status.
+
+### Prototype
+```c
+int pw_ao_run_control_parse_status( const struct spa_pod *props, struct pw_ao_run_control_status *status);
+```
+"""
+function pw_ao_run_control_parse_status(props, status)
+    @ccall libpipewire_ao.pw_ao_run_control_parse_status(props::Ptr{spa_pod}, status::Ptr{pw_ao_run_control_status})::Cint
+end
+
+"""
+    pw_ao_reset_control_build_request(builder, token)
+
+Build one complete Version 1 processing-state reset request.
+
+### Prototype
+```c
+struct spa_pod *pw_ao_reset_control_build_request( struct spa_pod_builder *builder, int64_t token);
+```
+"""
+function pw_ao_reset_control_build_request(builder, token)
+    @ccall libpipewire_ao.pw_ao_reset_control_build_request(builder::Ptr{spa_pod_builder}, token::Int64)::Ptr{spa_pod}
+end
+
+"""
+    pw_ao_reset_control_parse_request(props, request)
+
+Parse one complete reset request. Unknown non-reset Props return -ENOENT.
+
+### Prototype
+```c
+int pw_ao_reset_control_parse_request( const struct spa_pod *props, struct pw_ao_reset_control_request *request);
+```
+"""
+function pw_ao_reset_control_parse_request(props, request)
+    @ccall libpipewire_ao.pw_ao_reset_control_parse_request(props::Ptr{spa_pod}, request::Ptr{pw_ao_reset_control_request})::Cint
+end
+
+"""
+    pw_ao_reset_control_build_status(builder, completed_token, result)
+
+Build one complete Version 1 processing-state reset completion.
+
+### Prototype
+```c
+struct spa_pod *pw_ao_reset_control_build_status( struct spa_pod_builder *builder, int64_t completed_token, int32_t result);
+```
+"""
+function pw_ao_reset_control_build_status(builder, completed_token, result)
+    @ccall libpipewire_ao.pw_ao_reset_control_build_status(builder::Ptr{spa_pod_builder}, completed_token::Int64, result::Int32)::Ptr{spa_pod}
+end
+
+"""
+    pw_ao_reset_control_parse_status(props, status)
+
+Parse one complete reset completion.
+
+### Prototype
+```c
+int pw_ao_reset_control_parse_status( const struct spa_pod *props, struct pw_ao_reset_control_status *status);
+```
+"""
+function pw_ao_reset_control_parse_status(props, status)
+    @ccall libpipewire_ao.pw_ao_reset_control_parse_status(props::Ptr{spa_pod}, status::Ptr{pw_ao_reset_control_status})::Cint
 end
 
 mutable struct pw_port end
@@ -7593,17 +7800,21 @@ end
 
 Standalone ndarray filter execution options.
 
-| Enumerator                                           | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| :--------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PW\\_NDARRAY\\_FILTER\\_FLAG\\_RT\\_PROCESS          | Invoke processing directly on a PipeWire real-time data-loop thread.  Leave this unset when a runtime requires callbacks on the thread that runs the owned main loop. Runtimes that adopt foreign-created threads, including Julia callbacks created by its cfunction macro, may opt in after ensuring no exception or language unwind can cross the callback boundary.                                                                                                                                                                         |
-| PW\\_NDARRAY\\_FILTER\\_FLAG\\_INDEPENDENT\\_INPUTS  | Invoke process when any frame-data input has arrived.  The callback still receives every frame-data input in declaration order. Inputs without an arrival in that cycle carry PW\\_NDARRAY\\_FILTER\\_BUFFER\\_FLAG\\_INPUT\\_UNAVAILABLE and a NULL data pointer. A zero-sized input buffer is consumed as an explicit no-arrival token; this permits a PipeWire driver to satisfy graph-cycle scheduling without inventing a sample. The callback must mark every output unavailable when it only retains an input for a later joined cycle.  |
-| PW\\_NDARRAY\\_FILTER\\_FLAG\\_OWNER\\_RUN\\_CONTROL | Accept Version 1 owner-mediated run-control requests.  The filter connects inactive and publishes its initial stopped status. A controller may then request running or stopped through the node's SPA\\_PARAM\\_Props parameter. The helper applies the request locally and publishes a token-matched completion status.                                                                                                                                                                                                                        |
+| Enumerator                                             | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_RT\\_PROCESS            | Invoke processing directly on a PipeWire real-time data-loop thread.  Leave this unset when a runtime requires callbacks on the thread that runs the owned main loop. Runtimes that adopt foreign-created threads, including Julia callbacks created by its cfunction macro, may opt in after ensuring no exception or language unwind can cross the callback boundary.                                                                                                                                                                         |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_INDEPENDENT\\_INPUTS    | Invoke process when any frame-data input has arrived.  The callback still receives every frame-data input in declaration order. Inputs without an arrival in that cycle carry PW\\_NDARRAY\\_FILTER\\_BUFFER\\_FLAG\\_INPUT\\_UNAVAILABLE and a NULL data pointer. A zero-sized input buffer is consumed as an explicit no-arrival token; this permits a PipeWire driver to satisfy graph-cycle scheduling without inventing a sample. The callback must mark every output unavailable when it only retains an input for a later joined cycle.  |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_OWNER\\_RUN\\_CONTROL   | Accept Version 1 owner-mediated run-control requests.  The filter connects inactive and publishes its initial stopped status. A controller may then request running or stopped through the node's SPA\\_PARAM\\_Props parameter. The helper applies the request locally and publishes a token-matched completion status.                                                                                                                                                                                                                        |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_OWNER\\_PROPERTIES      | Publish and accept the scientific owner's scalar Props surface.  Version 2 property callbacks are required. Property requests execute on the owned main-loop thread. The owner calls [`pw_ndarray_filter_notify_properties`](@ref)() after a requested value becomes active at a frame boundary.                                                                                                                                                                                                                                                |
+| PW\\_NDARRAY\\_FILTER\\_FLAG\\_OWNER\\_RESET\\_CONTROL | Accept Version 1 owner-mediated processing-state reset requests.  Version 2 reset() is required. Reset is accepted only while processing is stopped and no run-control transition is pending.                                                                                                                                                                                                                                                                                                                                                   |
 """
 const pw_ndarray_filter_flags = UInt32
 const PW_NDARRAY_FILTER_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_FLAG_RT_PROCESS = 1 % UInt32
 const PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS = 2 % UInt32
 const PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL = 4 % UInt32
+const PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES = 8 % UInt32
+const PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL = 16 % UInt32
 
 """
     pw_ndarray_filter_port_flags
@@ -7749,6 +7960,13 @@ Lifecycle callbacks are serialized and never overlap `process`. `prepare_process
 `process` runs on the PipeWire data loop. It receives every frame-data input and output in direction-local declaration order, excluding Parameter Ports. `update_parameter` runs on one owned serial worker and receives the original direction-local input-port index. It may allocate and block while copying or preparing a replacement, but it must not retain the borrowed buffer. A return of -EBUSY retains the Parameter buffer and retries it after a later data-loop cycle; any other negative result terminates the filter. At most one buffer is retained per Parameter Port. Newer buffers that arrive while it is retained are immediately returned to their producer.
 
 Callbacks return zero on success or a negative errno-style value, must not retain borrowed pointers, and must not let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
+
+| Field              | Note                                                                    |
+| :----------------- | :---------------------------------------------------------------------- |
+| enum\\_prop\\_info | Return PropInfo at index, or -ENOENT after the final declaration.       |
+| get\\_props        | Return the owner's current requested and active scalar property state.  |
+| set\\_props        | Validate and stage one scalar property request.                         |
+| reset              | Reset processing state while the node is stopped.                       |
 """
 struct pw_ndarray_filter_events
     version::UInt32
@@ -7756,6 +7974,10 @@ struct pw_ndarray_filter_events
     process::Ptr{Cvoid}
     deactivate::Ptr{Cvoid}
     update_parameter::Ptr{Cvoid}
+    enum_prop_info::Ptr{Cvoid}
+    get_props::Ptr{Cvoid}
+    set_props::Ptr{Cvoid}
+    reset::Ptr{Cvoid}
 end
 
 """
@@ -7837,6 +8059,22 @@ int pw_ndarray_filter_quit(struct pw_ndarray_filter *filter);
 """
 function pw_ndarray_filter_quit(filter)
     @ccall libpipewire_ao.pw_ndarray_filter_quit(filter::Ptr{pw_ndarray_filter})::Cint
+end
+
+"""
+    pw_ndarray_filter_notify_properties(filter)
+
+Schedule publication of the owner's current Props on the main-loop thread.
+
+This operation is non-blocking and may be called from a process callback. Notifications are coalesced. It is valid only with PW\\_NDARRAY\\_FILTER\\_FLAG\\_OWNER\\_PROPERTIES.
+
+### Prototype
+```c
+int pw_ndarray_filter_notify_properties(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_notify_properties(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_notify_properties(filter::Ptr{pw_ndarray_filter})::Cint
 end
 
 """

@@ -105,6 +105,7 @@ end
         description="Camera exposure duration",
         group="AcquisitionControl",
         params=true,
+        flags=SPA.PROPERTY_READONLY,
     )
     info_parameter = @inferred prop_info_param(info)
     parsed_info = @inferred SPA.PropInfo(Pod(info_parameter))
@@ -113,6 +114,7 @@ end
     @test parsed_info.description == info.description
     @test parsed_info.group == info.group
     @test parsed_info.params
+    @test parsed_info.flags == SPA.PROPERTY_READONLY
 
     trigger = SPA.PropInfo(
         "genicam.TriggerMode",

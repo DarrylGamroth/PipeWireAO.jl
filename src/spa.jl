@@ -593,9 +593,12 @@ function SPA.PropInfo(pod::Pod)
     group = group_property === nothing ? nothing : pod_value(String, group_property.value)
     params_property = get(object, SPA.PROP_INFO_PARAMS, nothing)
     params = params_property === nothing ? false : pod_value(Bool, params_property.value)
+    type_property = get(object, SPA.PROP_INFO_TYPE, nothing)
+    type_property === nothing && throw(ArgumentError("SPA property type is missing"))
     return SPA.PropInfo(
         name,
-        _required_property(object, SPA.PROP_INFO_TYPE, "SPA property type");
+        type_property.value;
+        flags=type_property.flags,
         description,
         labels,
         id=_optional_id_property(object, SPA.PROP_INFO_ID),
@@ -633,7 +636,7 @@ function prop_info_param(info::SPA.PropInfo)
     properties = SPA.Property[
         SPA.Property(SPA.PROP_INFO_NAME, info.name),
         SPA.Property(SPA.PROP_INFO_DESCRIPTION, info.description),
-        SPA.Property(SPA.PROP_INFO_TYPE, info.type),
+        SPA.Property(SPA.PROP_INFO_TYPE, info.type; flags=info.flags),
     ]
     info.id === nothing || push!(
         properties,

@@ -132,6 +132,47 @@ function invoke_ndarray_filter_parameter(
     )
 end
 
+function invoke_ndarray_filter_prop_info(events, filter::T, index::UInt32) where {T<:NdArrayFilter}
+    result = Ref{Ptr{PipeWireAO.LibPipeWire.spa_pod}}(C_NULL)
+    status = ccall(
+        events.enum_prop_info,
+        Cint,
+        (Ref{T}, UInt32, Ref{Ptr{PipeWireAO.LibPipeWire.spa_pod}}),
+        filter,
+        index,
+        result,
+    )
+    return status, result[]
+end
+
+function invoke_ndarray_filter_get_props(events, filter::T) where {T<:NdArrayFilter}
+    result = Ref{Ptr{PipeWireAO.LibPipeWire.spa_pod}}(C_NULL)
+    status = ccall(
+        events.get_props,
+        Cint,
+        (Ref{T}, Ref{Ptr{PipeWireAO.LibPipeWire.spa_pod}}),
+        filter,
+        result,
+    )
+    return status, result[]
+end
+
+
+function invoke_ndarray_filter_set_props(events, filter::T, properties::Pod) where {T<:NdArrayFilter}
+    return ccall(
+        events.set_props,
+        Cint,
+        (Ref{T}, Ptr{PipeWireAO.LibPipeWire.spa_pod}),
+        filter,
+        PipeWireAO._pod_pointer(properties),
+    )
+end
+
+
+function invoke_ndarray_filter_reset(events, filter::T) where {T<:NdArrayFilter}
+    return ccall(events.reset, Cint, (Ref{T},), filter)
+end
+
 mutable struct ForeignNdArrayFilterInvocation{T<:NdArrayFilter}
     events::PipeWireAO.LibPipeWire.pw_ndarray_filter_events
     filter::T
@@ -246,12 +287,14 @@ end
     @test sizeof(native.pw_ndarray_filter_format) == 40
     @test sizeof(native.pw_ndarray_filter_port) == 64
     @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
-    @test sizeof(native.pw_ndarray_filter_events) == 40
+    @test sizeof(native.pw_ndarray_filter_events) == 72
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
     @test native.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS == UInt32(2)
     @test native.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL == UInt32(4)
+    @test native.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES == UInt32(8)
+    @test native.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL == UInt32(16)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_NONE == UInt32(0)
@@ -265,9 +308,13 @@ end
     schemas = ["org.pipewireao.test.ndarray/1"]
     events = [
         native.pw_ndarray_filter_events(
-            UInt32(1),
+            UInt32(2),
             C_NULL,
             NDARRAY_FILTER_TEST_PROCESS,
+            C_NULL,
+            C_NULL,
+            C_NULL,
+            C_NULL,
             C_NULL,
             C_NULL,
         ),
@@ -359,7 +406,7 @@ end
     )
     events = PipeWireAO._ndarray_filter_events(filter)
     storage = PipeWireAO._native_ndarray_filter_ports(NdArrayFilterPort[parameter_port])
-    @test events.version == UInt32(1)
+    @test events.version == UInt32(2)
     @test events.update_parameter != C_NULL
     @test only(storage.native).flags == native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER
 
@@ -467,6 +514,70 @@ end
     end
 end
 
+@testset "ndarray owner properties and reset callbacks" begin
+    format = NdArrayFormat(NdArray.U8, (1,); layout=NdArray.COLUMN_MAJOR)
+    port = NdArrayFilterPort("input", PipeWireAO.DIRECTION_INPUT, format)
+    requested = Ref(1.0)
+    active = Ref(1.0)
+    resets = Ref(0)
+    info = SPA.PropInfo(
+        "algorithm:gain",
+        Pod(SPA.Choice(SPA.CHOICE_RANGE, Float64[1.0, 0.0, 10.0]));
+        description="Algorithm gain",
+    )
+    filter = NdArrayFilter(
+        "test.ndarray.owner-properties",
+        (port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        property_info=(info,),
+        on_get_properties=filter -> SPA.Props(
+            "algorithm:gain.requested" => requested[],
+            "algorithm:gain.active" => active[],
+        ),
+        on_properties=(filter, properties) -> begin
+            pair = only(properties.values)
+            first(pair) == "algorithm:gain" || throw(ArgumentError("unexpected property"))
+            requested[] = pod_value(Float64, last(pair))
+        end,
+        on_reset=filter -> (resets[] += 1),
+        reset_control=true,
+    )
+    events = PipeWireAO._ndarray_filter_events(filter)
+
+    status, pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(0))
+    @test status == 0
+    @test SPA.PropInfo(PipeWireAO._copy_pod(pointer)).name == "algorithm:gain"
+    @test first(invoke_ndarray_filter_prop_info(events, filter, UInt32(1))) ==
+          -Base.Libc.ENOENT
+
+    status, pointer = invoke_ndarray_filter_get_props(events, filter)
+    @test status == 0
+    properties = SPA.Props(PipeWireAO._copy_pod(pointer))
+    @test pod_value(Float64, properties.values[1].second) == 1.0
+    @test pod_value(Float64, properties.values[2].second) == 1.0
+
+    request = Pod(props_param(SPA.Props("algorithm:gain" => 2.5)))
+    @test invoke_ndarray_filter_set_props(events, filter, request) == 0
+    @test requested[] == 2.5
+    @test active[] == 1.0
+    @test invoke_ndarray_filter_reset(events, filter) == 0
+    @test resets[] == 1
+    close(filter)
+
+    @test_throws ArgumentError NdArrayFilter(
+        "test.ndarray.missing-property-getter",
+        (port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        property_info=(info,),
+    )
+    @test_throws ArgumentError NdArrayFilter(
+        "test.ndarray.missing-reset",
+        (port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        reset_control=true,
+    )
+end
+
 @testset "idiomatic ndarray filter wrapper" begin
     schema = "org.pipewireao.test.vector/1"
     format = NdArrayFormat(
@@ -563,12 +674,14 @@ end
     )
     @test isopen(independent_filter)
     close(independent_filter)
-    @test PipeWireAO._ndarray_filter_flags(false, false) ==
+    @test PipeWireAO._ndarray_filter_flags(false, false, false, false) ==
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS
-    @test PipeWireAO._ndarray_filter_flags(true, true) ==
+    @test PipeWireAO._ndarray_filter_flags(true, true, true, true) ==
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS |
-          PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL
+          PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL |
+          PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES |
+          PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL
 end
 
 @testset "ndarray callback adopts a foreign data-loop thread" begin

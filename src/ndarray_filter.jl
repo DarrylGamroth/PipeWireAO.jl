@@ -227,7 +227,10 @@ end
 """
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
                   on_process, on_parameter=nothing, on_deactivate=nothing,
-                  independent_inputs=false, run_control=false)
+                  property_info=SPA.PropInfo[], on_get_properties=nothing,
+                  on_properties=nothing, on_reset=nothing,
+                  independent_inputs=false, run_control=false,
+                  reset_control=false)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
 callbacks are ordinary Julia callables:
@@ -256,6 +259,17 @@ parameter. The native owner applies each tokened request and publishes the
 matching completion status. This is intended for an RTC or another explicit
 session controller; the default remains application-controlled execution.
 
+`property_info` declares an ordinary scalar `SPA_PARAM_PropInfo` surface.
+When it is non-empty, `on_get_properties(filter)` must return the current
+requested and active values as [`SPA.Props`](@ref), and
+`on_properties(filter, properties)` must validate and stage requests supplied
+as [`SPA.Props`](@ref). Call [`notify_properties!`](@ref) from the process
+callback after a staged request becomes active at a frame boundary.
+
+With `reset_control=true`, `on_reset(filter)` is required. The native owner
+accepts tokened reset requests only while processing is stopped, invokes this
+callback, and publishes a matching completion.
+
 `on_parameter` is required when any declaration has `parameter=true`.
 
 Callback exceptions are contained at the C boundary and rethrown by
@@ -279,6 +293,7 @@ mutable struct NdArrayFilter{Callbacks}
     owner_thread::Int
     connected::Bool
     running::Bool
+    callback_pod::Union{Nothing,Pod}
 end
 
 function _record_ndarray_filter_callback_error(filter::NdArrayFilter, error)
@@ -351,6 +366,79 @@ function _ndarray_filter_deactivate(filter::NdArrayFilter)::Cint
     end
 end
 
+function _store_ndarray_filter_callback_pod!(
+    filter::NdArrayFilter,
+    destination::Ptr{Ptr{LibPipeWire.spa_pod}},
+    value,
+)
+    pod = Pod(value)
+    filter.callback_pod = pod
+    unsafe_store!(destination, _pod_pointer(pod))
+    return Cint(0)
+end
+
+function _ndarray_filter_enum_prop_info(
+    filter::NdArrayFilter,
+    index::UInt32,
+    destination::Ptr{Ptr{LibPipeWire.spa_pod}},
+)::Cint
+    try
+        infos = filter.callbacks.property_info
+        Int(index) < length(infos) || return Cint(-Base.Libc.ENOENT)
+        return _store_ndarray_filter_callback_pod!(
+            filter,
+            destination,
+            prop_info_param(infos[Int(index) + 1]),
+        )
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
+function _ndarray_filter_get_props(
+    filter::NdArrayFilter,
+    destination::Ptr{Ptr{LibPipeWire.spa_pod}},
+)::Cint
+    try
+        properties = filter.callbacks.on_get_properties(filter)
+        properties isa SPA.Props || throw(
+            ArgumentError("an ndarray property getter must return SPA.Props"),
+        )
+        return _store_ndarray_filter_callback_pod!(
+            filter,
+            destination,
+            props_param(properties),
+        )
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
+function _ndarray_filter_set_props(
+    filter::NdArrayFilter,
+    properties::Ptr{LibPipeWire.spa_pod},
+)::Cint
+    try
+        filter.callbacks.on_properties(filter, SPA.Props(_copy_pod(properties)))
+        return Cint(0)
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
+function _ndarray_filter_reset(filter::NdArrayFilter)::Cint
+    try
+        filter.callbacks.on_reset(filter)
+        return Cint(0)
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
 function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
     prepare = @cfunction(_ndarray_filter_prepare, Cint, (Ref{T},))
     process = @cfunction(
@@ -370,12 +458,32 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         Cint,
         (Ref{T}, UInt32, Ptr{LibPipeWire.pw_ndarray_filter_buffer}),
     )
+    enum_prop_info = @cfunction(
+        _ndarray_filter_enum_prop_info,
+        Cint,
+        (Ref{T}, UInt32, Ptr{Ptr{LibPipeWire.spa_pod}}),
+    )
+    get_props = @cfunction(
+        _ndarray_filter_get_props,
+        Cint,
+        (Ref{T}, Ptr{Ptr{LibPipeWire.spa_pod}}),
+    )
+    set_props = @cfunction(
+        _ndarray_filter_set_props,
+        Cint,
+        (Ref{T}, Ptr{LibPipeWire.spa_pod}),
+    )
+    reset = @cfunction(_ndarray_filter_reset, Cint, (Ref{T},))
     return LibPipeWire.pw_ndarray_filter_events(
-        UInt32(1),
+        UInt32(2),
         prepare,
         process,
         deactivate,
         update_parameter,
+        enum_prop_info,
+        get_props,
+        set_props,
+        reset,
     )
 end
 
@@ -425,8 +533,13 @@ function NdArrayFilter(
     on_process,
     on_parameter=nothing,
     on_deactivate=nothing,
+    property_info=SPA.PropInfo[],
+    on_get_properties=nothing,
+    on_properties=nothing,
+    on_reset=nothing,
     independent_inputs::Bool=false,
     run_control::Bool=false,
+    reset_control::Bool=false,
 )
     node_name = _validate_c_string(String(name), "ndarray filter name")
     isempty(node_name) && throw(ArgumentError("an ndarray filter name cannot be empty"))
@@ -442,7 +555,27 @@ function NdArrayFilter(
     any(port -> port.parameter, ports) && on_parameter === nothing && throw(
         ArgumentError("on_parameter is required for an ndarray Parameter Port"),
     )
-    callbacks = (; on_prepare, on_process, on_parameter, on_deactivate)
+    infos = collect(SPA.PropInfo, property_info)
+    properties_enabled = !isempty(infos)
+    properties_enabled && on_get_properties === nothing && throw(
+        ArgumentError("on_get_properties is required when property_info is declared"),
+    )
+    properties_enabled && on_properties === nothing && throw(
+        ArgumentError("on_properties is required when property_info is declared"),
+    )
+    reset_control && on_reset === nothing && throw(
+        ArgumentError("on_reset is required when reset_control=true"),
+    )
+    callbacks = (;
+        on_prepare,
+        on_process,
+        on_parameter,
+        on_deactivate,
+        property_info=infos,
+        on_get_properties,
+        on_properties,
+        on_reset,
+    )
     filter = NdArrayFilter(
         Ptr{Cvoid}(C_NULL),
         node_name,
@@ -452,6 +585,7 @@ function NdArrayFilter(
         Threads.threadid(),
         false,
         false,
+        nothing,
     )
     storage = _native_ndarray_filter_ports(ports)
     events = [_ndarray_filter_events(filter)]
@@ -464,7 +598,12 @@ function NdArrayFilter(
                 pointer(node_name),
                 remote_name === nothing ? C_NULL : pointer(remote_name),
                 UInt32(length(storage.native)),
-                _ndarray_filter_flags(independent_inputs, run_control),
+                _ndarray_filter_flags(
+                    independent_inputs,
+                    run_control,
+                    properties_enabled,
+                    reset_control,
+                ),
                 pointer(storage.native),
                 pointer(events),
                 pointer_from_objref(filter),
@@ -483,12 +622,21 @@ function NdArrayFilter(
     return filter
 end
 
-function _ndarray_filter_flags(independent_inputs::Bool, run_control::Bool)
+function _ndarray_filter_flags(
+    independent_inputs::Bool,
+    run_control::Bool,
+    properties::Bool,
+    reset_control::Bool,
+)
     return LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
            (independent_inputs ?
             LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS : UInt32(0)) |
            (run_control ?
-            LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL : UInt32(0))
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL : UInt32(0)) |
+           (properties ?
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES : UInt32(0)) |
+           (reset_control ?
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL : UInt32(0))
 end
 
 function _require_open(filter::NdArrayFilter)
@@ -566,6 +714,18 @@ function quit!(filter::NdArrayFilter)
         LibPipeWire.pw_ndarray_filter_quit(_require_open(filter))
     end
     _check_result(:pw_ndarray_filter_quit, result)
+    return filter
+end
+
+"Schedule publication of active scalar properties after frame-boundary adoption."
+function notify_properties!(filter::NdArrayFilter)
+    handle = Ptr{LibPipeWire.pw_ndarray_filter}(filter.handle)
+    handle == C_NULL &&
+        throw(InvalidStateException("the ndarray filter is closed", :closed))
+    _check_result(
+        :pw_ndarray_filter_notify_properties,
+        LibPipeWire.pw_ndarray_filter_notify_properties(handle),
+    )
     return filter
 end
 
