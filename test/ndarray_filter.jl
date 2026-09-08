@@ -525,11 +525,16 @@ end
         Pod(SPA.Choice(SPA.CHOICE_RANGE, Float64[1.0, 0.0, 10.0]));
         description="Algorithm gain",
     )
+    pole_info = SPA.PropInfo(
+        "algorithm:pole",
+        Pod(SPA.Choice(SPA.CHOICE_RANGE, Float64[0.5, 0.0, 1.0]));
+        description="Algorithm pole",
+    )
     filter = NdArrayFilter(
         "test.ndarray.owner-properties",
         (port,);
         on_process=(filter, inputs, outputs) -> nothing,
-        property_info=(info,),
+        property_info=(info, pole_info),
         on_get_properties=filter -> SPA.Props(
             "algorithm:gain.requested" => requested[],
             "algorithm:gain.active" => active[],
@@ -544,10 +549,15 @@ end
     )
     events = PipeWireAO._ndarray_filter_events(filter)
 
-    status, pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(0))
+    status, gain_pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(0))
     @test status == 0
-    @test SPA.PropInfo(PipeWireAO._copy_pod(pointer)).name == "algorithm:gain"
-    @test first(invoke_ndarray_filter_prop_info(events, filter, UInt32(1))) ==
+    status, pole_pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(1))
+    @test status == 0
+    @test gain_pointer != pole_pointer
+    GC.gc()
+    @test SPA.PropInfo(PipeWireAO._copy_pod(gain_pointer)).name == "algorithm:gain"
+    @test SPA.PropInfo(PipeWireAO._copy_pod(pole_pointer)).name == "algorithm:pole"
+    @test first(invoke_ndarray_filter_prop_info(events, filter, UInt32(2))) ==
           -Base.Libc.ENOENT
 
     status, pointer = invoke_ndarray_filter_get_props(events, filter)

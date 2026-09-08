@@ -293,6 +293,7 @@ mutable struct NdArrayFilter{Callbacks}
     owner_thread::Int
     connected::Bool
     running::Bool
+    property_info_pods::Vector{Pod}
     callback_pod::Union{Nothing,Pod}
 end
 
@@ -383,13 +384,10 @@ function _ndarray_filter_enum_prop_info(
     destination::Ptr{Ptr{LibPipeWire.spa_pod}},
 )::Cint
     try
-        infos = filter.callbacks.property_info
-        Int(index) < length(infos) || return Cint(-Base.Libc.ENOENT)
-        return _store_ndarray_filter_callback_pod!(
-            filter,
-            destination,
-            prop_info_param(infos[Int(index) + 1]),
-        )
+        pods = filter.property_info_pods
+        Int(index) < length(pods) || return Cint(-Base.Libc.ENOENT)
+        unsafe_store!(destination, _pod_pointer(pods[Int(index) + 1]))
+        return Cint(0)
     catch error
         _record_ndarray_filter_callback_error(filter, error)
         return _NDARRAY_FILTER_CALLBACK_ERROR
@@ -576,6 +574,7 @@ function NdArrayFilter(
         on_properties,
         on_reset,
     )
+    property_info_pods = Pod[Pod(prop_info_param(info)) for info in infos]
     filter = NdArrayFilter(
         Ptr{Cvoid}(C_NULL),
         node_name,
@@ -585,6 +584,7 @@ function NdArrayFilter(
         Threads.threadid(),
         false,
         false,
+        property_info_pods,
         nothing,
     )
     storage = _native_ndarray_filter_ports(ports)
