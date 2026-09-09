@@ -314,7 +314,7 @@ include("stream.jl")
 include("filter.jl")
 include("listeners.jl")
 
-const _MINIMUM_JLL_VERSION = v"1.7.0+13"
+const _MINIMUM_JLL_VERSION = v"1.7.0+14"
 
 function __init__()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)

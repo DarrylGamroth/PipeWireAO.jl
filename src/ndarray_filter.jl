@@ -229,7 +229,7 @@ end
                   on_process, on_parameter=nothing, on_deactivate=nothing,
                   property_info=SPA.PropInfo[], on_get_properties=nothing,
                   on_properties=nothing, on_reset=nothing,
-                  independent_inputs=false, run_control=false,
+                  independent_inputs=false, fifo_inputs=false, run_control=false,
                   reset_control=false)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
@@ -252,6 +252,15 @@ With `independent_inputs=true`, `on_process` runs when any frame-data input
 arrives. Every declared input remains present in the collection; call
 [`input_available`](@ref) before accessing its payload. The default preserves
 the lockstep all-input admission contract.
+
+With `fifo_inputs=true`, the native helper admits frame-data buffers in FIFO
+order and retains an admitted input until it has been presented to
+`on_process`. Missing peer inputs or output buffers apply bounded back pressure
+through the negotiated PipeWire buffer pools. After a callback, already queued
+input requests another graph cycle. The graph driver must service PipeWire
+`RequestProcess` commands, or provide its next scheduled cycle, for that input
+to make progress without another arrival. The default uses PipeWire's
+drain-to-latest admission policy.
 
 With `run_control=true`, the node starts stopped and accepts Version 1
 owner-mediated run-control requests through its public PipeWire Props
@@ -536,6 +545,7 @@ function NdArrayFilter(
     on_properties=nothing,
     on_reset=nothing,
     independent_inputs::Bool=false,
+    fifo_inputs::Bool=false,
     run_control::Bool=false,
     reset_control::Bool=false,
 )
@@ -600,6 +610,7 @@ function NdArrayFilter(
                 UInt32(length(storage.native)),
                 _ndarray_filter_flags(
                     independent_inputs,
+                    fifo_inputs,
                     run_control,
                     properties_enabled,
                     reset_control,
@@ -624,6 +635,7 @@ end
 
 function _ndarray_filter_flags(
     independent_inputs::Bool,
+    fifo_inputs::Bool,
     run_control::Bool,
     properties::Bool,
     reset_control::Bool,
@@ -631,6 +643,8 @@ function _ndarray_filter_flags(
     return LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
            (independent_inputs ?
             LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS : UInt32(0)) |
+           (fifo_inputs ?
+            LibPipeWire.PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS : UInt32(0)) |
            (run_control ?
             LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL : UInt32(0)) |
            (properties ?

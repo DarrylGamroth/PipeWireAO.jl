@@ -295,6 +295,7 @@ end
     @test native.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL == UInt32(4)
     @test native.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES == UInt32(8)
     @test native.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL == UInt32(16)
+    @test native.PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS == UInt32(32)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER == UInt32(1)
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_NONE == UInt32(0)
@@ -684,11 +685,20 @@ end
     )
     @test isopen(independent_filter)
     close(independent_filter)
-    @test PipeWireAO._ndarray_filter_flags(false, false, false, false) ==
+    fifo_filter = NdArrayFilter(
+        "test.idiomatic.ndarray.fifo-inputs",
+        (input_port, output_port);
+        on_process=NdArrayFilterProcessRecorder(Ref(0)),
+        fifo_inputs=true,
+    )
+    @test isopen(fifo_filter)
+    close(fifo_filter)
+    @test PipeWireAO._ndarray_filter_flags(false, false, false, false, false) ==
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS
-    @test PipeWireAO._ndarray_filter_flags(true, true, true, true) ==
+    @test PipeWireAO._ndarray_filter_flags(true, true, true, true, true) ==
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_RT_PROCESS |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS |
+          PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL
