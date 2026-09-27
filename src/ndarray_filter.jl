@@ -2,6 +2,62 @@ const _NDARRAY_FILTER_CALLBACK_ERROR = Cint(-Base.Libc.EFAULT)
 const _NDARRAY_FILTER_PARAMETER_BUSY = Cint(-Base.Libc.EBUSY)
 const _NDARRAY_FILTER_INVALID_ID = typemax(UInt32)
 
+"""
+    NdArrayProgressiveOptions(input_port, region_format;
+                              region_schema, timeout_ns, cpu,
+                              on_abort=(filter, generation, sequence, reason) -> nothing)
+
+Enable progressive-frame processing for one full-frame input port. `input_port`
+is its one-based direction-local input-port index. The helper presents each
+committed fixed-size `region_format` block to `on_process` on its owned worker.
+`region_schema` describes that block and must differ from the transport port's
+schema. `timeout_ns` is the maximum interval without a newly committed region.
+Set `cpu` to a nonnegative CPU index to pin the worker, or `-1` to leave it
+unpinned.
+
+When a frame is cancelled, stale, malformed, or times out, `on_abort` runs on
+the same worker after processing stops. It receives the filter, frame generation,
+frame sequence, and negative errno-style reason, and can reset or drain partial
+owner state. It must not retain callback buffers.
+"""
+struct NdArrayProgressiveOptions{N,Abort}
+    input_port::UInt32
+    region_format::NdArrayFormat{N}
+    region_schema::String
+    timeout_ns::UInt64
+    cpu::Int32
+    on_abort::Abort
+end
+
+function NdArrayProgressiveOptions(
+    input_port::Integer,
+    region_format::NdArrayFormat{N};
+    region_schema::AbstractString,
+    timeout_ns::Integer,
+    cpu::Integer,
+    on_abort=(filter, generation, sequence, reason) -> nothing,
+) where {N}
+    1 <= input_port <= typemax(UInt32) || throw(
+        ArgumentError("a progressive input port must be a one-based UInt32 index"),
+    )
+    1 <= timeout_ns <= typemax(UInt64) || throw(
+        ArgumentError("a progressive timeout must be a positive UInt64 nanosecond interval"),
+    )
+    -1 <= cpu <= typemax(Int32) || throw(
+        ArgumentError("a progressive worker CPU must be -1 or a nonnegative Int32 index"),
+    )
+    schema = _validate_c_string(String(region_schema), "progressive region schema")
+    isempty(schema) && throw(ArgumentError("a progressive region schema cannot be empty"))
+    return NdArrayProgressiveOptions{N,typeof(on_abort)}(
+        UInt32(input_port),
+        region_format,
+        schema,
+        UInt64(timeout_ns),
+        Int32(cpu),
+        on_abort,
+    )
+end
+
 "The lifecycle state of a standalone [`NdArrayFilter`](@ref)."
 @enum NdArrayFilterState::Int32 begin
     NDARRAY_FILTER_STATE_ERROR = LibPipeWire.PW_FILTER_STATE_ERROR
@@ -230,7 +286,7 @@ end
                   property_info=SPA.PropInfo[], on_get_properties=nothing,
                   on_properties=nothing, on_reset=nothing,
                   independent_inputs=false, fifo_inputs=false, run_control=false,
-                  reset_control=false)
+                  reset_control=false, progressive=nothing)
 
 Create an unconnected PipeWire node with exact packed-ndarray ports. The
 callbacks are ordinary Julia callables:
@@ -280,6 +336,12 @@ accepts tokened reset requests only while processing is stopped, invokes this
 callback, and publishes a matching completion.
 
 `on_parameter` is required when any declaration has `parameter=true`.
+
+Set `progressive` to [`NdArrayProgressiveOptions`](@ref) to receive committed
+fixed-size regions from a full-frame transport input. The wrapper enables FIFO
+admission for that input, runs `on_prepare` and `on_process` on the dedicated
+worker, and calls the option's `on_abort` callback when the helper abandons a
+partial frame.
 
 Callback exceptions are contained at the C boundary and rethrown by
 [`run!`](@ref). The warmed successful process path introduces no locks or
@@ -338,6 +400,21 @@ function _ndarray_filter_prepare(filter::NdArrayFilter)::Cint
     try
         callback = filter.callbacks.on_prepare
         callback === nothing || callback(filter)
+        return Cint(0)
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
+function _ndarray_filter_abort_progressive_frame(
+    filter::NdArrayFilter,
+    generation::UInt64,
+    sequence::UInt64,
+    reason::Cint,
+)::Cint
+    try
+        filter.callbacks.on_abort(filter, generation, sequence, Int(reason))
         return Cint(0)
     catch error
         _record_ndarray_filter_callback_error(filter, error)
@@ -446,7 +523,7 @@ function _ndarray_filter_reset(filter::NdArrayFilter)::Cint
     end
 end
 
-function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
+function _ndarray_filter_events(filter::T) where {T<:NdArrayFilter}
     prepare = @cfunction(_ndarray_filter_prepare, Cint, (Ref{T},))
     process = @cfunction(
         _ndarray_filter_process,
@@ -481,9 +558,16 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         (Ref{T}, Ptr{LibPipeWire.spa_pod}),
     )
     reset = @cfunction(_ndarray_filter_reset, Cint, (Ref{T},))
+    prepare_progressive_worker = @cfunction(_ndarray_filter_prepare, Cint, (Ref{T},))
+    abort_progressive_frame = @cfunction(
+        _ndarray_filter_abort_progressive_frame,
+        Cint,
+        (Ref{T}, UInt64, UInt64, Cint),
+    )
+    is_progressive = filter.callbacks.progressive !== nothing
     return LibPipeWire.pw_ndarray_filter_events(
-        UInt32(2),
-        prepare,
+        is_progressive ? UInt32(3) : UInt32(2),
+        is_progressive ? C_NULL : prepare,
         process,
         deactivate,
         update_parameter,
@@ -491,6 +575,8 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         get_props,
         set_props,
         reset,
+        is_progressive ? prepare_progressive_worker : C_NULL,
+        is_progressive ? abort_progressive_frame : C_NULL,
     )
 end
 
@@ -532,6 +618,77 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
     return (; names, schemas, shapes, native)
 end
 
+function _validate_progressive_options(
+    progressive::NdArrayProgressiveOptions,
+    ports::Vector{NdArrayFilterPort},
+)
+    input_ports = filter(port -> port.direction == DIRECTION_INPUT, ports)
+    progressive.input_port <= length(input_ports) || throw(
+        ArgumentError("the progressive input port does not name a declared input"),
+    )
+    transport = input_ports[Int(progressive.input_port)]
+    transport.parameter && throw(
+        ArgumentError("the progressive input port cannot be a Parameter Port"),
+    )
+    count(port -> port.direction == DIRECTION_INPUT && !port.parameter, ports) == 1 || throw(
+        ArgumentError("progressive processing requires exactly one frame-data input"),
+    )
+    any(port -> port.direction == DIRECTION_OUTPUT, ports) || throw(
+        ArgumentError("progressive processing requires at least one output"),
+    )
+    transport.schema === nothing && throw(
+        ArgumentError("the progressive transport port requires a schema"),
+    )
+    progressive.region_schema == transport.schema && throw(
+        ArgumentError("the progressive region schema must differ from the transport port schema"),
+    )
+    region = progressive.region_format
+    format = transport.format
+    typeof(region) === typeof(format) || throw(
+        ArgumentError("the progressive region format must have the transport format rank"),
+    )
+    region.element_type == format.element_type || throw(
+        ArgumentError("the progressive region element type must match the transport port"),
+    )
+    region.layout == format.layout || throw(
+        ArgumentError("the progressive region layout must match the transport port"),
+    )
+    region.rate == format.rate || throw(
+        ArgumentError("the progressive region rate must match the transport port"),
+    )
+    axis = region.layout == NdArray.ROW_MAJOR ? 1 : length(region.shape)
+    for index in eachindex(region.shape)
+        if index == axis
+            format.shape[index] % region.shape[index] == 0 || throw(
+                ArgumentError("the progressive region axis must evenly partition the transport port"),
+            )
+        else
+            region.shape[index] == format.shape[index] || throw(
+                ArgumentError("the progressive region can differ only on its contiguous axis"),
+            )
+        end
+    end
+    return transport
+end
+
+function _native_progressive_format(
+    progressive::NdArrayProgressiveOptions,
+    shape::Vector{UInt32},
+)
+    format = progressive.region_format
+    rate_num, rate_denom = format.rate === nothing ?
+        (UInt32(0), UInt32(0)) : (format.rate.num, format.rate.denom)
+    return LibPipeWire.pw_ndarray_filter_format(
+        UInt32(format.element_type),
+        UInt32(format.layout),
+        rate_num,
+        rate_denom,
+        UInt32(length(shape)),
+        pointer(shape),
+        pointer(progressive.region_schema),
+    )
+end
+
 function NdArrayFilter(
     name::AbstractString,
     port_declarations;
@@ -548,6 +705,7 @@ function NdArrayFilter(
     fifo_inputs::Bool=false,
     run_control::Bool=false,
     reset_control::Bool=false,
+    progressive::Union{Nothing,NdArrayProgressiveOptions}=nothing,
 )
     node_name = _validate_c_string(String(name), "ndarray filter name")
     isempty(node_name) && throw(ArgumentError("an ndarray filter name cannot be empty"))
@@ -574,6 +732,7 @@ function NdArrayFilter(
     reset_control && on_reset === nothing && throw(
         ArgumentError("on_reset is required when reset_control=true"),
     )
+    progressive === nothing || _validate_progressive_options(progressive, ports)
     callbacks = (;
         on_prepare,
         on_process,
@@ -583,6 +742,9 @@ function NdArrayFilter(
         on_get_properties,
         on_properties,
         on_reset,
+        progressive,
+        on_abort=progressive === nothing ?
+                 (filter, generation, sequence, reason) -> nothing : progressive.on_abort,
     )
     property_info_pods = Pod[Pod(prop_info_param(info)) for info in infos]
     filter = NdArrayFilter(
@@ -600,17 +762,19 @@ function NdArrayFilter(
     storage = _native_ndarray_filter_ports(ports)
     events = [_ndarray_filter_events(filter)]
     result = Ref{Ptr{LibPipeWire.pw_ndarray_filter}}(C_NULL)
-    GC.@preserve filter storage events node_name remote_name begin
+    progressive_shape = progressive === nothing ? UInt32[] :
+                        collect(UInt32, progressive.region_format.shape)
+    GC.@preserve filter storage events node_name remote_name progressive progressive_shape begin
         config = Ref(
             LibPipeWire.pw_ndarray_filter_config(
                 UInt32(sizeof(LibPipeWire.pw_ndarray_filter_config)),
-                UInt32(0),
+                progressive === nothing ? UInt32(0) : UInt32(1),
                 pointer(node_name),
                 remote_name === nothing ? C_NULL : pointer(remote_name),
                 UInt32(length(storage.native)),
                 _ndarray_filter_flags(
                     independent_inputs,
-                    fifo_inputs,
+                    fifo_inputs || progressive !== nothing,
                     run_control,
                     properties_enabled,
                     reset_control,
@@ -618,6 +782,13 @@ function NdArrayFilter(
                 pointer(storage.native),
                 pointer(events),
                 pointer_from_objref(filter),
+                progressive === nothing ? UInt32(0) : progressive.input_port - UInt32(1),
+                progressive === nothing ?
+                LibPipeWire.pw_ndarray_filter_format(
+                    UInt32(0), UInt32(0), UInt32(0), UInt32(0), UInt32(0), C_NULL, C_NULL,
+                ) : _native_progressive_format(progressive, progressive_shape),
+                progressive === nothing ? UInt64(0) : progressive.timeout_ns,
+                progressive === nothing ? Int32(0) : progressive.cpu,
             ),
         )
         _check_result(:pw_ndarray_filter_new, LibPipeWire.pw_ndarray_filter_new(config, result))
