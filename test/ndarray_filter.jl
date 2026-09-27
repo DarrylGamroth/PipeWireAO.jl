@@ -779,6 +779,63 @@ end
         progressive,
         NdArrayFilterPort[input_port, output_port],
     ) === input_port
+    @test NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=0,
+        busy_poll=true,
+    ).busy_poll
+    @test_throws ArgumentError NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=-1,
+        busy_poll=true,
+    )
+    @test NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=0,
+        inline=true,
+    ).inline
+    @test_throws ArgumentError NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=-1,
+        inline=true,
+    )
+    @test NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=0,
+        spin_idle=true,
+    ).spin_idle
+    @test_throws ArgumentError NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=-1,
+        spin_idle=true,
+    )
+    @test_throws ArgumentError NdArrayProgressiveOptions(
+        1,
+        region_format;
+        region_schema="org.pipewireao.test.progressive-region/1",
+        timeout_ns=1,
+        cpu=0,
+        inline=true,
+        spin_idle=true,
+    )
     @test_throws ArgumentError NdArrayProgressiveOptions(
         0,
         region_format;

@@ -4,7 +4,8 @@ const _NDARRAY_FILTER_INVALID_ID = typemax(UInt32)
 
 """
     NdArrayProgressiveOptions(input_port, region_format;
-                              region_schema, timeout_ns, cpu,
+                              region_schema, timeout_ns, cpu, busy_poll=false,
+                              inline=false, spin_idle=false,
                               on_abort=(filter, generation, sequence, reason) -> nothing)
 
 Enable progressive-frame processing for one full-frame input port. `input_port`
@@ -16,6 +17,13 @@ transport frame rate multiplied by the number of regions per frame. `timeout_ns`
 is the maximum interval without a newly committed region.
 Set `cpu` to a nonnegative CPU index to pin the worker, or `-1` to leave it
 unpinned.
+Set `busy_poll=true` only with a pinned worker dedicated to this filter. The
+worker then polls for committed regions while a frame is active.
+Set `inline=true` to complete the frame in the original PipeWire process cycle.
+The filter data-loop thread must be dedicated to this work and is pinned to
+`cpu`. This option is experimental.
+Set `spin_idle=true` to poll for the next frame between callbacks on a
+dedicated pinned CPU. The native worker uses SCHED_OTHER in this mode.
 
 When a frame is cancelled, stale, malformed, or times out, `on_abort` runs on
 the same worker after processing stops. It receives the filter, frame generation,
@@ -28,6 +36,9 @@ struct NdArrayProgressiveOptions{N,Abort}
     region_schema::String
     timeout_ns::UInt64
     cpu::Int32
+    busy_poll::Bool
+    inline::Bool
+    spin_idle::Bool
     on_abort::Abort
 end
 
@@ -37,6 +48,9 @@ function NdArrayProgressiveOptions(
     region_schema::AbstractString,
     timeout_ns::Integer,
     cpu::Integer,
+    busy_poll::Bool=false,
+    inline::Bool=false,
+    spin_idle::Bool=false,
     on_abort=(filter, generation, sequence, reason) -> nothing,
 ) where {N}
     1 <= input_port <= typemax(UInt32) || throw(
@@ -48,6 +62,12 @@ function NdArrayProgressiveOptions(
     -1 <= cpu <= typemax(Int32) || throw(
         ArgumentError("a progressive worker CPU must be -1 or a nonnegative Int32 index"),
     )
+    (busy_poll || inline || spin_idle) && cpu < 0 && throw(
+        ArgumentError("polling and inline processing require a pinned progressive CPU"),
+    )
+    inline && spin_idle && throw(ArgumentError(
+        "inline processing cannot use a separate idle-spinning worker",
+    ))
     schema = _validate_c_string(String(region_schema), "progressive region schema")
     isempty(schema) && throw(ArgumentError("a progressive region schema cannot be empty"))
     return NdArrayProgressiveOptions{N,typeof(on_abort)}(
@@ -56,6 +76,9 @@ function NdArrayProgressiveOptions(
         schema,
         UInt64(timeout_ns),
         Int32(cpu),
+        busy_poll,
+        inline,
+        spin_idle,
         on_abort,
     )
 end
@@ -798,7 +821,12 @@ function NdArrayFilter(
                     run_control,
                     properties_enabled,
                     reset_control,
-                ),
+                ) | (progressive !== nothing && progressive.busy_poll ?
+                     LibPipeWire.PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_BUSY_POLL : UInt32(0)) |
+                    (progressive !== nothing && progressive.inline ?
+                     LibPipeWire.PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_INLINE : UInt32(0)) |
+                    (progressive !== nothing && progressive.spin_idle ?
+                     LibPipeWire.PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_SPIN_IDLE : UInt32(0)),
                 pointer(storage.native),
                 pointer(events),
                 pointer_from_objref(filter),
