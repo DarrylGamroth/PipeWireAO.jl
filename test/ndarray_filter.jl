@@ -751,7 +751,7 @@ end
         NdArray.U8,
         (8, 2);
         layout=NdArray.COLUMN_MAJOR,
-        rate=SPA.Fraction(UInt32(1), UInt32(1)),
+        rate=SPA.Fraction(UInt32(2), UInt32(1)),
     )
     input_port = NdArrayFilterPort(
         "transport",
@@ -795,6 +795,31 @@ end
             cpu=-1,
         ),
         NdArrayFilterPort[input_port, output_port],
+    )
+    @test_throws ArgumentError PipeWireAO._validate_progressive_options(
+        NdArrayProgressiveOptions(
+            1,
+            NdArrayFormat(
+                NdArray.U8,
+                (8, 2);
+                layout=NdArray.COLUMN_MAJOR,
+                rate=SPA.Fraction(UInt32(1), UInt32(1)),
+            );
+            region_schema="org.pipewireao.test.progressive-region/1",
+            timeout_ns=1,
+            cpu=-1,
+        ),
+        NdArrayFilterPort[input_port, output_port],
+    )
+    @test PipeWireAO._progressive_region_rate_matches(
+        SPA.Fraction(typemax(UInt32), typemax(UInt32) - UInt32(1)),
+        SPA.Fraction(typemax(UInt32), (typemax(UInt32) - UInt32(1)) ÷ UInt32(2)),
+        2,
+    )
+    @test !PipeWireAO._progressive_region_rate_matches(
+        SPA.Fraction(typemax(UInt32), UInt32(1)),
+        SPA.Fraction(UInt32(1), typemax(UInt32)),
+        typemax(UInt32),
     )
 
     prepare_count = Ref(0)

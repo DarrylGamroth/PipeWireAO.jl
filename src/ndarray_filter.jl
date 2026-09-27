@@ -11,7 +11,9 @@ Enable progressive-frame processing for one full-frame input port. `input_port`
 is its one-based direction-local input-port index. The helper presents each
 committed fixed-size `region_format` block to `on_process` on its owned worker.
 `region_schema` describes that block and must differ from the transport port's
-schema. `timeout_ns` is the maximum interval without a newly committed region.
+schema. Both formats must declare rates: the region callback rate equals the
+transport frame rate multiplied by the number of regions per frame. `timeout_ns`
+is the maximum interval without a newly committed region.
 Set `cpu` to a nonnegative CPU index to pin the worker, or `-1` to leave it
 unpinned.
 
@@ -653,8 +655,11 @@ function _validate_progressive_options(
     region.layout == format.layout || throw(
         ArgumentError("the progressive region layout must match the transport port"),
     )
-    region.rate == format.rate || throw(
-        ArgumentError("the progressive region rate must match the transport port"),
+    format.rate === nothing && throw(
+        ArgumentError("the progressive transport port must declare a frame rate"),
+    )
+    region.rate === nothing && throw(
+        ArgumentError("the progressive region format must declare a callback rate"),
     )
     axis = region.layout == NdArray.ROW_MAJOR ? 1 : length(region.shape)
     for index in eachindex(region.shape)
@@ -668,7 +673,22 @@ function _validate_progressive_options(
             )
         end
     end
+    region_count = Int(format.shape[axis] ÷ region.shape[axis])
+    _progressive_region_rate_matches(format.rate, region.rate, region_count) || throw(
+        ArgumentError("the progressive region rate must equal the transport frame rate times the region count"),
+    )
     return transport
+end
+
+function _progressive_region_rate_matches(
+    transport_rate::SPA.Fraction,
+    region_rate::SPA.Fraction,
+    region_count::Integer,
+)
+    left = UInt128(region_rate.num) * UInt128(transport_rate.denom)
+    right = UInt128(transport_rate.num) *
+            UInt128(region_rate.denom) * UInt128(region_count)
+    return left == right
 end
 
 function _native_progressive_format(
