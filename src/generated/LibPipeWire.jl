@@ -7379,15 +7379,16 @@ end
 
 ` pw_filter_flags Extra flags that can be used in \\ref pw_filter_connect()  `
 
-| Enumerator                            | Note                                                                                                                                                                                                                                                                                      |
-| :------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PW\\_FILTER\\_FLAG\\_NONE             | no flags                                                                                                                                                                                                                                                                                  |
-| PW\\_FILTER\\_FLAG\\_INACTIVE         | start the filter inactive, [`pw_filter_set_active`](@ref)() needs to be called explicitly                                                                                                                                                                                                 |
-| PW\\_FILTER\\_FLAG\\_DRIVER           | be a driver                                                                                                                                                                                                                                                                               |
-| PW\\_FILTER\\_FLAG\\_RT\\_PROCESS     | call process from the realtime thread. Only call methods marked as RT safe.                                                                                                                                                                                                               |
-| PW\\_FILTER\\_FLAG\\_CUSTOM\\_LATENCY | don't call the default latency algorithm but emit the param\\_changed event for the ports when Latency params are received.                                                                                                                                                               |
-| PW\\_FILTER\\_FLAG\\_TRIGGER          | the filter will not be scheduled automatically but \\_trigger\\_process() needs to be called. This can be used when the filter depends on processing of other filters.                                                                                                                    |
-| PW\\_FILTER\\_FLAG\\_ASYNC            | Buffers will not be dequeued/queued from the realtime process() function. This is assumed when RT\\_PROCESS is unset but can also be the case when the process() function does a trigger\\_process() that will then dequeue/queue a buffer from another process() function. since 0.3.73  |
+| Enumerator                                   | Note                                                                                                                                                                                                                                                                                      |
+| :------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_FILTER\\_FLAG\\_NONE                    | no flags                                                                                                                                                                                                                                                                                  |
+| PW\\_FILTER\\_FLAG\\_INACTIVE                | start the filter inactive, [`pw_filter_set_active`](@ref)() needs to be called explicitly                                                                                                                                                                                                 |
+| PW\\_FILTER\\_FLAG\\_DRIVER                  | be a driver                                                                                                                                                                                                                                                                               |
+| PW\\_FILTER\\_FLAG\\_RT\\_PROCESS            | call process from the realtime thread. Only call methods marked as RT safe.                                                                                                                                                                                                               |
+| PW\\_FILTER\\_FLAG\\_CUSTOM\\_LATENCY        | don't call the default latency algorithm but emit the param\\_changed event for the ports when Latency params are received.                                                                                                                                                               |
+| PW\\_FILTER\\_FLAG\\_TRIGGER                 | the filter will not be scheduled automatically but \\_trigger\\_process() needs to be called. This can be used when the filter depends on processing of other filters.                                                                                                                    |
+| PW\\_FILTER\\_FLAG\\_ASYNC                   | Buffers will not be dequeued/queued from the realtime process() function. This is assumed when RT\\_PROCESS is unset but can also be the case when the process() function does a trigger\\_process() that will then dequeue/queue a buffer from another process() function. since 0.3.73  |
+| PW\\_FILTER\\_FLAG\\_OUTPUT\\_RETURN\\_RETRY | request a graph cycle when an output buffer returns.                                                                                                                                                                                                                                      |
 """
 const pw_filter_flags = UInt32
 const PW_FILTER_FLAG_NONE = 0 % UInt32
@@ -7397,6 +7398,7 @@ const PW_FILTER_FLAG_RT_PROCESS = 4 % UInt32
 const PW_FILTER_FLAG_CUSTOM_LATENCY = 8 % UInt32
 const PW_FILTER_FLAG_TRIGGER = 16 % UInt32
 const PW_FILTER_FLAG_ASYNC = 32 % UInt32
+const PW_FILTER_FLAG_OUTPUT_RETURN_RETRY = 64 % UInt32
 
 """
     pw_filter_port_flags
