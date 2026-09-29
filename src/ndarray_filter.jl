@@ -695,7 +695,11 @@ function connect!(filter::NdArrayFilter)
     return filter
 end
 
-"Run an ndarray filter until another task or thread calls [`quit!`](@ref)."
+"""
+Run an ndarray filter until another task or thread calls [`quit!`](@ref).
+Julia 1.12 and later permit GC while the native loop blocks. On Julia 1.10
+and 1.11, that foreign call can delay GC when callbacks enter Julia.
+"""
 function run!(filter::NdArrayFilter)
     handle = lock(filter.state_lock) do
         _require_owner_thread(filter, "run!")
@@ -708,7 +712,15 @@ function run!(filter::NdArrayFilter)
         _require_open(filter)
     end
     result = try
-        LibPipeWire.pw_ndarray_filter_run(handle)
+        # The native main loop blocks while other threads may enter Julia
+        # through process and parameter callbacks. It must permit GC then.
+        @static if VERSION >= v"1.12"
+            @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_ndarray_filter_run(
+                handle::Ptr{LibPipeWire.pw_ndarray_filter}
+            )::Cint
+        else
+            LibPipeWire.pw_ndarray_filter_run(handle)
+        end
     finally
         lock(filter.state_lock) do
             filter.running = false
