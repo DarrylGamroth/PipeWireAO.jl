@@ -185,9 +185,8 @@ end
     run!(loop::MainLoop)
 
 Run `loop` until another task or thread calls [`quit!`](@ref). This call blocks
-the calling Julia thread. On Julia 1.10 and 1.11, an indefinitely blocked
-foreign call can also delay garbage collection; use [`roundtrip`](@ref) for
-finite client operations on those releases.
+the calling Julia thread while permitting GC. Use [`roundtrip`](@ref) for
+finite client operations.
 """
 function run!(loop::MainLoop)
     handle = lock(loop.state_lock) do
@@ -199,7 +198,9 @@ function run!(loop::MainLoop)
     end
 
     result = try
-        LibPipeWire.pw_main_loop_run(handle)
+        @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_main_loop_run(
+            handle::Ptr{LibPipeWire.pw_main_loop}
+        )::Cint
     finally
         lock(loop.state_lock) do
             loop.running = false

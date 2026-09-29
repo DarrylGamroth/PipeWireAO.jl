@@ -331,16 +331,37 @@ end
     end
     @test result === :ok
 
-    # Julia 1.10 and 1.11 cannot mark the blocking generated @ccall as GC-safe.
-    if VERSION >= v"1.12" && Threads.nthreads() > 1
+    if Threads.nthreads() > 1
         threaded_loop = MainLoop()
-        runner = Threads.@spawn run!(threaded_loop)
+        event_count = Threads.Atomic{Int}(0)
+        event = EventSource(threaded_loop, (_source, count) -> begin
+            Threads.atomic_add!(event_count, Int(count))
+            return nothing
+        end)
         started = () -> lock(getfield(threaded_loop, :state_lock)) do
             getfield(threaded_loop, :running)
         end
-        @test Base.timedwait(started, 5) === :ok
-        quit!(threaded_loop)
-        @test fetch(runner) === nothing
+        startup_status = Ref(:pending)
+        callback_status = Ref(:pending)
+        Threads.@threads :static for index in 1:Threads.nthreads()
+            if index == 1
+                try
+                    startup_status[] = Base.timedwait(started, 5)
+                    if startup_status[] === :ok
+                        signal!(event)
+                        callback_status[] = Base.timedwait(() -> event_count[] == 1, 5)
+                        callback_status[] === :ok && GC.gc(true)
+                    end
+                finally
+                    quit!(threaded_loop)
+                end
+            elseif index == 2
+                run!(threaded_loop)
+            end
+        end
+        @test startup_status[] === :ok
+        @test callback_status[] === :ok
+        close(event)
         close(threaded_loop)
     end
 end
