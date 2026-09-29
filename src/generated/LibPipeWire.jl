@@ -3890,20 +3890,19 @@ end
 
 \\{
 
-| Enumerator                   | Note                                                                                                          |
-| :--------------------------- | :------------------------------------------------------------------------------------------------------------ |
-| SPA\\_META\\_Header          | struct [`spa_meta_header`](@ref)                                                                              |
-| SPA\\_META\\_VideoCrop       | struct [`spa_meta_region`](@ref) with cropping data                                                           |
-| SPA\\_META\\_VideoDamage     | array of struct [`spa_meta_region`](@ref) with damage, where an invalid entry or end-of-array marks the end.  |
-| SPA\\_META\\_Bitmap          | struct [`spa_meta_bitmap`](@ref)                                                                              |
-| SPA\\_META\\_Cursor          | struct [`spa_meta_cursor`](@ref)                                                                              |
-| SPA\\_META\\_Control         | metadata contains a [`spa_meta_control`](@ref) associated with the data                                       |
-| SPA\\_META\\_Busy            | don't write to buffer when count > 0                                                                          |
-| SPA\\_META\\_VideoTransform  | struct spa\\_meta\\_transform                                                                                 |
-| SPA\\_META\\_SyncTimeline    | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
-| SPA\\_META\\_Acquisition     | struct [`spa_meta_acquisition`](@ref)                                                                         |
-| SPA\\_META\\_NdarrayProgress | struct [`spa_meta_ndarray_progress`](@ref)                                                                    |
-| \\_SPA\\_META\\_LAST         | not part of ABI/API                                                                                           |
+| Enumerator                  | Note                                                                                                          |
+| :-------------------------- | :------------------------------------------------------------------------------------------------------------ |
+| SPA\\_META\\_Header         | struct [`spa_meta_header`](@ref)                                                                              |
+| SPA\\_META\\_VideoCrop      | struct [`spa_meta_region`](@ref) with cropping data                                                           |
+| SPA\\_META\\_VideoDamage    | array of struct [`spa_meta_region`](@ref) with damage, where an invalid entry or end-of-array marks the end.  |
+| SPA\\_META\\_Bitmap         | struct [`spa_meta_bitmap`](@ref)                                                                              |
+| SPA\\_META\\_Cursor         | struct [`spa_meta_cursor`](@ref)                                                                              |
+| SPA\\_META\\_Control        | metadata contains a [`spa_meta_control`](@ref) associated with the data                                       |
+| SPA\\_META\\_Busy           | don't write to buffer when count > 0                                                                          |
+| SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
+| SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
+| SPA\\_META\\_Acquisition    | struct [`spa_meta_acquisition`](@ref)                                                                         |
+| \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
 const spa_meta_type = UInt32
 const SPA_META_Invalid = 0 % UInt32
@@ -3918,7 +3917,6 @@ const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
 const SPA_META_START_PipeWireAO = 10 % UInt32
 const SPA_META_Acquisition = 11 % UInt32
-const SPA_META_NdarrayProgress = 12 % UInt32
 const _SPA_META_LAST = 13 % UInt32
 const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_features = 65536 % UInt32
@@ -4054,45 +4052,6 @@ a busy counter for the buffer
 struct spa_meta_busy
     flags::UInt32
     count::UInt32
-end
-
-struct spa_meta_ndarray_progress
-    data::NTuple{192, UInt8}
-end
-
-function Base.getproperty(x::Ptr{spa_meta_ndarray_progress}, f::Symbol)
-    f === :version && return Ptr{UInt32}(x + 0)
-    f === :abi_size && return Ptr{UInt32}(x + 4)
-    f === :generation && return Ptr{UInt64}(x + 8)
-    f === :sequence && return Ptr{UInt64}(x + 16)
-    f === :region_count && return Ptr{UInt32}(x + 24)
-    f === :region_bytes && return Ptr{UInt32}(x + 28)
-    f === :reserved0 && return Ptr{NTuple{32, UInt8}}(x + 32)
-    f === :committed_regions && return Ptr{UInt32}(x + 64)
-    f === :state && return Ptr{UInt32}(x + 68)
-    f === :reserved1 && return Ptr{NTuple{56, UInt8}}(x + 72)
-    f === :released_generation && return Ptr{UInt64}(x + 128)
-    f === :reserved2 && return Ptr{NTuple{56, UInt8}}(x + 136)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_meta_ndarray_progress, f::Symbol)
-    r = Ref{spa_meta_ndarray_progress}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_meta_ndarray_progress}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_meta_ndarray_progress}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_meta_ndarray_progress, private::Bool = false)
-    (:version, :abi_size, :generation, :sequence, :region_count, :region_bytes, :reserved0, :committed_regions, :state, :reserved1, :released_generation, :reserved2, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
 end
 
 """
@@ -7860,9 +7819,6 @@ const PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL = 4 % UInt32
 const PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES = 8 % UInt32
 const PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL = 16 % UInt32
 const PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS = 32 % UInt32
-const PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_BUSY_POLL = 64 % UInt32
-const PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_INLINE = 128 % UInt32
-const PW_NDARRAY_FILTER_FLAG_PROGRESSIVE_SPIN_IDLE = 256 % UInt32
 
 """
     pw_ndarray_filter_port_flags
@@ -8009,14 +7965,12 @@ Lifecycle callbacks are serialized and never overlap `process`. `prepare_process
 
 Callbacks return zero on success or a negative errno-style value, must not retain borrowed pointers, and must not let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
 
-| Field                          | Note                                                                                                                                                         |
-| :----------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| enum\\_prop\\_info             | Return PropInfo at index, or -ENOENT after the final declaration. Every returned POD must remain valid until [`pw_ndarray_filter_connect`](@ref)() returns.  |
-| get\\_props                    | Return the owner's current requested and active scalar property state.                                                                                       |
-| set\\_props                    | Validate and stage one scalar property request.                                                                                                              |
-| reset                          | Reset processing state while the node is stopped.                                                                                                            |
-| prepare\\_progressive\\_worker | Prepare the dedicated progressive worker before it processes frames.                                                                                         |
-| abort\\_progressive\\_frame    | Discard partial state for one frame, on the progressive worker.                                                                                              |
+| Field              | Note                                                                                                                                                         |
+| :----------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| enum\\_prop\\_info | Return PropInfo at index, or -ENOENT after the final declaration. Every returned POD must remain valid until [`pw_ndarray_filter_connect`](@ref)() returns.  |
+| get\\_props        | Return the owner's current requested and active scalar property state.                                                                                       |
+| set\\_props        | Validate and stage one scalar property request.                                                                                                              |
+| reset              | Reset processing state while the node is stopped.                                                                                                            |
 """
 struct pw_ndarray_filter_events
     version::UInt32
@@ -8028,8 +7982,6 @@ struct pw_ndarray_filter_events
     get_props::Ptr{Cvoid}
     set_props::Ptr{Cvoid}
     reset::Ptr{Cvoid}
-    prepare_progressive_worker::Ptr{Cvoid}
-    abort_progressive_frame::Ptr{Cvoid}
 end
 
 """
@@ -8037,14 +7989,10 @@ end
 
 Immutable construction configuration. All strings and shapes are copied.
 
-| Field                         | Note                                                                   |
-| :---------------------------- | :--------------------------------------------------------------------- |
-| remote\\_name                 | optional PipeWire remote                                               |
-| flags                         | mask of enum [`pw_ndarray_filter_flags`](@ref)                         |
-| progressive\\_input\\_port    | Version 1: direction-local index of the progressive frame-data input.  |
-| progressive\\_region\\_format | Version 1: exact fixed-region format presented to process().           |
-| progressive\\_timeout\\_ns    | Version 1: finite interval without a new committed region, in ns.      |
-| progressive\\_cpu             | Version 1: worker CPU, or -1 for explicitly unpinned development.      |
+| Field         | Note                                            |
+| :------------ | :---------------------------------------------- |
+| remote\\_name | optional PipeWire remote                        |
+| flags         | mask of enum [`pw_ndarray_filter_flags`](@ref)  |
 """
 struct pw_ndarray_filter_config
     struct_size::UInt32
@@ -8056,10 +8004,6 @@ struct pw_ndarray_filter_config
     ports::Ptr{pw_ndarray_filter_port}
     events::Ptr{pw_ndarray_filter_events}
     user_data::Ptr{Cvoid}
-    progressive_input_port::UInt32
-    progressive_region_format::pw_ndarray_filter_format
-    progressive_timeout_ns::UInt64
-    progressive_cpu::Int32
 end
 
 """Opaque owner of one main loop, PipeWire filter, and copied declaration."""

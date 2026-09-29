@@ -173,28 +173,6 @@ function invoke_ndarray_filter_reset(events, filter::T) where {T<:NdArrayFilter}
     return ccall(events.reset, Cint, (Ref{T},), filter)
 end
 
-function invoke_ndarray_filter_prepare_progressive_worker(events, filter::T) where {T<:NdArrayFilter}
-    return ccall(events.prepare_progressive_worker, Cint, (Ref{T},), filter)
-end
-
-function invoke_ndarray_filter_abort_progressive_frame(
-    events,
-    filter::T,
-    generation::UInt64,
-    sequence::UInt64,
-    reason::Cint,
-) where {T<:NdArrayFilter}
-    return ccall(
-        events.abort_progressive_frame,
-        Cint,
-        (Ref{T}, UInt64, UInt64, Cint),
-        filter,
-        generation,
-        sequence,
-        reason,
-    )
-end
-
 mutable struct ForeignNdArrayFilterInvocation{T<:NdArrayFilter}
     events::PipeWireAO.LibPipeWire.pw_ndarray_filter_events
     filter::T
@@ -309,8 +287,8 @@ end
     @test sizeof(native.pw_ndarray_filter_format) == 40
     @test sizeof(native.pw_ndarray_filter_port) == 64
     @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
-    @test sizeof(native.pw_ndarray_filter_events) == 88
-    @test sizeof(native.pw_ndarray_filter_config) == 120
+    @test sizeof(native.pw_ndarray_filter_events) == 72
+    @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
     @test native.PW_NDARRAY_FILTER_FLAG_INDEPENDENT_INPUTS == UInt32(2)
@@ -334,8 +312,6 @@ end
             UInt32(2),
             C_NULL,
             NDARRAY_FILTER_TEST_PROCESS,
-            C_NULL,
-            C_NULL,
             C_NULL,
             C_NULL,
             C_NULL,
@@ -377,18 +353,6 @@ end
             pointer(ports),
             pointer(events),
             C_NULL,
-            UInt32(0),
-            native.pw_ndarray_filter_format(
-                UInt32(0),
-                UInt32(0),
-                UInt32(0),
-                UInt32(0),
-                UInt32(0),
-                C_NULL,
-                C_NULL,
-            ),
-            UInt64(0),
-            Int32(0),
         )
         @test native.pw_ndarray_filter_new(Ref(config), result) == 0
     end
@@ -738,187 +702,6 @@ end
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RUN_CONTROL |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_PROPERTIES |
           PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_FLAG_OWNER_RESET_CONTROL
-end
-
-@testset "progressive ndarray filter options and callbacks" begin
-    transport_format = NdArrayFormat(
-        NdArray.U8,
-        (8, 4);
-        layout=NdArray.COLUMN_MAJOR,
-        rate=SPA.Fraction(UInt32(1), UInt32(1)),
-    )
-    region_format = NdArrayFormat(
-        NdArray.U8,
-        (8, 2);
-        layout=NdArray.COLUMN_MAJOR,
-        rate=SPA.Fraction(UInt32(2), UInt32(1)),
-    )
-    input_port = NdArrayFilterPort(
-        "transport",
-        PipeWireAO.DIRECTION_INPUT,
-        transport_format;
-        schema="org.pipewireao.test.progressive-transport/1",
-    )
-    output_port = NdArrayFilterPort(
-        "output",
-        PipeWireAO.DIRECTION_OUTPUT,
-        transport_format;
-        schema="org.pipewireao.test.output/1",
-    )
-    abort = Ref{Any}(nothing)
-    progressive = NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=UInt64(1_000_000),
-        cpu=-1,
-        on_abort=(filter, generation, sequence, reason) ->
-            abort[] = (filter, generation, sequence, reason),
-    )
-    @test PipeWireAO._validate_progressive_options(
-        progressive,
-        NdArrayFilterPort[input_port, output_port],
-    ) === input_port
-    @test NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=0,
-        busy_poll=true,
-    ).busy_poll
-    @test_throws ArgumentError NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=-1,
-        busy_poll=true,
-    )
-    @test NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=0,
-        inline=true,
-    ).inline
-    @test_throws ArgumentError NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=-1,
-        inline=true,
-    )
-    @test NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=0,
-        spin_idle=true,
-    ).spin_idle
-    @test_throws ArgumentError NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=-1,
-        spin_idle=true,
-    )
-    @test_throws ArgumentError NdArrayProgressiveOptions(
-        1,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=0,
-        inline=true,
-        spin_idle=true,
-    )
-    @test_throws ArgumentError NdArrayProgressiveOptions(
-        0,
-        region_format;
-        region_schema="org.pipewireao.test.progressive-region/1",
-        timeout_ns=1,
-        cpu=-1,
-    )
-    @test_throws ArgumentError PipeWireAO._validate_progressive_options(
-        NdArrayProgressiveOptions(
-            1,
-            region_format;
-            region_schema=input_port.schema,
-            timeout_ns=1,
-            cpu=-1,
-        ),
-        NdArrayFilterPort[input_port, output_port],
-    )
-    @test_throws ArgumentError PipeWireAO._validate_progressive_options(
-        NdArrayProgressiveOptions(
-            1,
-            NdArrayFormat(
-                NdArray.U8,
-                (8, 2);
-                layout=NdArray.COLUMN_MAJOR,
-                rate=SPA.Fraction(UInt32(1), UInt32(1)),
-            );
-            region_schema="org.pipewireao.test.progressive-region/1",
-            timeout_ns=1,
-            cpu=-1,
-        ),
-        NdArrayFilterPort[input_port, output_port],
-    )
-    @test PipeWireAO._progressive_region_rate_matches(
-        SPA.Fraction(typemax(UInt32), typemax(UInt32) - UInt32(1)),
-        SPA.Fraction(typemax(UInt32), (typemax(UInt32) - UInt32(1)) ÷ UInt32(2)),
-        2,
-    )
-    @test !PipeWireAO._progressive_region_rate_matches(
-        SPA.Fraction(typemax(UInt32), UInt32(1)),
-        SPA.Fraction(UInt32(1), typemax(UInt32)),
-        typemax(UInt32),
-    )
-
-    prepare_count = Ref(0)
-    callbacks = (
-        on_prepare=NdArrayFilterPrepareRecorder(prepare_count),
-        on_process=NdArrayFilterProcessRecorder(Ref(0)),
-        on_parameter=nothing,
-        on_deactivate=nothing,
-        property_info=SPA.PropInfo[],
-        on_get_properties=nothing,
-        on_properties=nothing,
-        on_reset=nothing,
-        progressive,
-        on_abort=progressive.on_abort,
-    )
-    filter = NdArrayFilter(
-        Ptr{Cvoid}(C_NULL),
-        "test.progressive.ndarray.filter",
-        callbacks,
-        Ref{Any}(nothing),
-        ReentrantLock(),
-        Threads.threadid(),
-        false,
-        false,
-        Pod[],
-        nothing,
-    )
-    events = PipeWireAO._ndarray_filter_events(filter)
-    @test events.version == 3
-    @test events.prepare_process_thread == C_NULL
-    @test events.prepare_progressive_worker != C_NULL
-    @test events.abort_progressive_frame != C_NULL
-    @test invoke_ndarray_filter_prepare_progressive_worker(events, filter) == 0
-    @test prepare_count[] == 1
-    @test invoke_ndarray_filter_abort_progressive_frame(
-        events,
-        filter,
-        UInt64(3),
-        UInt64(5),
-        Cint(-Base.Libc.ETIMEDOUT),
-    ) == 0
-    @test abort[] == (filter, UInt64(3), UInt64(5), -Base.Libc.ETIMEDOUT)
 end
 
 @testset "ndarray callback adopts a foreign data-loop thread" begin
