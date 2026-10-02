@@ -532,9 +532,12 @@ Pkg.add("PipeWireAO")
 
 `PipeWireAO_jll` currently supports glibc-based Linux on aarch64 and x86_64.
 On x86_64, baseline, AVX2, and AVX-512 artifacts are selected from the host
-CPU capabilities. PipeWireAO 0.6.11 requires Julia 1.12 or newer and
+CPU capabilities. PipeWireAO 0.6.11 and later require Julia 1.12 or newer and
 PipeWireAO_jll 1.7.0+17 or newer. Its blocking main and ndarray filter loops
 permit Julia GC while PipeWire callbacks enter Julia.
+PipeWireAO 0.6.12 also permits GC while acquiring a ThreadLoop's native mutex
+and waiting for its callback thread to stop. This prevents collection requested
+by a callback from deadlocking the waiting Julia owner.
 
 ## Regenerating the C bindings
 
