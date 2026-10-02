@@ -34,6 +34,22 @@ function invoke_idle_source(source::T) where {T<:IdleSource}
     return nothing
 end
 
+@testset "thread-loop GC participation" begin
+    child = joinpath(@__DIR__, "thread_loop_gc_child.jl")
+    project = dirname(Base.active_project())
+    for operation in ("lock", "stop")
+        command = `$(Base.julia_cmd()) --startup-file=no --threads=1,0 --project=$project $child $operation`
+        process = run(pipeline(command; stdout=devnull, stderr=stderr); wait=false)
+        completed = Base.timedwait(() -> process_exited(process), 20)
+        if completed !== :ok
+            kill(process, Base.SIGKILL)
+        end
+        wait(process)
+        @test completed === :ok
+        @test success(process)
+    end
+end
+
 @testset "managed thread loop" begin
     loop = ThreadLoop("PipeWireAO.jl managed-loop test")
     @test isopen(loop)

@@ -97,7 +97,7 @@ function stop!(loop::ThreadLoop)
         loop.running = false
         return handle
     end
-    handle == C_NULL || LibPipeWire.pw_thread_loop_stop(handle)
+    handle == C_NULL || _stop_thread_loop(handle)
     return loop
 end
 
@@ -115,7 +115,11 @@ function with_thread_loop_lock(f, loop::ThreadLoop)
         loop.native_access_count += 1
         return handle
     end
-    LibPipeWire.pw_thread_loop_lock(handle)
+    # A callback can request GC while holding this native mutex. The waiting
+    # Julia thread must allow collection to proceed until it acquires the lock.
+    @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_thread_loop_lock(
+        handle::Ptr{LibPipeWire.pw_thread_loop}
+    )::Cvoid
     try
         return f(loop)
     finally
@@ -163,9 +167,17 @@ function Base.close(loop::ThreadLoop)
     end
     handle == C_NULL && return nothing
 
-    running && LibPipeWire.pw_thread_loop_stop(handle)
+    running && _stop_thread_loop(handle)
     LibPipeWire.pw_thread_loop_destroy(handle)
     LibPipeWire.pw_deinit()
+    return nothing
+end
+
+function _stop_thread_loop(handle)
+    # Joining may wait for a Julia callback to finish compilation or collection.
+    @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_thread_loop_stop(
+        handle::Ptr{LibPipeWire.pw_thread_loop}
+    )::Cvoid
     return nothing
 end
 
