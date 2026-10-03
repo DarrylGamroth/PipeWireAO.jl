@@ -5,6 +5,7 @@ include("aqua.jl")
 include("current_info.jl")
 include("ndarray_filter.jl")
 include("object_callbacks.jl")
+include("ndarray_exchange.jl")
 
 struct CountProcess
     count::Base.RefValue{Int}

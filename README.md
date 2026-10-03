@@ -430,6 +430,76 @@ finally
 end
 ```
 
+## Prepared ndarray exchange
+
+`NdArraySource` and `NdArraySink` prepare one reusable payload slot per stream.
+Their constructors copy the supplied storage and connect inactive streams to
+the caller's core. They support `Float32` with `F32_LE`, `UInt16` with `U16_LE`,
+and `Bool` with `BOOL8`. The vector contains packed linear wire order for the
+declared shape and layout. No reshape or transpose is implicit. Negotiated
+element type, shape, layout, rate, and optional schema must match exactly.
+Buffer allocation leaves stride unconstrained so native ndarray peers can
+negotiate their packed contiguous-axis stride. A sink accepts that exact stride,
+the legacy element stride, or zero when a native graph leaves chunk stride
+unspecified. The fixed packed Format, exact payload size, and zero offset still
+apply; padded and negative strides are rejected.
+
+```julia
+format = NdArrayFormat(NdArray.F32_LE, (2, 2);
+    layout=NdArray.ROW_MAJOR, rate=SPA.Fraction(1000, 1))
+source = NdArraySource(core, "command-source", zeros(Float32, 4), format;
+    schema="example.command/1")
+sink = NdArraySink(core, "command-sink", zeros(Float32, 4), format;
+    schema="example.command/1")
+
+# Create an explicit Link between source.stream and sink.stream through Registry.
+# The caller must run the core's loop; a running ThreadLoop supports these waits.
+start!(sink)
+start!(source)
+arm_array_sink!(sink, UInt64(1))
+header = BufferHeader(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(1))
+token = submit_array!(source, Float32[1, 2, 3, 4], header)
+wait_array_source!(source, token; timeout_ns=1_000_000_000)
+receipt = wait_array_sink!(sink; timeout_ns=1_000_000_000)
+values = array_values(sink) # sink-owned storage; read before the next arm
+
+close(sink)
+close(source) # core and loop remain caller-owned
+```
+
+`submit_array!` promptly stages a payload and requests native processing. Its
+positive lifetime token is independent of Header sequence. A new acquisition
+generation can restart Header sequence at one. Source completion proves native
+queue publication; sink completion proves one validated payload was copied.
+Only one submit may be outstanding, and `wait_array_source!` acknowledges it
+before the next submit. Sink rearm requires `wait_array_sink!` to acknowledge
+the previous receipt. `array_values` returns the owned vector without copying;
+`array_receipt` returns an immutable Header, acquisition identity, and exposure
+duration snapshot. Consume them before rearming.
+
+Arm with an `AcquisitionIdentity` to require its complete domain, generation,
+and sequence, plus matching Header sequence and valid acquisition metadata.
+`exposure_duration_ns` optionally requires an exact exposure duration. Submit
+accepts the same identity and duration keywords. A sequence-only arm requires
+matching Header sequence. Malformed payloads, noncanonical BOOL8 bytes, wrong
+identity, duplicate or unarmed input, disconnect, and deadline expiration latch
+a failure until close. These endpoints contain transport policy only.
+
+The source uses explicit native driver triggers and retries within its wait
+deadline when buffers or native I/O are not ready. Timer notifications only
+wake the waiter; they cannot establish completion. Native calls take the
+ThreadLoop lock outside the wait condition. MainLoop users must serialize
+endpoint access on its dispatch thread. Callbacks use public borrowed buffer
+APIs and return every dequeued lease. Warmed successful callback copy paths
+allocate zero bytes; exceptional paths and control operations are outside that
+contract. Julia callbacks make no hard real-time execution claim.
+
+The private daemon integration test runs separately with
+`julia --project --threads=2 test/ndarray_exchange_private_core.jl`.
+`PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
+`bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
+isolated runtime directory and daemon socket.
+
 ## Multi-port filter
 
 `Filter` provides the managed equivalent of PipeWire's `pw_filter`: add typed

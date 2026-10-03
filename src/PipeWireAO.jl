@@ -73,6 +73,8 @@ export CoreConnection,
     NdArrayFilterBuffers,
     NdArrayFilterPort,
     NdArrayFilterState,
+    NdArraySource,
+    NdArraySink,
     NdArrayFormat,
     NdArrayEnumFormat,
     NdArrayRateChoice,
@@ -149,6 +151,9 @@ export CoreConnection,
     acquisition_timebase,
     acquisition_times_match,
     acquisition_valid,
+    arm_array_sink!,
+    array_values,
+    array_receipt,
     add_port!,
     add_listener!,
     allocate_buffer!,
@@ -279,6 +284,9 @@ export CoreConnection,
     sync!,
     sync_timeline,
     trigger_process!,
+    submit_array!,
+    wait_array_source!,
+    wait_array_sink!,
     update_permissions!,
     update_io!,
     update_timer!,
@@ -313,6 +321,7 @@ include("ndarray_filter.jl")
 include("stream.jl")
 include("filter.jl")
 include("listeners.jl")
+include("ndarray_exchange.jl")
 
 const _MINIMUM_JLL_VERSION = v"1.7.0+17"
 
