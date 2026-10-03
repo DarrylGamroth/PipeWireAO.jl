@@ -186,6 +186,11 @@ function _array_stream(core, name, state, process, source, properties)
             on_state_changed=_ArrayStateChanged(state), on_param_changed=_ArrayParamChanged(state),
             on_io_changed=_ArrayIOChanged(state))
         try
+            # Compile the exact handler before publishing the endpoint. Its
+            # first native capability notification can otherwise spend the
+            # link admission budget compiling the negotiated-format branch.
+            # Executing that branch here would change live stream parameters.
+            precompile(stream.callbacks.on_param_changed, (typeof(stream), UInt32, Pod))
             flags = STREAM_MAP_BUFFERS | STREAM_INACTIVE | STREAM_DONT_RECONNECT | STREAM_NO_CONVERT
             source && (flags |= STREAM_DRIVER)
             connect!(stream, source ? :output : :input; flags, params=_array_parameters(state))
