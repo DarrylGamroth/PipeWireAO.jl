@@ -157,6 +157,60 @@ end
     @test_throws DimensionMismatch PipeWireAO._ArrayExchangeState(zeros(Float32, 3), NdArrayFormat(NdArray.F32_LE, (4,); layout=NdArray.ROW_MAJOR), nothing)
 end
 
+@testset "zero Header sequence is explicitly opt-in" begin
+    format = NdArrayFormat(NdArray.F32_LE, (1,); layout=NdArray.ROW_MAJOR)
+    domain = AcquisitionDomain(ntuple(i -> UInt8(i), ACQUISITION_DOMAIN_SIZE))
+    context = Context()
+    core = CoreConnection(context; self=true)
+    sink = NdArraySink(core, "test.ndarray.zero.sequence", zeros(Float32, 1), format)
+    try
+        @test_throws ArgumentError arm_array_sink!(sink, UInt64(0))
+        sink.state.started = true
+        arm_array_sink!(sink, UInt64(0); allow_zero_sequence=true)
+        @test_throws InvalidStateException arm_array_sink!(sink, UInt64(0); allow_zero_sequence=true)
+        sink.state.phase[] = PipeWireAO._ARRAY_COMPLETE
+        @test_throws InvalidStateException arm_array_sink!(sink, UInt64(0); allow_zero_sequence=true)
+        sink.state.acknowledged = true
+        @test arm_array_sink!(sink, UInt64(0); allow_zero_sequence=true) === sink
+
+        @test_throws ArgumentError PipeWireAO._array_validate_expected_sequence(
+            AcquisitionIdentity(domain, UInt64(1), UInt64(0)), true)
+    finally
+        close(sink)
+        close(core)
+        close(context)
+    end
+
+    write_state = PipeWireAO._ArrayExchangeState(Float32[7], format, nothing)
+    read_state = PipeWireAO._ArrayExchangeState(Float32[0], format, nothing)
+    write_state.header = BufferHeader(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(0))
+    read_state.expected = UInt64(0)
+    fixture = array_exchange_fixture(Float32, 1)
+    GC.@preserve fixture begin
+        PipeWireAO._array_write!(write_state, fixture.buffer)
+        @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
+        @test read_state.header == write_state.header
+        @test read_state.values == Float32[7]
+
+        write_state.values[1] = 8
+        PipeWireAO._array_write!(write_state, fixture.buffer)
+        @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
+        @test read_state.values == Float32[8]
+
+        write_state.header = BufferHeader(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(1))
+        PipeWireAO._array_write!(write_state, fixture.buffer)
+        @test_throws ArgumentError PipeWireAO._array_read!(read_state, fixture.buffer)
+
+        identity = AcquisitionIdentity(domain, UInt64(2), UInt64(1))
+        write_state.header = BufferHeader(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(1))
+        write_state.identity = identity
+        read_state.expected = identity
+        PipeWireAO._array_write!(write_state, fixture.buffer)
+        @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
+        @test read_state.identity == identity
+    end
+end
+
 @testset "prepared ndarray lifecycle and bounded waits" begin
     context = Context()
     core = CoreConnection(context; self=true)

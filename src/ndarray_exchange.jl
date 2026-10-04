@@ -243,6 +243,14 @@ end
 
 _array_expected_sequence(expected::UInt64) = expected
 _array_expected_sequence(expected::AcquisitionIdentity) = expected.sequence
+function _array_validate_expected_sequence(expected::UInt64, allow_zero_sequence::Bool)
+    (expected > 0 || allow_zero_sequence) || throw(ArgumentError("expected sequence must be positive"))
+    return nothing
+end
+function _array_validate_expected_sequence(expected::AcquisitionIdentity, ::Bool)
+    expected.sequence > 0 || throw(ArgumentError("acquisition identity sequence must be positive"))
+    return nothing
+end
 _array_matches_identity(::UInt64, identity) = true
 _array_matches_identity(expected::AcquisitionIdentity, ::Nothing) = false
 _array_matches_identity(expected::AcquisitionIdentity, identity::AcquisitionIdentity) = expected == identity
@@ -411,16 +419,20 @@ function submit_array!(source::NdArraySource{T}, values::AbstractVector{T}, head
 end
 
 """
-    arm_array_sink!(sink, expected::Union{UInt64,AcquisitionIdentity}; exposure_duration_ns=nothing)
+    arm_array_sink!(sink, expected::Union{UInt64,AcquisitionIdentity}; exposure_duration_ns=nothing, allow_zero_sequence=false)
 
 Arm one receive slot. A sequence expectation matches Header sequence; an
 acquisition expectation also requires complete valid domain/generation/sequence
-metadata. An optional duration must match exactly. After `wait_array_sink!`,
+metadata. An optional duration must match exactly. Sequence zero is rejected
+unless `allow_zero_sequence=true` is explicitly used with a `UInt64` expectation;
+acquisition identities always require a positive sequence. This opt-in permits
+native peers with a constant zero Header sequence, but does not establish
+freshness or replace phase and acknowledgement checks. After `wait_array_sink!`,
 read or copy the values and receipt before rearming. Unexpected, duplicate, or
 unarmed input permanently fails the endpoint.
 """
-function arm_array_sink!(sink::NdArraySink, expected::Union{UInt64,AcquisitionIdentity}; exposure_duration_ns=nothing)
-    _array_expected_sequence(expected) > 0 || throw(ArgumentError("expected sequence must be positive"))
+function arm_array_sink!(sink::NdArraySink, expected::Union{UInt64,AcquisitionIdentity}; exposure_duration_ns=nothing, allow_zero_sequence::Bool=false)
+    _array_validate_expected_sequence(expected, allow_zero_sequence)
     duration = _array_duration(exposure_duration_ns)
     _array_loop_lock(sink) do
         state = sink.state

@@ -481,9 +481,16 @@ Arm with an `AcquisitionIdentity` to require its complete domain, generation,
 and sequence, plus matching Header sequence and valid acquisition metadata.
 `exposure_duration_ns` optionally requires an exact exposure duration. Submit
 accepts the same identity and duration keywords. A sequence-only arm requires
-matching Header sequence. Malformed payloads, noncanonical BOOL8 bytes, wrong
-identity, duplicate or unarmed input, disconnect, and deadline expiration latch
-a failure until close. These endpoints contain transport policy only.
+matching Header sequence. Header sequence zero is rejected by default. For a
+native peer that emits zero, a caller may explicitly arm a `UInt64(0)` sequence
+with `allow_zero_sequence=true`; this relaxes only the Header value check. Zero
+does not prove freshness, and the owning protocol must correlate native frame
+identity and the applied figure separately. Acquisition identities always
+require a positive sequence. Phase and acknowledgement checks still reject
+pending, unacknowledged, duplicate, or unarmed receives. Malformed payloads,
+noncanonical BOOL8 bytes, wrong identity, duplicate or unarmed input,
+disconnect, and deadline expiration latch a failure until close. These
+endpoints contain transport policy only.
 
 The source uses explicit native driver triggers and retries within its wait
 deadline when buffers or native I/O are not ready. Timer notifications only
