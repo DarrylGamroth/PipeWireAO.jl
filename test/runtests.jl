@@ -245,6 +245,20 @@ end
     @test isbitstype(PipeWireAO.LibPipeWire.pw_registry_events)
 end
 
+@testset "unused native notifications" begin
+    context = Context()
+    core = CoreConnection(context; self=true)
+    stream = Stream(core, "unused-notifications")
+    try
+        @test core.events[].remove_mem == C_NULL
+        @test stream.events[].command == C_NULL
+    finally
+        close(stream)
+        close(core)
+        close(context)
+    end
+end
+
 @testset "core protocol" begin
     context = Context()
     ping_event = Ref((UInt32(0), Cint(0)))

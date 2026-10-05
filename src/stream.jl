@@ -316,7 +316,7 @@ function _stream_trigger_done(stream::Stream)::Cvoid
     return nothing
 end
 
-function _stream_events(::T) where {T<:Stream}
+function _stream_events(stream::T) where {T<:Stream}
     state_changed = @cfunction(
         _stream_state_changed,
         Cvoid,
@@ -349,7 +349,9 @@ function _stream_events(::T) where {T<:Stream}
         (Ref{T}, Ptr{LibPipeWire.pw_buffer}),
     )
     drained = @cfunction(_stream_drained, Cvoid, (Ref{T},))
-    command = @cfunction(
+    # The native stream applies commands before notifying listeners. A missing
+    # observer needs neither a Julia callback nor an owned POD copy.
+    command = stream.callbacks.on_command === nothing ? _NULL_CALLBACK : @cfunction(
         _stream_command,
         Cvoid,
         (Ref{T}, Ptr{LibPipeWire.spa_command}),

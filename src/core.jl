@@ -612,7 +612,7 @@ function _core_bound_properties(
     return nothing
 end
 
-function _core_events(::T) where {T<:CoreConnection}
+function _core_events(core::T) where {T<:CoreConnection}
     info = @cfunction(
         _core_info,
         Cvoid,
@@ -636,7 +636,9 @@ function _core_events(::T) where {T<:CoreConnection}
         Cvoid,
         (Ref{T}, UInt32, UInt32, Cint, UInt32),
     )
-    remove_memory = @cfunction(
+    # Native core memory reclamation has its own listener. Avoid entering
+    # Julia for an optional notification without an observer.
+    remove_memory = core.callbacks.on_remove_memory === nothing ? _NULL_CALLBACK : @cfunction(
         _core_remove_memory,
         Cvoid,
         (Ref{T}, UInt32),

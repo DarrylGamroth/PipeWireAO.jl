@@ -209,3 +209,86 @@ responsibilities. Prepared native status publication does not prove those
 properties. Cold JSON reports may remain persisted evidence, but their timing
 and ownership require a separate design decision before an inclusive
 simulator-process zero-allocation claim.
+
+## NC-005 — Do not register unused optional notifications
+
+Date: 2026-10-05. Severity: high for the required inclusive simulator Julia-heap
+budget. Confidence: high for the sampled callback attribution and the narrow
+native-contract analysis. Disposition: targeted change verified by source,
+saved full-suite results and the completed Classic FGN v9 lifecycle below.
+Other live-control compositions remain unqualified by this finding.
+
+### Observed failure and attribution
+
+The unchanged failed v7 and diagnostic v8 acquisitions remain preserved under
+`/home/dgamroth/.cache/rtc-live-controls-20261005`, abbreviated `E` here.
+V7 records 329552 allocated bytes and 6675 pool allocations over 7936 measured
+exchanges, with zero GC. The v8 diagnostic is separately identified by
+`E/classic-fgn-native-profile-v8-allocation-stacks.json` and is not a replacement
+qualification run.
+
+Independent inspection of that 10%-sampled profile finds 654 events and 27337
+sampled bytes. Of these, 653 events/27313 bytes across 449 stacks enter compiler
+and ABI-converter work through `core_event_demarshal_remove_mem` and
+`jl_get_abi_converter`. The remaining event is 24 bytes in
+`_stream_command` / `_copy_pod`. No sampled stack attributes allocation to the
+optics. Sampling does not prove absence of other allocations, nor can these
+sampled bytes be equated with the whole-process v7 count.
+
+Before the fix, `_core_events` registered `_core_remove_memory` even when
+`on_remove_memory === nothing`. That Julia handler only invokes the optional
+observer. `_stream_events` similarly registered `_stream_command` without an
+observer; the handler copied the POD before attempting optional dispatch.
+Thus the absent-observer configuration still entered Julia and, for commands,
+constructed discarded owned data.
+
+### Native contract and reviewed implementation
+
+Native `src/pipewire/core.c` registers its own `core_events` listener when
+constructing the core. Its `core_event_remove_mem` performs
+`pw_mempool_remove_id` independently of the Julia observer. Omitting the Julia
+notification does not omit native memory reclamation.
+
+Native `src/pipewire/stream.c:impl_send_command` applies its Pause/Suspend/Start
+state and IO work before emitting the command notification. Public `stream.h`
+describes this event as a command notification. The native SPA hook dispatcher
+checks callback presence. A null Julia notification therefore leaves native
+command handling intact.
+
+The inspected diff changes only these optional registrations: an absent
+`on_remove_memory` or `on_command` selects `_NULL_CALLBACK`; otherwise it creates
+the same typed `@cfunction` and invokes the existing handler. There is no native
+ABI/schema change or resource-policy change. Mandatory state, error,
+synchronization, process and trigger-completion registrations are unchanged.
+Configured observers retain the original owned payload, dispatch and contained
+error behavior. Avoiding absent-observer foreign entry is narrower than warming
+an unused ABI trampoline and retaining its repeated notification overhead.
+
+### Validation and limits
+
+The added `unused native notifications` test checks that both default event
+pointers are null. Existing core-protocol tests still configure and exercise
+memory-removal observation; stream tests still configure command observation
+through the registered events. Inspection of
+`E/pwa-unused-notifications-full.log` finds 61 passing testset summaries,
+2011 assertions and the final `PipeWireAO tests passed` message. There are no
+failed summaries. This review inspected those results without rerunning jobs.
+
+The completed `E/classic-fgn-native-v9-evidence.lifecycle.json` has
+`success=true`, confirmed public shutdown and complete cleanup. Both primary
+`run-1/sustained-result.json` and `run-2/sustained-result.json` report 8192/8192
+completed frame/command exchanges and 7936 measured exchanges. Both intervals
+record zero allocated bytes, pool/big/malloc/realloc counts, GC pauses/time and
+full sweeps. Run 1 includes public midrun stop/resume and fresh status tokens 5
+and 6 holding sequence 6136 in generation one; the saved-report cursor remains
+zero and correctly reports `report-ready=false` while paused. Run 2 follows
+stopped reset/restart. The lifecycle's retained frame and command hashes match
+across both runs.
+
+These are positive before/after observations for the targeted callback change
+in one actual Classic FGN composition. They do not establish every source of
+unsampled historical allocation, all Classic/Copper FGN/JFG cohorts, native
+allocator freedom, hard real-time behavior or physical-device qualification.
+The application still owns causal control completion and inclusive measurement;
+this library change does not mask counters, exclude the pause interval or
+move work into another simulator task.
