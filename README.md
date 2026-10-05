@@ -501,11 +501,25 @@ APIs and return every dequeued lease. Warmed successful callback copy paths
 allocate zero bytes; exceptional paths and control operations are outside that
 contract. Julia callbacks make no hard real-time execution claim.
 
-The private daemon integration test runs separately with
+PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
+daemon integration test runs separately with
 `julia --project --threads=2 test/ndarray_exchange_private_core.jl`.
+Prepared exchanges require the stream-buffer ownership fix shipped in
+`PipeWireAO_jll` 1.7.0+19, or a native build containing commit
+`42fdf86f4e66b15e7cc1d22404294f2234dfcb85`. Earlier packaged clients can lose
+buffer capacity after a borrowed buffer is returned and time out waiting for
+source completion. Update the JLL and restart Julia before using this path.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
+This prefix selects the daemon, modules, and plugins; it does not override the
+client library loaded by the JLL. For a local native installation, also set the
+JLL's `libpipewire_ao_path`, `libspa_ao_path`, and `libspa_support_path` preferences
+in the active environment's `LocalPreferences.toml` before starting Julia.
+Use absolute paths from the same native installation. See
+[the completion review](docs/EXCHANGE_COMPLETION_REVIEW.md) and
+[validation record](docs/EXCHANGE_COMPLETION_VALIDATION.md) for the controlled
+failure and the packaged regression checks.
 
 ## Multi-port filter
 
