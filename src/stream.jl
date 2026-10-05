@@ -444,15 +444,17 @@ end
 "Return the current native state of `stream`, throwing a reported stream error."
 function stream_state(stream::Stream)
     _check_callback_error(stream)
-    error_pointer = Ref{Cstring}(C_NULL)
-    value = lock(stream.state_lock) do
-        LibPipeWire.pw_stream_get_state(_require_open(stream), error_pointer)
+    return lock(stream.state_lock) do
+        # Keep the native output reference within this call so it can use
+        # stack storage. Copy borrowed error details before unlocking.
+        error_pointer = Ref{Cstring}(C_NULL)
+        value = LibPipeWire.pw_stream_get_state(_require_open(stream), error_pointer)
+        if value == LibPipeWire.PW_STREAM_STATE_ERROR
+            detail = error_pointer[] == C_NULL ? nothing : unsafe_string(error_pointer[])
+            throw(PipeWireError(:pw_stream, Cint(-Base.Libc.errno()), detail))
+        end
+        return value
     end
-    if value == LibPipeWire.PW_STREAM_STATE_ERROR
-        detail = error_pointer[] == C_NULL ? nothing : unsafe_string(error_pointer[])
-        throw(PipeWireError(:pw_stream, Cint(-Base.Libc.errno()), detail))
-    end
-    return value
 end
 
 "Return the bound PipeWire node ID for `stream`."

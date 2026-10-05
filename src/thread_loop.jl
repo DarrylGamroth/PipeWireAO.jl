@@ -111,9 +111,9 @@ recursive, so this is also valid inside a callback dispatched by `loop`.
 """
 function with_thread_loop_lock(f, loop::ThreadLoop)
     handle = lock(loop.state_lock) do
-        handle = _require_open(loop)
+        native_handle = _require_open(loop)
         loop.native_access_count += 1
-        return handle
+        return native_handle
     end
     # A callback can request GC while holding this native mutex. The waiting
     # Julia thread must allow collection to proceed until it acquires the lock.
