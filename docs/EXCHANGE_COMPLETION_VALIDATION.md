@@ -141,8 +141,35 @@ The prepared path's required native revision/build is stated in the README.
 Older locked manifests require an explicit dependency update and Julia restart.
 
 The unchanged package suite also passes 1,506 assertions with the 0.6.13
-release candidate (`package-tests-0.6.13.log`). Final registry-only exchange
-results are appended after publication.
+release candidate (`package-tests-0.6.13.log`). PipeWireAO 0.6.13 source commit
+is `d6d2672d84a52228a75a32d0a6f00595deae37d7`, registered tree
+`2216e057b6ef890b979735e67cc7914224099acb`, and registry commit `b4dbe50`.
+The API release is public (`published-api-release.json`).
+
+A second fresh `Pkg.add("PipeWireAO")` selects PipeWireAO 0.6.13 and JLL
+1.7.0+19 automatically (`published-resolution-v2.toml`). Neither package
+tracks a local development path, and all overrides remain absent.
+
+| Registry-selected run | Threads / affinity | Result |
+| --- | --- | --- |
+| `published-0.6.13-one-thread-1` | 1 / CPU 11 | 133/133, exit 0 |
+| `published-0.6.13-two-thread-2` | 2 / CPUs 11,12 | 133/133, exit 0 |
+
+Both runs retain exact receipt, loan-exhaustion, error and warmed allocation
+assertions, record the actual fixed host artifact's product/native mappings,
+and leave no private daemon alive. This completes the selected host packaged
+exchange delivery. It does not rerun scientific correction, continuous HIL,
+progressive readout, instrument operation or all-architecture qualification.
+
+The RTC HIL environment minimum is now 0.6.13. Four focused assertions
+confirm its compatibility rejects 0.6.12, accepts 0.6.13, and the published
+source exports both prepared endpoints (`rtc-hil-release-bound.log`, exit 0).
+Scientific source/package identities in earlier cohorts are preserved.
+
+All release/source/registry pushes target the owner's repositories. Native
+upstream and Yggdrasil upstream remain untouched. Previously locked manifests
+and applications with explicit older source overrides must update deliberately;
+this release does not mutate those environments.
 
 ## Build resource record
 
