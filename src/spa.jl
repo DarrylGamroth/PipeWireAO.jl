@@ -17,6 +17,19 @@ function _copy_pod(pointer::Ptr{LibPipeWire.spa_pod})
     return Pod(data)
 end
 
+_stream_parameter_pod(::Nothing, native::Ptr{LibPipeWire.spa_pod}) = _copy_pod(native)
+
+function _stream_parameter_pod(buffer::PodBuffer, native::Ptr{LibPipeWire.spa_pod})
+    native == C_NULL && return nothing
+    header = unsafe_load(native)
+    total = sizeof(LibPipeWire.spa_pod) + Int(header.size)
+    total <= buffer.capacity || throw(ArgumentError("stream parameter exceeds prepared POD buffer"))
+    data = buffer.pod.data
+    resize!(data, total)
+    GC.@preserve data unsafe_copyto!(pointer(data), Ptr{UInt8}(native), total)
+    return buffer.pod
+end
+
 function _append_bits!(data::Vector{UInt8}, value::T) where {T}
     bytes = reinterpret(UInt8, [value])
     append!(data, bytes)

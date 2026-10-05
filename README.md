@@ -238,6 +238,42 @@ format = video_format(
 )
 ```
 
+### Prepared native controls
+
+PipeWireAO 0.6.15 provides the native Version 1 run/reset control codecs and
+prepared scalar SPA Props storage. These are ordinary SPA PODs; live commands
+need no JSON encoding.
+
+```julia
+request = PodBuffer(512)
+values = PropsBuffer(("application.version", "application.sequence"),
+    (Int32(1), Int64(0)))
+parameters = PreparedParams((values.pod,))
+with_thread_loop_lock(loop) do _
+    run_control_request!(request, Int64(1), :stopped)
+    set_param!(node, SPA.PARAM_PROPS, request.pod)
+    props!(values, (Int32(1), Int64(42)))
+    update_params!(stream, parameters)
+end
+```
+
+Prepare buffers and parameter sets before repeated use. The fixed Props schema
+supports Bool, Int32, Int64, Float32, Float64 and SPA.Id values. `parse_props!`
+validates the whole schema before assigning its prepared destination; an
+application must also validate versions, tokens and its own state transitions.
+Submission alone is not an owner-applied acknowledgement.
+
+A Stream may opt into `param_buffer=PodBuffer(capacity)` for bounded callback
+storage. Its callback POD is borrowed until that callback returns; retain copied
+scalar values rather than the POD. `on_param_overflow` can reject oversized
+controls without failing a healthy stream. Without that handler, overflow follows
+the normal callback-error path. Ordinary callbacks retain their owned POD behavior.
+
+Publish under the owning loop lock and serialize buffer mutation with its owner.
+Prepared publication avoids Julia heap allocation after warmup; the native
+library still copies parameters and may allocate native storage. It does not
+establish whole-system allocation freedom or a real-time latency bound.
+
 Adaptive-optics numerical payloads use the native `ndarray` application
 subtype. Shapes are in logical axis order. Julia matrices default to
 column-major layout, while row-major storage remains explicit and fully

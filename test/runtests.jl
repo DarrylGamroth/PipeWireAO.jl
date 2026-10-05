@@ -8,6 +8,11 @@ include("stream_state_allocations.jl")
 include("ndarray_filter.jl")
 include("object_callbacks.jl")
 include("ndarray_exchange.jl")
+include("run_control.jl")
+include("pod_buffer.jl")
+include("props_buffer.jl")
+include("stream_param_overflow.jl")
+include("native_control_private_core.jl")
 
 struct CountProcess
     count::Base.RefValue{Int}

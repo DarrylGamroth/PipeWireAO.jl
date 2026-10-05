@@ -26,6 +26,55 @@ Base.isequal(left::Pod, right::Pod) = isequal(left.data, right.data)
 Base.hash(value::Pod, seed::UInt) = hash(value.data, seed)
 Base.sizeof(pod::Pod) = length(pod.data)
 
+"""
+    PodBuffer(capacity::Integer)
+
+Prepare bounded storage for a stream parameter callback. With
+`Stream(...; param_buffer=buffer)`, the callback receives a `Pod` backed by this
+storage, valid only until its callback returns. Copy it with `Pod(pod.data)`
+outside an allocation-sensitive path if it must be retained. A buffer belongs
+to one stream and must not be accessed concurrently or shared with listeners.
+Parameters exceeding `capacity` fail through the ordinary callback error path.
+"""
+struct PodBuffer
+    pod::Pod
+    capacity::Int
+    builder::Base.RefValue{LibPipeWire.spa_pod_builder}
+
+    function PodBuffer(capacity::Integer)
+        8 <= capacity <= (1 << 20) || throw(
+            ArgumentError("POD buffer capacity must be between 8 bytes and 1 MiB"),
+        )
+        data = zeros(UInt8, Int(capacity))
+        header = reinterpret(UInt32, @view(data[1:8]))
+        header[1] = UInt32(capacity - 8)
+        header[2] = UInt32(LibPipeWire.SPA_TYPE_Bytes)
+        builder = Ref(LibPipeWire.spa_pod_builder(
+            C_NULL, 0, 0, LibPipeWire.spa_pod_builder_state(0, 0, C_NULL),
+            LibPipeWire.spa_callbacks(C_NULL, C_NULL),
+        ))
+        return new(Pod(data), Int(capacity), builder)
+    end
+end
+
+"""
+    PreparedParams(params::Tuple)
+
+Retain a complete parameter set and prepare native publication storage.
+Use `update_params!(stream, prepared)` to publish every POD in one update.
+The PODs may use prepared mutable buffers, but must not change while the update
+is in progress. This storage has one owner and must not be shared concurrently.
+"""
+struct PreparedParams{N}
+    params::NTuple{N,Pod}
+    pointers::Vector{Ptr{LibPipeWire.spa_pod}}
+
+    function PreparedParams(params::NTuple{N,Pod}) where {N}
+        N <= typemax(UInt32) || throw(ArgumentError("too many prepared parameters"))
+        return new{N}(params, Vector{Ptr{LibPipeWire.spa_pod}}(undef,N))
+    end
+end
+
 "SPA POD value types that need wrappers to preserve their wire-level meaning."
 module SPA
 

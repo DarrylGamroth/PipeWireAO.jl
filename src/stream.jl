@@ -108,7 +108,8 @@ end
 """
     Stream(core, name; properties=nothing, on_state_changed=nothing,
            on_control_info=nothing, on_io_changed=nothing,
-           on_param_changed=nothing, on_process=nothing,
+           on_param_changed=nothing, param_buffer=nothing,
+           on_param_overflow=nothing, on_process=nothing,
            on_buffer_added=nothing, on_buffer_removed=nothing,
            on_drained=nothing, on_command=nothing, on_trigger_done=nothing)
 
@@ -123,6 +124,20 @@ part of the concrete `Stream` type. After warmup, dispatching `on_process`
 allocates zero bytes when the callback itself does not allocate. Callback error
 paths and the owned POD copy passed to `on_param_changed` are outside that
 steady-state allocation contract.
+
+An optional [`PodBuffer`](@ref) reuses bounded storage for `on_param_changed`.
+Its `Pod` argument is borrowed until the callback returns; it must not be
+retained or shared with another callback. Successful bounded copying introduces
+no Julia heap allocation after warmup. The callback and native parameter
+publication still have their own allocation and execution costs.
+
+When `on_param_overflow` is supplied, a non-null parameter larger than
+`param_buffer` invokes `on_param_overflow(stream, id, total_size)` and is
+rejected without copying or calling `on_param_changed`; `total_size` includes
+the SPA POD header. The prepared buffer remains unchanged and the loop continues.
+Without a handler, overflow keeps the existing fatal callback-error behavior.
+An exception from the overflow handler follows the ordinary contained callback
+failure path.
 """
 mutable struct Stream{CoreType<:CoreConnection,Callbacks}
     handle::Ptr{LibPipeWire.pw_stream}
@@ -164,7 +179,9 @@ function _stream_io_changed(
     return nothing
 end
 
-function _invoke_stream_callback(stream::Stream, ::Val{Field}, args...) where {Field}
+@inline function _invoke_stream_callback(
+    stream::Stream, ::Val{Field}, args::Vararg{Any,N},
+) where {Field,N}
     lock(stream.callback_lock)
     if !stream.callbacks_active
         unlock(stream.callback_lock)
@@ -195,13 +212,45 @@ function _stream_state_changed(
     return nothing
 end
 
+@inline _stream_parameter_overflow(
+    stream::Stream,
+    id::UInt32,
+    param::Ptr{LibPipeWire.spa_pod},
+    ::Nothing,
+) = false
+
+@inline function _stream_parameter_overflow(
+    stream::Stream,
+    id::UInt32,
+    param::Ptr{LibPipeWire.spa_pod},
+    buffer::PodBuffer,
+)
+    param == C_NULL && return false
+    header = unsafe_load(param)
+    total_size = sizeof(LibPipeWire.spa_pod) + Int(header.size)
+    if total_size > buffer.capacity &&
+       stream.callbacks.on_param_overflow !== nothing
+        _invoke_stream_callback(stream, Val(:on_param_overflow), id, total_size)
+        return true
+    end
+    return false
+end
+
 function _stream_param_changed(
     stream::Stream,
     id::UInt32,
     param::Ptr{LibPipeWire.spa_pod},
 )::Cvoid
     try
-        _invoke_stream_callback(stream, Val(:on_param_changed), id, _copy_pod(param))
+        _stream_parameter_overflow(
+            stream,
+            id,
+            param,
+            stream.callbacks.param_buffer,
+        ) && return nothing
+        stream.callbacks.on_param_changed === nothing && return nothing
+        pod = _stream_parameter_pod(stream.callbacks.param_buffer, param)
+        _invoke_stream_callback(stream, Val(:on_param_changed), id, pod)
     catch error
         lock(stream.callback_lock) do
             stream.callback_error[] === nothing && (stream.callback_error[] = error)
@@ -330,6 +379,8 @@ function Stream(
     on_control_info=nothing,
     on_io_changed=nothing,
     on_param_changed=nothing,
+    param_buffer::Union{Nothing,PodBuffer}=nothing,
+    on_param_overflow=nothing,
     on_process=nothing,
     on_buffer_added=nothing,
     on_buffer_removed=nothing,
@@ -361,6 +412,8 @@ function Stream(
         on_control_info=on_control_info,
         on_io_changed=on_io_changed,
         on_param_changed=on_param_changed,
+        param_buffer=param_buffer,
+        on_param_overflow=on_param_overflow,
         on_process=on_process,
         on_buffer_added=on_buffer_added,
         on_buffer_removed=on_buffer_removed,
@@ -518,6 +571,49 @@ function update_params!(stream::Stream, params)
             isempty(pointers) ? C_NULL : pointer(pointers),
             UInt32(length(pointers)),
         )
+    end
+    _check_result(:pw_stream_update_params, result)
+    return stream
+end
+
+"""
+    update_params!(stream::Stream, param::Pod)
+
+Publish one prepared parameter without constructing Julia parameter arrays.
+Access the stream while holding its thread-loop lock, or from its loop
+callback. Native PipeWire publication and subscribers have their own costs;
+this overload does not make them real-time safe.
+"""
+function update_params!(stream::Stream, param::Pod)
+    _check_callback_error(stream)
+    result = lock(stream.state_lock) do
+        destination = Ref(_pod_pointer(param))
+        GC.@preserve param destination begin
+            LibPipeWire.pw_stream_update_params(
+                _require_open(stream),
+                Base.unsafe_convert(Ptr{Ptr{LibPipeWire.spa_pod}}, destination),
+                UInt32(1),
+            )
+        end
+    end
+    _check_result(:pw_stream_update_params, result)
+    return stream
+end
+
+"Publish a complete prepared parameter set in one native update."
+function update_params!(stream::Stream, prepared::PreparedParams{N}) where {N}
+    _check_callback_error(stream)
+    result = lock(stream.state_lock) do
+        for index in eachindex(prepared.pointers)
+            prepared.pointers[index] = _pod_pointer(prepared.params[index])
+        end
+        GC.@preserve prepared begin
+            LibPipeWire.pw_stream_update_params(
+                _require_open(stream),
+                N == 0 ? C_NULL : pointer(prepared.pointers),
+                UInt32(N),
+            )
+        end
     end
     _check_result(:pw_stream_update_params, result)
     return stream

@@ -83,6 +83,15 @@ export CoreConnection,
     PipeWireError,
     PipeWireModule,
     Pod,
+    PodBuffer,
+    PreparedParams,
+    PropsBuffer,
+    props!,
+    parse_props!,
+    RunControlRequest,
+    RunControlStatus,
+    ResetControlRequest,
+    ResetControlStatus,
     Properties,
     Profiler,
     Proxy,
@@ -246,6 +255,18 @@ export CoreConnection,
     process_latency_param,
     prop_info_param,
     props_param,
+    run_control_request,
+    run_control_status,
+    reset_control_request,
+    reset_control_status,
+    run_control_request!,
+    run_control_status!,
+    reset_control_request!,
+    reset_control_status!,
+    parse_run_control_request!,
+    parse_run_control_status!,
+    parse_reset_control_request!,
+    parse_reset_control_status!,
     proxy_id,
     queue_buffer!,
     remove_port!,
@@ -316,6 +337,8 @@ include("core.jl")
 include("proxy.jl")
 include("spa_types.jl")
 include("spa.jl")
+include("run_control.jl")
+include("props_buffer.jl")
 include("objects.jl")
 include("ndarray_filter.jl")
 include("stream.jl")
