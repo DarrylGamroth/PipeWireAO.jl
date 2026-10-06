@@ -1,0 +1,3 @@
+SDK_SOURCE /tmp/pipewireao-sdk-bootstrap-seal/src/PipeWireAO.jl
+Test Summary:                                              | Pass  Total  Time
+stop global tracking preserves independently bound proxies |   13     13  2.9s

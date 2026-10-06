@@ -1224,6 +1224,9 @@ function _registry_global_added(
 )::Cvoid
     state = registry.callback_state
     try
+        lock(state.lock) do
+            state.active
+        end || return nothing
         global_object = Global(
             id,
             permissions,
@@ -1338,6 +1341,47 @@ function Base.isopen(registry::Registry)
     end
 end
 
+"""
+    stop_global_tracking!(registry::Registry) -> Registry
+
+Permanently detach the registry's built-in global-event listener. Its cached
+globals remain the last observed snapshot; they no longer establish current
+global presence. Already-bound proxies remain open and continue receiving
+their own NodeInfo, removal and error events. The registry must remain open
+until those proxies are closed.
+
+This does not detach independently owned listeners returned by
+[`add_listener!`](@ref); close those separately. There is no implicit resume.
+Repeated calls on an open registry are harmless. For a `ThreadLoop`, native
+listener removal is serialized with that loop; for a `MainLoop`, call from its
+owning thread, as for other native resource mutations.
+"""
+function stop_global_tracking!(registry::Registry)
+    loop = main_loop(registry.core)
+    if loop isa ThreadLoop
+        return with_thread_loop_lock(loop) do _
+            _stop_global_tracking!(registry)
+        end
+    end
+    return _stop_global_tracking!(registry)
+end
+
+function _stop_global_tracking!(registry::Registry)
+    lock(registry.state_lock) do
+        _require_open(registry)
+        detach = lock(registry.callback_state.lock) do
+            active = registry.callback_state.active
+            registry.callback_state.active = false
+            active
+        end
+        if detach
+            hook = registry.listener
+            GC.@preserve registry hook _remove_spa_hook!(hook)
+        end
+    end
+    return registry
+end
+
 function Base.close(registry::Registry)
     handle = lock(registry.state_lock) do
         registry.handle == C_NULL && return C_NULL
@@ -1384,6 +1428,8 @@ roundtrip(registry::Registry) = roundtrip(registry.core)
 
 Return an ID-sorted snapshot of the global objects currently known to
 `registry`. The returned globals and their property dictionaries are copies.
+After [`stop_global_tracking!`](@ref), this is the last observed snapshot; it
+does not establish current presence.
 """
 function globals(registry::Registry)
     lock(registry.state_lock) do

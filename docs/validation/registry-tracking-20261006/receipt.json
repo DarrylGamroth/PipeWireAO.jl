@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-06",
+  "julia": "1.12.7",
+  "starting_revision": "d514d6b0d76a1dcac359ec23943876343b7bb205",
+  "prerequisite_commit": "2daa72c",
+  "prerequisite_root_integration": "f7cfdaf",
+  "worktree": "/tmp/pipewireao-sdk-bootstrap-seal",
+  "branch": "fix/bootstrap-registry-notifications-20261006",
+  "cpu": 15,
+  "rlimit_rtprio": 0,
+  "science_frames": 0,
+  "full_suite": {
+    "assertions": 2087,
+    "testsets": 65,
+    "exit_code": 0,
+    "command": "prlimit --rtprio=0:0 taskset -c 15 env JULIA_PKG_OFFLINE=true OPENBLAS_NUM_THREADS=1 julia --startup-file=no --threads=2,0 --project=/tmp/pipewireao-sdk-bootstrap-seal -e 'using Pkg; Pkg.test(; julia_args=[\"--threads=2,0\"], allow_reresolve=false)'",
+    "notes": "API/production source frozen before run. A duplicate test helper include warning was fixed afterward with an isdefined guard; the same existing-helper-plus-new-fixture path then passed13/13 without warning. No production code changed after the full suite."
+  },
+  "final_guard_fixture": {
+    "assertions": 13,
+    "exit_code": 0,
+    "command": "prlimit --rtprio=0:0 taskset -c 15 env JULIA_PKG_OFFLINE=true OPENBLAS_NUM_THREADS=1 julia --startup-file=no --compiled-modules=existing --threads=2,0 --project=/tmp/pipewireao-sdk-bootstrap-seal -e 'include(\"/tmp/pipewireao-sdk-bootstrap-seal/test/private_core.jl\"); include(\"/tmp/pipewireao-sdk-bootstrap-seal/test/registry_tracking.jl\")'"
+  },
+  "source_sha256": {
+    "src/PipeWireAO.jl": "0205f8ccf3aab66cb3e28916571d55e32574efef38a20bf35369286c169e57ff",
+    "src/core.jl": "da83db51f3d1ef8e75cd2e683a562a95bc5113666178fb022f2357956bac5842",
+    "src/listeners.jl": "97d93a21f4c64886f88dd9a8a87a88d46fe40e4f3d4b61de0cf30f8a5819ea54",
+    "test/registry_tracking.jl": "bce24d26e42cced05087b3d661a5b625ab30afa5faeac2b97d204014cc68ef61",
+    "test/runtests.jl": "94668b7106b72cbc5c7b8ec417c7a6e70f17d445e179061d41d9e4169de669e3"
+  },
+  "log_sha256": {
+    "sdk-after-hook-fix.log": "42b00cb15029e8da977a672729758ba12d8ea9512a9dc07921493f48aa4c1845",
+    "sdk-final-include.log": "37572ac5d4c19c63273603f9963d81c44e8e07be7baff5097bac1af7851b35de",
+    "sdk-full.log": "a49c9feb350c8775566d0576ce60bdb81b108170b6cc7edef2b4f797957378b9"
+  },
+  "remaining_gate": "Independent review; installed SCI zero allocation qualification owned by primary."
+}

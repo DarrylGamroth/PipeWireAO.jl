@@ -16,6 +16,7 @@ include("props_buffer.jl")
 include("stream_param_overflow.jl")
 include("native_control_private_core.jl")
 include("hook_removal.jl")
+include("registry_tracking.jl")
 
 struct CountProcess
     count::Base.RefValue{Int}
