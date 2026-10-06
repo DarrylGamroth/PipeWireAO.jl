@@ -503,15 +503,20 @@ end
 "Return the current native filter state, throwing a reported filter error."
 function filter_state(filter::Filter)
     _check_callback_error(filter)
-    error_pointer = Ref{Cstring}(C_NULL)
-    value = lock(filter.state_lock) do
-        LibPipeWire.pw_filter_get_state(_require_open(filter), error_pointer)
+    return lock(filter.state_lock) do
+        handle = _require_open(filter)
+        # The error output is optional. Healthy queries need no owned scratch.
+        value = LibPipeWire.pw_filter_get_state(handle, C_NULL)
+        if value == LibPipeWire.PW_FILTER_STATE_ERROR
+            error_pointer = Ref{Cstring}(C_NULL)
+            value = LibPipeWire.pw_filter_get_state(handle, error_pointer)
+            if value == LibPipeWire.PW_FILTER_STATE_ERROR
+                detail = error_pointer[] == C_NULL ? nothing : unsafe_string(error_pointer[])
+                throw(PipeWireError(:pw_filter, Cint(-Base.Libc.errno()), detail))
+            end
+        end
+        return value
     end
-    if value == LibPipeWire.PW_FILTER_STATE_ERROR
-        detail = error_pointer[] == C_NULL ? nothing : unsafe_string(error_pointer[])
-        throw(PipeWireError(:pw_filter, Cint(-Base.Libc.errno()), detail))
-    end
-    return value
 end
 
 "Return the native name of `filter`."
