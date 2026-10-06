@@ -1,0 +1,183 @@
+┌ Warning: The project dependencies or compat requirements have changed since the manifest was last resolved.
+│ It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.
+└ @ Pkg.API ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:1322
+     Testing PipeWireAO
+      Status `/tmp/jl_STP3NL/Project.toml`
+  [4c88cf16] Aqua v0.8.18
+  [5d815c25] PipeWireAO v0.6.16 `~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state`
+  [c4a57d5a] UnsafeArrays v1.0.9
+  [cde84cf6] PipeWireAO_jll v1.7.0+19
+  [8dfed614] Test v1.11.0
+      Status `/tmp/jl_STP3NL/Manifest.toml`
+  [4c88cf16] Aqua v0.8.18
+  [34da2185] Compat v4.18.1
+  [692b3bcd] JLLWrappers v1.8.0
+  [5d815c25] PipeWireAO v0.6.16 `~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state`
+  [21216c6a] Preferences v1.6.0
+  [c4a57d5a] UnsafeArrays v1.0.9
+  [cde84cf6] PipeWireAO_jll v1.7.0+19
+  [0dad84c5] ArgTools v1.1.2
+  [56f22d72] Artifacts v1.11.0
+  [2a0f44e3] Base64 v1.11.0
+  [ade2ca70] Dates v1.11.0
+  [f43a241f] Downloads v1.7.0
+  [7b1f6079] FileWatching v1.11.0
+  [b77e0a4c] InteractiveUtils v1.11.0
+  [ac6e5ff7] JuliaSyntaxHighlighting v1.12.0
+  [b27032c2] LibCURL v0.6.4
+  [76f85450] LibGit2 v1.11.0
+  [8f399da3] Libdl v1.11.0
+  [56ddb016] Logging v1.11.0
+  [d6f4376e] Markdown v1.11.0
+  [ca575930] NetworkOptions v1.3.0
+  [44cfe95a] Pkg v1.12.1
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [9e88b42a] Serialization v1.11.0
+  [f489334b] StyledStrings v1.11.0
+  [fa267f1f] TOML v1.0.3
+  [a4e569a6] Tar v1.10.0
+  [8dfed614] Test v1.11.0
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
+  [e66e0078] CompilerSupportLibraries_jll v1.3.1+2
+  [deac9b47] LibCURL_jll v8.15.0+0
+  [e37daf67] LibGit2_jll v1.9.0+0
+  [29816b5a] LibSSH2_jll v1.11.3+1
+  [14a3606d] MozillaCACerts_jll v2025.11.4
+  [458c3c95] OpenSSL_jll v3.5.6+0
+  [83775a58] Zlib_jll v1.3.1+2
+  [8e850ede] nghttp2_jll v1.64.0+1
+  [3f19e933] p7zip_jll v17.7.0+0
+Precompiling for configuration --code-coverage=none --color=no --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none --threads=2,0
+   3667.2 ms  ✓ PipeWireAO
+  1 dependency successfully precompiled in 4 seconds. 35 already precompiled.
+     Testing Running tests...
+Test Summary: | Pass  Total  Time
+Aqua          |   11     11  7.6s
+Test Summary:                  | Pass  Total  Time
+maintained current object info |   51     51  0.5s
+Test Summary:        | Pass  Total  Time
+managed info tracker |   19     19  4.3s
+Test Summary:                               | Pass  Total  Time
+prepared native thread-loop lock allocation |   10     10  0.5s
+Test Summary:                          | Pass  Total  Time
+native thread-loop interrupt ownership |    5      5  3.9s
+Test Summary:                  | Pass  Total  Time
+native stream state allocation |    8      8  0.6s
+Test Summary:                               | Pass  Total  Time
+native filter state allocation and failures |   10     10  0.5s
+Test Summary:                          | Pass  Total  Time
+native ndarray bindings remain private |    4      4  0.0s
+Test Summary:                | Pass  Total  Time
+generated ndarray filter ABI |   25     25  0.2s
+Test Summary:                   | Pass  Total  Time
+ndarray Parameter Port callback |   14     14  2.8s
+Test Summary:                                    | Pass  Total  Time
+ndarray callback metadata and conditional output |   19     19  0.2s
+Test Summary:                                | Pass  Total  Time
+ndarray owner properties and reset callbacks |   16     16  1.1s
+Test Summary:                    | Pass  Total  Time
+idiomatic ndarray filter wrapper |   28     28  0.6s
+Test Summary:                                      | Pass  Total  Time
+ndarray callback adopts a foreign data-loop thread |    6      6  0.2s
+Test Summary:                                    | Pass  Total  Time
+ndarray filter callback exceptions are contained |    8      8  0.2s
+Test Summary:                | Pass  Total  Time
+typed object callback copies |   32     32  1.3s
+Test Summary:                         | Pass  Total  Time
+prepared ndarray negotiation is exact |   10     10  1.2s
+Test Summary:                                       | Pass  Total  Time
+prepared ndarray native packed-stride compatibility |   48     48  0.6s
+Test Summary:                                   | Pass  Total  Time
+prepared ndarray encoding and captured metadata |   49     49  0.7s
+Test Summary:                             | Pass  Total  Time
+zero Header sequence is explicitly opt-in |   13     13  0.3s
+Test Summary:                                | Pass  Total  Time
+prepared ndarray lifecycle and bounded waits |   34     34  0.3s
+Test Summary:                                      | Pass  Total  Time
+prepared ndarray disconnect and close wake waiters |   10     10  0.1s
+Test Summary:                     | Pass  Total  Time
+native owner control POD wrappers |   53     53  0.4s
+Test Summary:                         | Pass  Total  Time
+prepared native control serialization |   22     22  1.1s
+Test Summary:                             | Pass  Total  Time
+bounded reusable stream parameter storage |   21     21  0.0s
+Test Summary:                 | Pass  Total  Time
+prepared scalar Props storage |   36     36  1.0s
+Test Summary:            | Pass  Total  Time
+prepared Props rejection |   44     44  0.4s
+Test Summary:                 | Pass  Total  Time
+bounded prepared Props parser |  250    250  0.0s
+Test Summary:                           | Pass  Total  Time
+prepared Props warmed allocation budget |   33     33  0.0s
+Test Summary:                      | Pass  Total  Time
+stream parameter overflow callback |   15     15  0.2s
+Test Summary:                                    | Pass  Total  Time
+prepared native parameter sets on a private core |   17     17  2.9s
+Test Summary:                 | Pass  Total  Time
+Clang.jl-generated C bindings |    5      5  0.0s
+Test Summary:               | Pass  Total  Time
+unused native notifications |    2      2  0.0s
+Test Summary: | Pass  Total  Time
+core protocol |   23     23  0.5s
+Test Summary: | Pass  Total  Time
+PipeWire      |    9      9  0.7s
+Test Summary:             | Pass  Total  Time
+managed core and registry |   40     40  0.8s
+Test Summary:   | Pass  Total  Time
+context modules |    8      8  0.2s
+Test Summary: | Pass  Total  Time
+properties    |   11     11  0.2s
+Test Summary: | Pass  Total  Time
+managed proxy |   15     15  0.4s
+Test Summary:          | Pass  Total  Time
+typed PipeWire objects |   51     51  1.5s
+Test Summary:                | Pass  Total  Time
+thread-loop GC participation |    4      4  3.7s
+Test Summary:       | Pass  Total  Time
+managed thread loop |   14     14  0.1s
+Test Summary:      | Pass  Total  Time
+owned loop sources |   15     15  1.2s
+Test Summary:      | Pass  Total  Time
+typed loop channel |    9      9  0.2s
+Test Summary:          | Pass  Total  Time
+public SPA identifiers |   28     28  0.0s
+Test Summary:       | Pass  Total  Time
+property parameters |   15     15  0.2s
+Test Summary:         | Pass  Total  Time
+native ndarray format |   89     89  1.2s
+Test Summary:         | Pass  Total  Time
+scalar SPA POD values |   67     67  0.7s
+Test Summary:            | Pass  Total  Time
+container SPA POD values |   68     68  0.4s
+Test Summary:         | Pass  Total  Time
+choice SPA POD values |   64     64  0.3s
+Test Summary:         | Pass  Total  Time
+object SPA POD values |   29     29  0.2s
+Test Summary:           | Pass  Total  Time
+sequence SPA POD values |   18     18  0.2s
+Test Summary:    | Pass  Total  Time
+raw video format |   26     26  0.7s
+Test Summary:          | Pass  Total  Time
+raw format information |   32     32  0.4s
+Test Summary:                     | Pass  Total  Time
+bitmap and pointer SPA POD values |   16     16  0.1s
+Test Summary:                              | Pass  Total  Time
+typed SPA parameters, commands, and events |   32     32  0.5s
+Test Summary:        | Pass  Total  Time
+acquisition metadata |   78     78  0.4s
+Test Summary:  | Pass  Total  Time
+managed filter |   89     89  1.7s
+Test Summary:      | Pass  Total  Time
+filter error state |    6      6  0.0s
+Test Summary:      | Pass  Total  Time
+filter buffer data |   48     48  0.5s
+Test Summary:                | Pass  Total  Time
+composable managed listeners |   70     70  3.2s
+Test Summary:   | Pass  Total  Time
+client examples |    9      9  0.1s
+Test Summary:  | Pass  Total  Time
+managed stream |  121    121  2.0s
+     Testing PipeWireAO tests passed 

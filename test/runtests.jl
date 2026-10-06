@@ -4,6 +4,7 @@ using Test
 include("aqua.jl")
 include("current_info.jl")
 include("thread_loop_allocations.jl")
+include("thread_loop_interrupt.jl")
 include("stream_state_allocations.jl")
 include("filter_state_allocations.jl")
 include("ndarray_filter.jl")

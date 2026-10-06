@@ -108,22 +108,38 @@ quit!(loop::ThreadLoop) = stop!(loop)
 
 Run `f(loop)` while holding PipeWire's native thread-loop lock. The lock is
 recursive, so this is also valid inside a callback dispatched by `loop`.
+Asynchronous SIGINT is deferred until native ownership is released. Keep `f`
+bounded; exceptions explicitly thrown by `f` still release the lock.
 """
 function with_thread_loop_lock(f, loop::ThreadLoop)
+    # A pending SIGINT can be delivered as a GC-safe C call returns. Defer it
+    # through the whole ownership interval, including reservation and cleanup;
+    # otherwise acquisition can succeed before Julia skips its unlock finally.
+    return Base.disable_sigint() do
+        _with_thread_loop_lock(f, loop)
+    end
+end
+
+# Keep the ownership body in a normal function. Nesting it in the SIGINT
+# closure boxes prepared immutable parameter sets in callers on Julia 1.12.
+function _with_thread_loop_lock(f, loop::ThreadLoop)
     handle = lock(loop.state_lock) do
         native_handle = _require_open(loop)
         loop.native_access_count += 1
         return native_handle
     end
-    # A callback can request GC while holding this native mutex. The waiting
-    # Julia thread must allow collection to proceed until it acquires the lock.
-    @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_thread_loop_lock(
-        handle::Ptr{LibPipeWire.pw_thread_loop}
-    )::Cvoid
     try
-        return f(loop)
+        # A callback can request GC while holding this native mutex. The
+        # waiting Julia thread must still allow collection to proceed.
+        @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_thread_loop_lock(
+            handle::Ptr{LibPipeWire.pw_thread_loop}
+        )::Cvoid
+        try
+            return f(loop)
+        finally
+            LibPipeWire.pw_thread_loop_unlock(handle)
+        end
     finally
-        LibPipeWire.pw_thread_loop_unlock(handle)
         lock(loop.state_lock) do
             loop.native_access_count -= 1
             @assert loop.native_access_count >= 0

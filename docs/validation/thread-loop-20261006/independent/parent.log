@@ -1,0 +1,4 @@
+Test Summary:                               | Pass  Total  Time
+prepared native thread-loop lock allocation |   10     10  0.3s
+Test Summary:                          | Pass  Total  Time
+native thread-loop interrupt ownership |    5      5  1.9s

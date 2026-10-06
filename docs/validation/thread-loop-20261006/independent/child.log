@@ -1,0 +1,2 @@
+INTERRUPT_OWNERSHIP interrupted=true count=0 main_thread=1
+INTERRUPT_OWNERSHIP closed=true cross_thread_reacquired=true

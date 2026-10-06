@@ -1,0 +1,279 @@
+┌ Warning: The project dependencies or compat requirements have changed since the manifest was last resolved.
+│ It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.
+└ @ Pkg.API ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:1322
+     Testing PipeWireAO
+      Status `/tmp/jl_2hx5ja/Project.toml`
+  [4c88cf16] Aqua v0.8.18
+  [5d815c25] PipeWireAO v0.6.16 `~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state`
+  [c4a57d5a] UnsafeArrays v1.0.9
+  [cde84cf6] PipeWireAO_jll v1.7.0+19
+  [8dfed614] Test v1.11.0
+      Status `/tmp/jl_2hx5ja/Manifest.toml`
+  [4c88cf16] Aqua v0.8.18
+  [34da2185] Compat v4.18.1
+  [692b3bcd] JLLWrappers v1.8.0
+  [5d815c25] PipeWireAO v0.6.16 `~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state`
+  [21216c6a] Preferences v1.6.0
+  [c4a57d5a] UnsafeArrays v1.0.9
+  [cde84cf6] PipeWireAO_jll v1.7.0+19
+  [0dad84c5] ArgTools v1.1.2
+  [56f22d72] Artifacts v1.11.0
+  [2a0f44e3] Base64 v1.11.0
+  [ade2ca70] Dates v1.11.0
+  [f43a241f] Downloads v1.7.0
+  [7b1f6079] FileWatching v1.11.0
+  [b77e0a4c] InteractiveUtils v1.11.0
+  [ac6e5ff7] JuliaSyntaxHighlighting v1.12.0
+  [b27032c2] LibCURL v0.6.4
+  [76f85450] LibGit2 v1.11.0
+  [8f399da3] Libdl v1.11.0
+  [56ddb016] Logging v1.11.0
+  [d6f4376e] Markdown v1.11.0
+  [ca575930] NetworkOptions v1.3.0
+  [44cfe95a] Pkg v1.12.1
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [9e88b42a] Serialization v1.11.0
+  [f489334b] StyledStrings v1.11.0
+  [fa267f1f] TOML v1.0.3
+  [a4e569a6] Tar v1.10.0
+  [8dfed614] Test v1.11.0
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
+  [e66e0078] CompilerSupportLibraries_jll v1.3.1+2
+  [deac9b47] LibCURL_jll v8.15.0+0
+  [e37daf67] LibGit2_jll v1.9.0+0
+  [29816b5a] LibSSH2_jll v1.11.3+1
+  [14a3606d] MozillaCACerts_jll v2025.11.4
+  [458c3c95] OpenSSL_jll v3.5.6+0
+  [83775a58] Zlib_jll v1.3.1+2
+  [8e850ede] nghttp2_jll v1.64.0+1
+  [3f19e933] p7zip_jll v17.7.0+0
+Precompiling for configuration --code-coverage=none --color=no --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none --threads=2,0
+   3777.6 ms  ✓ PipeWireAO
+  1 dependency successfully precompiled in 4 seconds. 35 already precompiled.
+     Testing Running tests...
+ERROR: LoadError: Some tests did not pass: 12 passed, 5 failed, 0 errored, 0 broken.
+in expression starting at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:25
+in expression starting at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/runtests.jl:17
+Test Summary: | Pass  Total  Time
+Aqua          |   11     11  7.6s
+Test Summary:                  | Pass  Total  Time
+maintained current object info |   51     51  0.5s
+Test Summary:        | Pass  Total  Time
+managed info tracker |   19     19  2.1s
+Test Summary:                               | Pass  Total  Time
+prepared native thread-loop lock allocation |    6      6  0.2s
+Test Summary:                          | Pass  Total  Time
+native thread-loop interrupt ownership |    5      5  2.0s
+Test Summary:                  | Pass  Total  Time
+native stream state allocation |    8      8  0.2s
+Test Summary:                               | Pass  Total  Time
+native filter state allocation and failures |   10     10  0.3s
+Test Summary:                          | Pass  Total  Time
+native ndarray bindings remain private |    4      4  0.0s
+Test Summary:                | Pass  Total  Time
+generated ndarray filter ABI |   25     25  0.1s
+Test Summary:                   | Pass  Total  Time
+ndarray Parameter Port callback |   14     14  1.2s
+Test Summary:                                    | Pass  Total  Time
+ndarray callback metadata and conditional output |   19     19  0.1s
+Test Summary:                                | Pass  Total  Time
+ndarray owner properties and reset callbacks |   16     16  1.1s
+Test Summary:                    | Pass  Total  Time
+idiomatic ndarray filter wrapper |   28     28  0.6s
+Test Summary:                                      | Pass  Total  Time
+ndarray callback adopts a foreign data-loop thread |    6      6  0.2s
+Test Summary:                                    | Pass  Total  Time
+ndarray filter callback exceptions are contained |    8      8  0.2s
+Test Summary:                | Pass  Total  Time
+typed object callback copies |   32     32  1.3s
+Test Summary:                         | Pass  Total  Time
+prepared ndarray negotiation is exact |   10     10  1.2s
+Test Summary:                                       | Pass  Total  Time
+prepared ndarray native packed-stride compatibility |   48     48  0.6s
+Test Summary:                                   | Pass  Total  Time
+prepared ndarray encoding and captured metadata |   49     49  0.7s
+Test Summary:                             | Pass  Total  Time
+zero Header sequence is explicitly opt-in |   13     13  0.3s
+Test Summary:                                | Pass  Total  Time
+prepared ndarray lifecycle and bounded waits |   34     34  0.3s
+Test Summary:                                      | Pass  Total  Time
+prepared ndarray disconnect and close wake waiters |   10     10  0.1s
+Test Summary:                     | Pass  Total  Time
+native owner control POD wrappers |   53     53  0.4s
+Test Summary:                         | Pass  Total  Time
+prepared native control serialization |   22     22  1.1s
+Test Summary:                             | Pass  Total  Time
+bounded reusable stream parameter storage |   21     21  0.0s
+Test Summary:                 | Pass  Total  Time
+prepared scalar Props storage |   36     36  1.0s
+Test Summary:            | Pass  Total  Time
+prepared Props rejection |   44     44  0.4s
+Test Summary:                 | Pass  Total  Time
+bounded prepared Props parser |  250    250  0.0s
+Test Summary:                           | Pass  Total  Time
+prepared Props warmed allocation budget |   33     33  0.0s
+Test Summary:                      | Pass  Total  Time
+stream parameter overflow callback |   15     15  0.2s
+prepared native parameter sets on a private core: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:81
+  Expression: batch_publication_bytes(stream, empty_parameters, client_loop) == 0
+   Evaluated: 16 == 0
+
+Stacktrace:
+  [1] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+  [2] (::var"#167#168")(remote::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:81
+  [3] #with_array_exchange_private_core##4
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:45 [inlined]
+  [4] withenv(::var"#with_array_exchange_private_core##4#with_array_exchange_private_core##5"{String, var"#167#168"}, ::Pair{String, String}, ::Vararg{Pair{String, String}})
+    @ Base ./env.jl:283
+  [5] (::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String})(directory::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:44
+  [6] mktempdir(fn::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:941
+  [7] mktempdir (repeats 2 times)
+    @ ./file.jl:937 [inlined]
+  [8] with_array_exchange_private_core(f::var"#167#168")
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:8
+  [9] top-level scope
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26
+ [10] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [11] macro expansion
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26 [inlined]
+prepared native parameter sets on a private core: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:91
+  Expression: batch_publication_bytes(stream, single, client_loop) == 0
+   Evaluated: 32 == 0
+
+Stacktrace:
+  [1] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+  [2] (::var"#167#168")(remote::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:91
+  [3] #with_array_exchange_private_core##4
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:45 [inlined]
+  [4] withenv(::var"#with_array_exchange_private_core##4#with_array_exchange_private_core##5"{String, var"#167#168"}, ::Pair{String, String}, ::Vararg{Pair{String, String}})
+    @ Base ./env.jl:283
+  [5] (::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String})(directory::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:44
+  [6] mktempdir(fn::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:941
+  [7] mktempdir (repeats 2 times)
+    @ ./file.jl:937 [inlined]
+  [8] with_array_exchange_private_core(f::var"#167#168")
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:8
+  [9] top-level scope
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26
+ [10] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [11] macro expansion
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26 [inlined]
+prepared native parameter sets on a private core: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:95
+  Expression: batch_publication_bytes(stream, parameters, client_loop) == 0
+   Evaluated: 48 == 0
+
+Stacktrace:
+  [1] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+  [2] (::var"#167#168")(remote::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:95
+  [3] #with_array_exchange_private_core##4
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:45 [inlined]
+  [4] withenv(::var"#with_array_exchange_private_core##4#with_array_exchange_private_core##5"{String, var"#167#168"}, ::Pair{String, String}, ::Vararg{Pair{String, String}})
+    @ Base ./env.jl:283
+  [5] (::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String})(directory::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:44
+  [6] mktempdir(fn::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:941
+  [7] mktempdir (repeats 2 times)
+    @ ./file.jl:937 [inlined]
+  [8] with_array_exchange_private_core(f::var"#167#168")
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:8
+  [9] top-level scope
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26
+ [10] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [11] macro expansion
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26 [inlined]
+prepared native parameter sets on a private core: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:103
+  Expression: batch_publication_bytes(stream, mixed, client_loop) == 0
+   Evaluated: 64 == 0
+
+Stacktrace:
+  [1] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+  [2] (::var"#167#168")(remote::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:103
+  [3] #with_array_exchange_private_core##4
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:45 [inlined]
+  [4] withenv(::var"#with_array_exchange_private_core##4#with_array_exchange_private_core##5"{String, var"#167#168"}, ::Pair{String, String}, ::Vararg{Pair{String, String}})
+    @ Base ./env.jl:283
+  [5] (::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String})(directory::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:44
+  [6] mktempdir(fn::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:941
+  [7] mktempdir (repeats 2 times)
+    @ ./file.jl:937 [inlined]
+  [8] with_array_exchange_private_core(f::var"#167#168")
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:8
+  [9] top-level scope
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26
+ [10] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [11] macro expansion
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26 [inlined]
+prepared native parameter sets on a private core: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:109
+  Expression: batch_publication_bytes(stream, parameters, client_loop) == 0
+   Evaluated: 48 == 0
+
+Stacktrace:
+  [1] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+  [2] (::var"#167#168")(remote::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:109
+  [3] #with_array_exchange_private_core##4
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:45 [inlined]
+  [4] withenv(::var"#with_array_exchange_private_core##4#with_array_exchange_private_core##5"{String, var"#167#168"}, ::Pair{String, String}, ::Vararg{Pair{String, String}})
+    @ Base ./env.jl:283
+  [5] (::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String})(directory::String)
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:44
+  [6] mktempdir(fn::var"#with_array_exchange_private_core##0#with_array_exchange_private_core##1"{var"#167#168", String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:941
+  [7] mktempdir (repeats 2 times)
+    @ ./file.jl:937 [inlined]
+  [8] with_array_exchange_private_core(f::var"#167#168")
+    @ Main ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/private_core.jl:8
+  [9] top-level scope
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26
+ [10] macro expansion
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [11] macro expansion
+    @ ~/workspaces/codex/pipewire/PipeWireAO-bootstrap-state/test/native_control_private_core.jl:26 [inlined]
+Test Summary:                                    | Pass  Fail  Total  Time
+prepared native parameter sets on a private core |   12     5     17  4.1s
+RNG of the outermost testset: Random.Xoshiro(0x877b2ae2f569ff95, 0x4808cedaa992ea71, 0xd27df80480feae5c, 0x6996ecc21263e129, 0x5f2be8d7f7d74ed3)
+ERROR: Package PipeWireAO errored during testing
+Stacktrace:
+  [1] pkgerror(msg::String)
+    @ Pkg.Types ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Types.jl:68
+  [2] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+    @ Pkg.Operations ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2642
+  [3] test
+    @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2487 [inlined]
+  [4] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Vector{String}, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:552
+  [5] test(pkgs::Vector{PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{julia_args::Vector{String}, allow_reresolve::Bool})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:169
+  [6] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::PackageMode, subdir::Nothing, kwargs::@Kwargs{julia_args::Vector{String}, allow_reresolve::Bool})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:186
+  [7] top-level scope
+    @ none:1
+  [8] eval(m::Module, e::Any)
+    @ Core ./boot.jl:489
+  [9] exec_options(opts::Base.JLOptions)
+    @ Base ./client.jl:283
+ [10] _start()
+    @ Base ./client.jl:550

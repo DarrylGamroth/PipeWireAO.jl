@@ -1,0 +1,7 @@
+Precompiling packages...
+   7697.5 ms  ✓ PipeWireAO
+  1 dependency successfully precompiled in 8 seconds. 8 already precompiled.
+Test Summary:                               | Pass  Total  Time
+prepared native thread-loop lock allocation |   10     10  0.5s
+Test Summary:                          | Pass  Total  Time
+native thread-loop interrupt ownership |    5      5  3.7s

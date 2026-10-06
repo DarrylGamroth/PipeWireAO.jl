@@ -1,0 +1,37 @@
+{
+  "starting_revision": "6e4e1eebf8bd160f01a532dcfc7284dec92de61b",
+  "worktree": "/home/dgamroth/workspaces/codex/pipewire/PipeWireAO-bootstrap-state",
+  "branch": "fix/thread-loop-interrupt-scope-20261006",
+  "julia": "1.12.7",
+  "cpu_checks": [
+    11,
+    15
+  ],
+  "source_sha256": {
+    "src/thread_loop.jl": "d622115599605017b251addf6f23c96d85c272d3c360c46b4048f2fb7eaed420",
+    "test/runtests.jl": "aad120f35d11346f5d530e5657bbde8f40b14e773f86cf830c95d6fe2c611e3b",
+    "test/thread_loop_allocations.jl": "0585a30441e8ec9074e4e19d61563a4b1d7b714553b43116a15ce01ebfdaf960",
+    "test/thread_loop_interrupt.jl": "07025575d27149bfc34a3c3e75ebd03b080deb44279b698a3868e3947ca10c52",
+    "test/thread_loop_interrupt_child.jl": "09ea9318db38e00bb63c5e21b8e3af8597c3a2dce7f39c5bd0ff46ac9983e9a3"
+  },
+  "evidence_sha256": {
+    "independent/child.log": "728477f8b06728b0629c424cbb9a33c07df4d120324b7b1981cbcc3e6f7398fa",
+    "independent/owned-child-pid.txt": "d28d5fda065869b0070354320228fec3546b9966910fe5f126d933150c2a33ec",
+    "independent/parent.log": "e62ac1405da98849ebf0cc9affc9ef0387e0b6b5e7d343fe19f47498243ca525",
+    "independent/waiting.txt": "7d67ed154f6c923bce7d738d4237828759ffb8ccd3c660a7e59ce6efa1a4b095",
+    "thread-loop-gc-lock-helper.log": "bd29a18287c75099c0bb86611552e7ad97ec7b8ca886ca79421365cfe23e7781",
+    "thread-loop-gc-stop-helper.log": "85a29422b243d24cc09038df3abfe14c3802b7dbca344fbeef28c1108e59ca3b",
+    "thread-loop-interrupt-before.log": "42eff342cdbc792c0f44dd066616f5ad3ea7e69380bf0b571564f8ed743e212f",
+    "thread-loop-ownership-helper.log": "248f09945ab5fafdbba24d1fe55d165170c0a142eb714f41d6cdcb7742eee29e",
+    "thread-loop-params-before.log": "6f752e22cc49e73a025b11ec468b721f1431bb193c9a36c9bb2a3f10ccb2a265",
+    "thread-loop-sdk-suite-after.log": "99c3bb7542b771b83e72f6c19e809a14f614d907cb15a6369c286c6188fb53ed",
+    "thread-loop-sdk-suite-helper.log": "4b2922a35464b0872c0266dfa1847ba77e1b2f9e46b893a0a08d704a5535884f"
+  },
+  "full_suite": {
+    "passed": 2032,
+    "total": 2032,
+    "testsets": 63
+  },
+  "native_abi_changed": false,
+  "installed_replay_completed": false
+}
