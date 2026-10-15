@@ -408,10 +408,23 @@ complete `SPA_META_Header` payload without crossing into native bindings.
 Acquisition metadata carries a stable acquisition identity and either a
 host-local `CLOCK_MONOTONIC` exposure timestamp or a PTP-qualified `CLOCK_TAI`
 timestamp. Cross-host joins compare timestamps only when both records name the
-same PTP grandmaster and PTP domain. `acquisition_wire` and
-`deserialize_acquisition!` provide the canonical fixed-size, big-endian record
-for transport between processes or hosts; semantic join policy remains with
-the application.
+same PTP grandmaster and PTP domain. Native buffer records are shared-memory
+metadata; this SDK does not expose a cross-host acquisition codec.
+
+Version 3 adds whole-exposure trigger classification: absent, low throughout, high
+throughout, or mixed. `acquisition_trigger_state` returns that classification;
+`set_acquisition_trigger_state!` upgrades a valid Version 2 record explicitly.
+`acquisition_metadata_param(; version=3)` and
+`NdArrayFilterPort(...; acquisition_version=3)` require the native Version 3
+feature. Defaults remain Version 2. Older peers reject the explicit requirement.
+The fixed native record remains 96 bytes.
+
+For ndarray callbacks, `buffer_acquisition` returns a borrowed record with the
+same semantic accessors as stream buffers. Do not retain it after the callback.
+`initialize_acquisition!(output_buffer; version=3)` creates writable metadata,
+and `clear_buffer_acquisition!` removes stale metadata from a reused output.
+Projection into an application record must preserve identity, clock qualification,
+duration and classification while the native record is borrowed.
 With `STREAM_ALLOC_BUFFERS`, call `allocate_buffer!` from `on_buffer_added` to
 install Julia-owned `MemPtr` planes. The stream roots those allocations until
 PipeWire removes the corresponding native buffer.

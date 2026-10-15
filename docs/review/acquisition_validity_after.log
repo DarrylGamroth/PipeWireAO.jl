@@ -1,0 +1,8 @@
+Test Summary:        | Pass  Total  Time
+acquisition metadata |   78     78  2.5s
+Test Summary:                   | Pass  Total  Time
+whole-exposure trigger metadata |   37     37  1.1s
+Test Summary:                       | Pass  Total  Time
+ndarray borrowed acquisition record |   11     11  0.3s
+Test Summary:                                                   | Pass  Total  Time
+cleared ndarray acquisition records cannot compare stale fields |   15     15  0.1s

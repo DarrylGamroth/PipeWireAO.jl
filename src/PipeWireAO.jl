@@ -2,6 +2,8 @@ module PipeWireAO
 
 using UnsafeArrays: UnsafeArray
 
+abstract type _AcquisitionMetadata end
+
 export CoreConnection,
     ContextModule,
     AcquisitionDomain,
@@ -10,6 +12,12 @@ export CoreConnection,
     AcquisitionMetadata,
     AcquisitionPtpReference,
     AcquisitionTimebase,
+    AcquisitionTriggerState,
+    NdArrayAcquisitionMetadata,
+    ACQUISITION_TRIGGER_ABSENT,
+    ACQUISITION_TRIGGER_LOW,
+    ACQUISITION_TRIGGER_HIGH,
+    ACQUISITION_TRIGGER_MIXED,
     PtpClockIdentity,
     ACQUISITION_DOMAIN_SIZE,
     ACQUISITION_FLAG_EXPOSURE_DURATION_VALID,
@@ -151,7 +159,11 @@ export CoreConnection,
     VideoInfoRaw,
     acquisition_exposure_duration,
     acquisition_exposure_start,
+    clear_buffer_acquisition!,
     acquisition_flags,
+    acquisition_version,
+    acquisition_trigger_state,
+    set_acquisition_trigger_state!,
     acquisition_identity,
     acquisition_identity_equal,
     acquisition_metadata_param,

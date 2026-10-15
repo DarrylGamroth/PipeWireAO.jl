@@ -775,6 +775,7 @@ end
 include("loop.jl")
 include("spa.jl")
 include("acquisition_metadata.jl")
+include("acquisition_trigger.jl")
 include("filter.jl")
 include("listeners.jl")
 include("examples.jl")

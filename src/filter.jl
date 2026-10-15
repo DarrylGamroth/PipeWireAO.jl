@@ -527,7 +527,11 @@ function filter_name(filter::Filter)
     return pointer == C_NULL ? "" : unsafe_string(pointer)
 end
 
-"Return the bound PipeWire node ID for `filter`."
+"""
+    node_id(filter::Filter)
+
+Return the bound PipeWire node ID for `filter`.
+"""
 function node_id(filter::Filter)
     _check_callback_error(filter)
     return lock(filter.state_lock) do
@@ -541,7 +545,11 @@ function _filter_params(params)
     return native_params, pointers
 end
 
-"Connect `filter` for processing and return it."
+"""
+    connect!(filter::Filter; flags=FILTER_ASYNC, params=Pod[])
+
+Connect `filter` for processing and return it.
+"""
 function connect!(filter::Filter; flags::Integer=FILTER_ASYNC, params=Pod[])
     native_flags = _core_uint32(flags, "filter flags")
     native_flags & LibPipeWire.PW_FILTER_FLAG_RT_PROCESS == 0 || throw(

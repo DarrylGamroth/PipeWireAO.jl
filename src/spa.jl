@@ -795,14 +795,15 @@ header_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param
 )
 
 """
-    acquisition_metadata_param(; id=LibPipeWire.SPA_PARAM_Meta)
+    acquisition_metadata_param(; version=2, id=LibPipeWire.SPA_PARAM_Meta)
 
-Request current native acquisition metadata on every negotiated buffer.
+Request acquisition metadata on every negotiated buffer. Version 2 is the default;
+Version 3 explicitly requires whole-exposure trigger classification support.
 """
-acquisition_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
+acquisition_metadata_param(; version::Integer=2, id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
     SPA.META_ACQUISITION;
     size=_ACQUISITION_SIZE,
-    features=_ACQUISITION_FEATURE_CURRENT,
+    features=_acquisition_feature(version),
     id,
 )
 

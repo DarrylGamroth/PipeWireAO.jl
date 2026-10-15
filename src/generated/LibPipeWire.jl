@@ -4114,12 +4114,14 @@ Acquisition metadata ABI constants.
 const spa_meta_acquisition_constant = UInt32
 const SPA_META_ACQUISITION_VERSION_1 = 1 % UInt32
 const SPA_META_ACQUISITION_VERSION_2 = 2 % UInt32
+const SPA_META_ACQUISITION_VERSION_3 = 3 % UInt32
 const SPA_META_ACQUISITION_VERSION = 2 % UInt32
 const SPA_META_ACQUISITION_SIZE = 96 % UInt32
 const SPA_META_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
 const SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE = 8 % UInt32
 const SPA_META_FEATURE_ACQUISITION_VERSION_1 = 1 % UInt32
 const SPA_META_FEATURE_ACQUISITION_VERSION_2 = 2 % UInt32
+const SPA_META_FEATURE_ACQUISITION_VERSION_3 = 4 % UInt32
 const SPA_META_FEATURE_ACQUISITION_CURRENT = 2 % UInt32
 
 const spa_meta_acquisition_flag = UInt32
@@ -4134,6 +4136,12 @@ const SPA_META_ACQUISITION_TIMEBASE_NONE = 0 % UInt32
 const SPA_META_ACQUISITION_TIMEBASE_MONOTONIC = 1 % UInt32
 const SPA_META_ACQUISITION_TIMEBASE_TAI = 2 % UInt32
 
+const spa_meta_acquisition_trigger_classification = UInt32
+const SPA_META_ACQUISITION_TRIGGER_ABSENT = 0 % UInt32
+const SPA_META_ACQUISITION_TRIGGER_LOW = 1 % UInt32
+const SPA_META_ACQUISITION_TRIGGER_HIGH = 2 % UInt32
+const SPA_META_ACQUISITION_TRIGGER_MIXED = 3 % UInt32
+
 """
     spa_meta_acquisition
 
@@ -4143,7 +4151,11 @@ The producer initializes this structure before publishing a complete buffer. It 
 
 Identity is the complete (domain, generation, sequence) tuple. The domain is opaque and compared bytewise. Version 1 exposure timestamps are in the local Linux CLOCK\\_MONOTONIC domain and are never comparable across hosts.
 
-Version 2 makes the timebase explicit. Cross-host timestamps use CLOCK\\_TAI nanoseconds and identify the PTP grandmaster and PTP domain that established the mapping. timestamp\\_uncertainty\\_nsec is an inclusive error bound for the exposure-start mapping. A PTP time is comparable only with another valid Version 2 PTP time carrying the same grandmaster identity and domain number.
+Version 2 makes the timebase explicit. Cross-host timestamps use CLOCK\\_TAI nanoseconds and identify the PTP grandmaster and PTP domain that established the mapping. timestamp\\_uncertainty\\_nsec is an inclusive error bound for the exposure-start mapping. A PTP time is comparable only with another valid Version 2 or 3 PTP time carrying the same grandmaster identity and domain number. Version 3 encodes trigger classification in reserved2; all upper bits are zero.
+
+| Field     | Note                                                     |
+| :-------- | :------------------------------------------------------- |
+| reserved2 | Version 3 trigger classification; zero in Versions 1/2.  |
 """
 struct spa_meta_acquisition
     data::NTuple{96, UInt8}
@@ -4257,9 +4269,37 @@ function spa_meta_acquisition_set_exposure_duration(acquisition, exposure_durati
 end
 
 """
+    spa_meta_acquisition_get_trigger_classification(acquisition, classification)
+
+Read trigger classification; valid Versions 1/2 report absent.
+
+### Prototype
+```c
+bool spa_meta_acquisition_get_trigger_classification( const struct spa_meta_acquisition *acquisition, enum spa_meta_acquisition_trigger_classification *classification);
+```
+"""
+function spa_meta_acquisition_get_trigger_classification(acquisition, classification)
+    @ccall libpipewire_ao.spa_meta_acquisition_get_trigger_classification(acquisition::Ptr{spa_meta_acquisition}, classification::Ptr{spa_meta_acquisition_trigger_classification})::Bool
+end
+
+"""
+    spa_meta_acquisition_set_trigger_classification(acquisition, classification)
+
+Set trigger classification, upgrading valid Version 2 metadata to Version 3.
+
+### Prototype
+```c
+bool spa_meta_acquisition_set_trigger_classification( struct spa_meta_acquisition *acquisition, enum spa_meta_acquisition_trigger_classification classification);
+```
+"""
+function spa_meta_acquisition_set_trigger_classification(acquisition, classification)
+    @ccall libpipewire_ao.spa_meta_acquisition_set_trigger_classification(acquisition::Ptr{spa_meta_acquisition}, classification::spa_meta_acquisition_trigger_classification)::Bool
+end
+
+"""
     spa_meta_acquisition_is_valid(meta)
 
-Validate a mapped Version 1 or Version 2 acquisition metadata allocation.
+Validate a mapped Version 1, 2 or 3 acquisition metadata allocation.
 
 ### Prototype
 ```c
@@ -7825,13 +7865,15 @@ const PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS = 32 % UInt32
 
 Static ndarray-filter Port roles.
 
-| Enumerator                                      | Note                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| :---------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_PARAMETER | Sparse input Parameter Port prepared away from repeated processing.  Parameter Ports must be inputs and must not declare a repeated rate. Their buffers are delivered to update\\_parameter() on a bounded worker rather than to the frame process callback. A buffer whose first data chunk has size zero means that no replacement is present in that graph cycle; it is recycled without invoking update\\_parameter().  |
+| Enumerator                                             | Note                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| :----------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_PARAMETER        | Sparse input Parameter Port prepared away from repeated processing.  Parameter Ports must be inputs and must not declare a repeated rate. Their buffers are delivered to update\\_parameter() on a bounded worker rather than to the frame process callback. A buffer whose first data chunk has size zero means that no replacement is present in that graph cycle; it is recycled without invoking update\\_parameter().  |
+| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_ACQUISITION\\_V3 | Require Acquisition Version 3 metadata with trigger classification.                                                                                                                                                                                                                                                                                                                                                         |
 """
 const pw_ndarray_filter_port_flags = UInt32
 const PW_NDARRAY_FILTER_PORT_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER = 1 % UInt32
+const PW_NDARRAY_FILTER_PORT_FLAG_ACQUISITION_V3 = 2 % UInt32
 
 """
     pw_ndarray_filter_metadata

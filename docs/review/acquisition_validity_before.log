@@ -1,0 +1,47 @@
+ERROR: LoadError: Some tests did not pass: 4 passed, 3 failed, 0 errored, 0 broken.
+in expression starting at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:78
+in expression starting at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-acquisition-release/docs/review/acquisition_validity.jl:12
+Test Summary:                   | Pass  Total  Time
+whole-exposure trigger metadata |   37     37  1.2s
+Test Summary:                       | Pass  Total  Time
+ndarray borrowed acquisition record |   11     11  0.3s
+cleared ndarray acquisition records cannot compare stale fields: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:94
+  Expression: !(acquisition_identity_equal(record, record))
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:79
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:94 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+cleared ndarray acquisition records cannot compare stale fields: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:95
+  Expression: acquisition_time_difference(record, record) === nothing
+   Evaluated: (0, 0x0000000000000004) === nothing
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:79
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:95 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+cleared ndarray acquisition records cannot compare stale fields: Test Failed at /home/dgamroth/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:96
+  Expression: !(acquisition_times_match(record, record, 0))
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:79
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/workspaces/codex/pipewire/PipeWireAO-acquisition-release/test/acquisition_trigger.jl:96 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.12.7+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+Test Summary:                                                   | Pass  Fail  Total  Time
+cleared ndarray acquisition records cannot compare stale fields |    4     3      7  1.3s
+RNG of the outermost testset: Random.Xoshiro(0xa48de1f91b72730f, 0x4c81731b43dd0861, 0x94d68e3f4d1486f5, 0x41b3c9a593106b6d, 0x3e2d860e6de31ef6)

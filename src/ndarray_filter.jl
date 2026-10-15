@@ -13,13 +13,16 @@ end
 
 """
     NdArrayFilterPort(name, direction, format;
-                      schema=nothing, parameter=false)
+                      schema=nothing, parameter=false, acquisition_version=2)
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
 the semantic meaning of the ndarray independently of its element type, shape,
 layout, and rate. It must include every schema-specific coordinate or ordering
 meaning needed to interpret the payload.
+
+Set `acquisition_version=3` to require the native Version 3 trigger-classification
+feature on this port. Version 2 remains the default.
 
 Set `parameter=true` for a sparse input Parameter Port. A Parameter Port must
 have input direction and a format without a repeated rate. Its buffers are
@@ -31,6 +34,7 @@ struct NdArrayFilterPort{N}
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
     parameter::Bool
+    acquisition_version::UInt32
 end
 
 function NdArrayFilterPort(
@@ -39,7 +43,9 @@ function NdArrayFilterPort(
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
     parameter::Bool=false,
+    acquisition_version::Integer=2,
 ) where {N}
+    _acquisition_feature(acquisition_version)
     port_name = _validate_c_string(String(name), "ndarray filter port name")
     isempty(port_name) && throw(ArgumentError("an ndarray filter port name cannot be empty"))
     semantic_schema = if schema === nothing
@@ -61,6 +67,7 @@ function NdArrayFilterPort(
         format,
         semantic_schema,
         parameter,
+        UInt32(acquisition_version),
     )
 end
 
@@ -153,6 +160,65 @@ function buffer_header(buffer::NdArrayFilterBuffer)
         header.dts_offset,
         header.seq,
     )
+end
+
+"A borrowed acquisition record in an ndarray callback; do not retain it."
+struct NdArrayAcquisitionMetadata{Writable} <: _AcquisitionMetadata
+    buffer::NdArrayFilterBuffer{Writable}
+end
+
+function buffer_acquisition(buffer::NdArrayFilterBuffer{Writable}) where {Writable}
+    native = _native_buffer(buffer)
+    available = unsafe_load(native.metadata_available)
+    iszero(available & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION) && return nothing
+    if !Writable && iszero(unsafe_load(native.metadata_valid) & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
+        return nothing
+    end
+    record = NdArrayAcquisitionMetadata(buffer)
+    Writable || acquisition_valid(record) || throw(
+        InvalidStateException("the ndarray acquisition metadata is malformed", :malformed),
+    )
+    return record
+end
+
+_acquisition_storage_pointer(record::NdArrayAcquisitionMetadata) =
+    _native_buffer(record.buffer).acquisition
+_writable_acquisition_storage_pointer(record::NdArrayAcquisitionMetadata{true}) =
+    _acquisition_storage_pointer(record)
+
+function acquisition_valid(record::NdArrayAcquisitionMetadata)
+    native = _native_buffer(record.buffer)
+    iszero(unsafe_load(native.metadata_valid) & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION) && return false
+    storage = Ref(LibPipeWire.spa_meta(
+        LibPipeWire.SPA_META_Acquisition, UInt32(_ACQUISITION_SIZE),
+        Ptr{Cvoid}(native.acquisition),
+    ))
+    return LibPipeWire.spa_meta_acquisition_is_valid(storage)
+end
+
+"Initialize writable callback acquisition metadata and mark it valid."
+function initialize_acquisition!(buffer::NdArrayFilterBuffer{true}; version::Integer=2)
+    record = buffer_acquisition(buffer)
+    record === nothing && throw(InvalidStateException(
+        "the ndarray callback buffer has no acquisition metadata", :no_metadata,
+    ))
+    return initialize_acquisition!(record; version)
+end
+
+function initialize_acquisition!(record::NdArrayAcquisitionMetadata{true}; version::Integer=2)
+    _initialize_acquisition!(record; version)
+    native = _native_buffer(record.buffer)
+    unsafe_store!(native.metadata_valid, unsafe_load(native.metadata_valid) |
+        LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
+    return record
+end
+
+"Clear acquisition validity on a reused writable callback buffer."
+function clear_buffer_acquisition!(buffer::NdArrayFilterBuffer{true})
+    native = _native_buffer(buffer)
+    unsafe_store!(native.metadata_valid, unsafe_load(native.metadata_valid) &
+        ~LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
+    return buffer
 end
 
 """
@@ -511,6 +577,9 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
             schema = schemas[index]
             flags = port.parameter ?
                 LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER : UInt32(0)
+            if port.acquisition_version == 3
+                flags |= LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_ACQUISITION_V3
+            end
             native[index] = LibPipeWire.pw_ndarray_filter_port(
                 UInt32(sizeof(LibPipeWire.pw_ndarray_filter_port)),
                 flags,
@@ -680,7 +749,11 @@ end
 "Return the name copied into an ndarray filter at construction."
 filter_name(filter::NdArrayFilter) = filter.name
 
-"Connect an ndarray filter to its configured PipeWire remote."
+"""
+    connect!(filter::NdArrayFilter)
+
+Connect an ndarray filter to its configured PipeWire remote.
+"""
 function connect!(filter::NdArrayFilter)
     result = lock(filter.state_lock) do
         _require_owner_thread(filter, "connect!")
@@ -758,7 +831,11 @@ function filter_state(filter::NdArrayFilter)
     return NdArrayFilterState(value)
 end
 
-"Return the first native asynchronous error, or `nothing` when none exists."
+"""
+    last_error(filter::NdArrayFilter)
+
+Return the first native asynchronous error, or `nothing` when none exists.
+"""
 function last_error(filter::NdArrayFilter)
     value = lock(filter.state_lock) do
         LibPipeWire.pw_ndarray_filter_get_error(_require_open(filter))
@@ -766,7 +843,11 @@ function last_error(filter::NdArrayFilter)
     return value == 0 ? nothing : PipeWireError(:pw_ndarray_filter, value)
 end
 
-"Return the published node ID, or `nothing` before registration."
+"""
+    node_id(filter::NdArrayFilter)
+
+Return the published node ID, or `nothing` before registration.
+"""
 function node_id(filter::NdArrayFilter)
     value = lock(filter.state_lock) do
         LibPipeWire.pw_ndarray_filter_get_node_id(_require_open(filter))
