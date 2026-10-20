@@ -227,6 +227,11 @@ They convert to `Pod` automatically in managed APIs. `buffers_param`,
 `node_command`, `device_command`, `node_event`, and `device_event` validate the
 object family before it reaches a native command or event entry point.
 
+`SPA.PropInfo` preserves a property's exact wire `name` while accepting an
+optional `display_name` for its UI label. The label is carried as the PipeWireAO
+`SPA_PROP_INFO_displayName` extension; `group` and `description` retain their
+separate hierarchy and explanatory roles. Omitted labels remain absent.
+
 Raw-video negotiation supports every PipeWire 1.6.8 pixel format and optional
 modifier, framerate, multiview, chroma, and colorimetry properties.
 

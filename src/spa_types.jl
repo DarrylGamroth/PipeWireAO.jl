@@ -434,7 +434,13 @@ function _optional_prop_id(value::Union{Nothing,Integer}, description::AbstractS
     return UInt32(value)
 end
 
-"A typed description carried by one `SPA_PARAM_PropInfo` object."
+"""
+    PropInfo(name, type; display_name=nothing, ...)
+
+A typed description carried by one `SPA_PARAM_PropInfo` object. `name` is the
+property's wire identifier. The optional `display_name` supplies a short UI label
+without changing that identifier, its description, or its group.
+"""
 struct PropInfo
     name::String
     type::Pod
@@ -444,6 +450,7 @@ struct PropInfo
     id::Union{Nothing,UInt32}
     container::Union{Nothing,UInt32}
     group::Union{Nothing,String}
+    display_name::Union{Nothing,String}
     params::Bool
 
     function PropInfo(
@@ -455,6 +462,7 @@ struct PropInfo
         id::Union{Nothing,Integer}=nothing,
         container::Union{Nothing,Integer}=nothing,
         group::Union{Nothing,AbstractString}=nothing,
+        display_name::Union{Nothing,AbstractString}=nothing,
         params::Bool=false,
     )
         owned_labels = Pair{Int32,String}[
@@ -471,6 +479,7 @@ struct PropInfo
             _optional_prop_id(id, "property ID"),
             _optional_prop_id(container, "property container ID"),
             group === nothing ? nothing : String(group),
+            display_name === nothing ? nothing : String(display_name),
             params,
         )
     end

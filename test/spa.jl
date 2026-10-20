@@ -40,12 +40,14 @@ end
         SPA.PORT_CONFIG_DIRECTION,
         SPA.PROFILE_INDEX,
         SPA.PROP_INFO_ID,
+        SPA.PROP_INFO_DISPLAY_NAME,
         SPA.ROUTE_INDEX,
         SPA.TAG_DIRECTION,
         SPA.NODE_COMMAND_START,
         SPA.NODE_EVENT_REQUEST_PROCESS,
     )
     @test all(identifier -> identifier isa UInt32, identifiers)
+    @test SPA.PROP_INFO_DISPLAY_NAME == UInt32(10)
     @test SPA.PARAM_PROPS == UInt32(2)
     @test SPA.PARAM_FORMAT == UInt32(4)
     @test SPA.OBJECT_PROPS == UInt32(0x0004_0002)
@@ -103,6 +105,7 @@ end
         "genicam.ExposureTime",
         exposure_type;
         description="Camera exposure duration",
+        display_name="Exposure time",
         group="AcquisitionControl",
         params=true,
         flags=SPA.PROPERTY_READONLY,
@@ -112,6 +115,9 @@ end
     @test parsed_info.name == info.name
     @test parsed_info.type == info.type
     @test parsed_info.description == info.description
+    @test parsed_info.display_name == "Exposure time"
+    @test pod_value(String, info_parameter.object[SPA.PROP_INFO_DISPLAY_NAME].value) ==
+          "Exposure time"
     @test parsed_info.group == info.group
     @test parsed_info.params
     @test parsed_info.flags == SPA.PROPERTY_READONLY
@@ -122,7 +128,11 @@ end
         labels=[Int32(0) => "Off", Int32(1) => "On"],
         params=true,
     )
-    @test SPA.PropInfo(Pod(prop_info_param(trigger))).labels == trigger.labels
+    parsed_trigger = SPA.PropInfo(Pod(prop_info_param(trigger)))
+    @test parsed_trigger.labels == trigger.labels
+    @test trigger.display_name === nothing
+    @test parsed_trigger.display_name === nothing
+    @test get(prop_info_param(trigger).object, SPA.PROP_INFO_DISPLAY_NAME, nothing) === nothing
 
     values = SPA.Props(
         "egrabber.enabled" => true,

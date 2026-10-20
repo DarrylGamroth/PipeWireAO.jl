@@ -396,6 +396,7 @@ end
     PROP_INFO_PARAMS = LibPipeWire.SPA_PROP_INFO_params
     PROP_INFO_DESCRIPTION = LibPipeWire.SPA_PROP_INFO_description
     PROP_INFO_GROUP = LibPipeWire.SPA_PROP_INFO_group
+    PROP_INFO_DISPLAY_NAME = LibPipeWire.SPA_PROP_INFO_displayName
 end
 
 # Property keys in SPA route parameters.

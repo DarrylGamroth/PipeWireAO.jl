@@ -9426,6 +9426,7 @@ properties of SPA\\_TYPE\\_OBJECT\\_PropInfo
 | SPA\\_PROP\\_INFO\\_description | (String) User readable description                                                                                                                                                    |
 | SPA\\_PROP\\_INFO\\_group       | (String) the property group path; '/' separates nested UI groups                                                                                                                      |
 | SPA\\_PROP\\_INFO\\_visibility  | (String) UI visibility level, for example "Beginner", "Expert", "Guru", or "Invisible"                                                                                                |
+| SPA\\_PROP\\_INFO\\_displayName | (String) optional user readable label; does not change the property name or id                                                                                                        |
 """
 const spa_prop_info = UInt32
 const SPA_PROP_INFO_START = 0 % UInt32
@@ -9438,6 +9439,7 @@ const SPA_PROP_INFO_params = 6 % UInt32
 const SPA_PROP_INFO_description = 7 % UInt32
 const SPA_PROP_INFO_group = 8 % UInt32
 const SPA_PROP_INFO_visibility = 9 % UInt32
+const SPA_PROP_INFO_displayName = 10 % UInt32
 
 """
     spa_prop

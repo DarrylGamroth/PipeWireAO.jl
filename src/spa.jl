@@ -604,6 +604,9 @@ function SPA.PropInfo(pod::Pod)
         Pair{Int32,String}[] : _prop_info_labels(labels_property.value)
     group_property = get(object, SPA.PROP_INFO_GROUP, nothing)
     group = group_property === nothing ? nothing : pod_value(String, group_property.value)
+    display_name_property = get(object, SPA.PROP_INFO_DISPLAY_NAME, nothing)
+    display_name = display_name_property === nothing ?
+        nothing : pod_value(String, display_name_property.value)
     params_property = get(object, SPA.PROP_INFO_PARAMS, nothing)
     params = params_property === nothing ? false : pod_value(Bool, params_property.value)
     type_property = get(object, SPA.PROP_INFO_TYPE, nothing)
@@ -617,6 +620,7 @@ function SPA.PropInfo(pod::Pod)
         id=_optional_id_property(object, SPA.PROP_INFO_ID),
         container=_optional_id_property(object, SPA.PROP_INFO_CONTAINER),
         group,
+        display_name,
         params,
     )
 end
@@ -670,6 +674,10 @@ function prop_info_param(info::SPA.PropInfo)
     info.group === nothing || push!(
         properties,
         SPA.Property(SPA.PROP_INFO_GROUP, info.group),
+    )
+    info.display_name === nothing || push!(
+        properties,
+        SPA.Property(SPA.PROP_INFO_DISPLAY_NAME, info.display_name),
     )
     push!(properties, SPA.Property(SPA.PROP_INFO_PARAMS, info.params))
     return SPA.Parameter(SPA.OBJECT_PROP_INFO, SPA.PARAM_PROP_INFO, properties)
