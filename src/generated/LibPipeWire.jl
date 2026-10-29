@@ -8007,12 +8007,13 @@ Lifecycle callbacks are serialized and never overlap `process`. `prepare_process
 
 Callbacks return zero on success or a negative errno-style value, must not retain borrowed pointers, and must not let an exception unwind across the callback boundary. Outputs are published by default. A process callback may independently mark an output unavailable; the helper retains that buffer and presents it again on the next callback.
 
-| Field              | Note                                                                                                                                                         |
-| :----------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| enum\\_prop\\_info | Return PropInfo at index, or -ENOENT after the final declaration. Every returned POD must remain valid until [`pw_ndarray_filter_connect`](@ref)() returns.  |
-| get\\_props        | Return the owner's current requested and active scalar property state.                                                                                       |
-| set\\_props        | Validate and stage one scalar property request.                                                                                                              |
-| reset              | Reset processing state while the node is stopped.                                                                                                            |
+| Field              | Note                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| :----------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| enum\\_prop\\_info | Return PropInfo at index, or -ENOENT after the final declaration. Every returned POD must remain valid until [`pw_ndarray_filter_connect`](@ref)() returns.                                                                                                                                                                                                                                                                                       |
+| get\\_props        | Return the owner's current requested and active scalar property state.                                                                                                                                                                                                                                                                                                                                                                            |
+| set\\_props        | Validate and stage one scalar property request.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| reset              | Reset processing state while the node is stopped.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| apply\\_props      | Adopt staged scalar properties without processing a frame. Optional since version 3. Called after successful set\\_props while prepared, serialized with process on its loop, even when required inputs are silent. Stopped requests remain staged for prepare\\_process\\_thread. Must not process data or change lifecycle state. The owner publishes its applied snapshot here; native property readback follows after this callback returns.  |
 """
 struct pw_ndarray_filter_events
     version::UInt32
@@ -8024,6 +8025,7 @@ struct pw_ndarray_filter_events
     get_props::Ptr{Cvoid}
     set_props::Ptr{Cvoid}
     reset::Ptr{Cvoid}
+    apply_props::Ptr{Cvoid}
 end
 
 """

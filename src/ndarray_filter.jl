@@ -294,7 +294,7 @@ end
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
                   on_process, on_parameter=nothing, on_deactivate=nothing,
                   property_info=SPA.PropInfo[], on_get_properties=nothing,
-                  on_properties=nothing, on_reset=nothing,
+                  on_properties=nothing, on_apply_properties=nothing, on_reset=nothing,
                   independent_inputs=false, fifo_inputs=false, run_control=false,
                   reset_control=false)
 
@@ -313,6 +313,11 @@ callbacks are ordinary Julia callables:
   when accepted or `false` to retain and retry the buffer after a later
   data-loop cycle. It may overlap `on_process`.
 - `on_deactivate(filter)` runs after processing has stopped.
+- `on_apply_properties(filter)` optionally adopts staged scalar properties on
+  the processing loop without consuming or publishing a frame. It runs after
+  `on_properties` returns while prepared, serialized with `on_process`.
+  Stopped requests remain staged until preparation. This callback requires
+  native ndarray filter events version 3; older libraries reject construction.
 
 With `independent_inputs=true`, `on_process` runs when any frame-data input
 arrives. Every declared input remains present in the collection; call
@@ -404,6 +409,16 @@ function _ndarray_filter_prepare(filter::NdArrayFilter)::Cint
     try
         callback = filter.callbacks.on_prepare
         callback === nothing || callback(filter)
+        return Cint(0)
+    catch error
+        _record_ndarray_filter_callback_error(filter, error)
+        return _NDARRAY_FILTER_CALLBACK_ERROR
+    end
+end
+
+function _ndarray_filter_apply_properties(filter::NdArrayFilter)::Cint
+    try
+        filter.callbacks.on_apply_properties(filter)
         return Cint(0)
     catch error
         _record_ndarray_filter_callback_error(filter, error)
@@ -512,7 +527,7 @@ function _ndarray_filter_reset(filter::NdArrayFilter)::Cint
     end
 end
 
-function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
+function _ndarray_filter_events(filter::T) where {T<:NdArrayFilter}
     prepare = @cfunction(_ndarray_filter_prepare, Cint, (Ref{T},))
     process = @cfunction(
         _ndarray_filter_process,
@@ -547,8 +562,10 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         (Ref{T}, Ptr{LibPipeWire.spa_pod}),
     )
     reset = @cfunction(_ndarray_filter_reset, Cint, (Ref{T},))
+    apply_props = filter.callbacks.on_apply_properties === nothing ? C_NULL :
+        @cfunction(_ndarray_filter_apply_properties, Cint, (Ref{T},))
     return LibPipeWire.pw_ndarray_filter_events(
-        UInt32(2),
+        apply_props == C_NULL ? UInt32(2) : UInt32(3),
         prepare,
         process,
         deactivate,
@@ -557,6 +574,7 @@ function _ndarray_filter_events(::T) where {T<:NdArrayFilter}
         get_props,
         set_props,
         reset,
+        apply_props,
     )
 end
 
@@ -612,6 +630,7 @@ function NdArrayFilter(
     property_info=SPA.PropInfo[],
     on_get_properties=nothing,
     on_properties=nothing,
+    on_apply_properties=nothing,
     on_reset=nothing,
     independent_inputs::Bool=false,
     fifo_inputs::Bool=false,
@@ -640,6 +659,9 @@ function NdArrayFilter(
     properties_enabled && on_properties === nothing && throw(
         ArgumentError("on_properties is required when property_info is declared"),
     )
+    on_apply_properties !== nothing && !properties_enabled && throw(
+        ArgumentError("on_apply_properties requires property_info"),
+    )
     reset_control && on_reset === nothing && throw(
         ArgumentError("on_reset is required when reset_control=true"),
     )
@@ -651,6 +673,7 @@ function NdArrayFilter(
         property_info=infos,
         on_get_properties,
         on_properties,
+        on_apply_properties,
         on_reset,
     )
     property_info_pods = Pod[Pod(prop_info_param(info)) for info in infos]
