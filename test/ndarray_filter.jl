@@ -88,6 +88,10 @@ function invoke_ndarray_filter_prepare(events, filter::T) where {T<:NdArrayFilte
     return ccall(events.prepare_process_thread, Cint, (Ref{T},), filter)
 end
 
+function invoke_ndarray_filter_apply_props(events, filter::T) where {T<:NdArrayFilter}
+    return ccall(events.apply_props, Cint, (Ref{T},), filter)
+end
+
 function invoke_ndarray_filter_process(
     events,
     filter::T,
@@ -287,7 +291,7 @@ end
     @test sizeof(native.pw_ndarray_filter_format) == 40
     @test sizeof(native.pw_ndarray_filter_port) == 64
     @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
-    @test sizeof(native.pw_ndarray_filter_events) == 72
+    @test sizeof(native.pw_ndarray_filter_events) == 80
     @test sizeof(native.pw_ndarray_filter_config) == 56
     @test native.PW_NDARRAY_FILTER_FLAG_NONE == UInt32(0)
     @test native.PW_NDARRAY_FILTER_FLAG_RT_PROCESS == UInt32(1)
@@ -312,6 +316,7 @@ end
             UInt32(2),
             C_NULL,
             NDARRAY_FILTER_TEST_PROCESS,
+            C_NULL,
             C_NULL,
             C_NULL,
             C_NULL,
@@ -546,9 +551,12 @@ end
             requested[] = pod_value(Float64, last(pair))
         end,
         on_reset=filter -> (resets[] += 1),
+        on_apply_properties=filter -> (active[] = requested[]),
         reset_control=true,
     )
     events = PipeWireAO._ndarray_filter_events(filter)
+
+    @test events.version == UInt32(3)
 
     status, gain_pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(0))
     @test status == 0
@@ -571,6 +579,9 @@ end
     @test invoke_ndarray_filter_set_props(events, filter, request) == 0
     @test requested[] == 2.5
     @test active[] == 1.0
+    @test invoke_ndarray_filter_apply_props(events, filter) == 0
+    @test active[] == 2.5
+    @test resets[] == 0
     @test invoke_ndarray_filter_reset(events, filter) == 0
     @test resets[] == 1
     close(filter)
@@ -580,6 +591,12 @@ end
         (port,);
         on_process=(filter, inputs, outputs) -> nothing,
         property_info=(info,),
+    )
+    @test_throws ArgumentError NdArrayFilter(
+        "test.ndarray.missing-property-declaration",
+        (port,);
+        on_process=(filter, inputs, outputs) -> nothing,
+        on_apply_properties=filter -> nothing,
     )
     @test_throws ArgumentError NdArrayFilter(
         "test.ndarray.missing-reset",
