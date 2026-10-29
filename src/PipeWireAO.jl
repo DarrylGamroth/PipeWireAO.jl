@@ -359,7 +359,7 @@ include("filter.jl")
 include("listeners.jl")
 include("ndarray_exchange.jl")
 
-const _MINIMUM_JLL_VERSION = v"1.7.0+17"
+const _MINIMUM_JLL_VERSION = v"1.7.2+0"
 
 function __init__()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)

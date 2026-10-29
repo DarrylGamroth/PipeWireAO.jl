@@ -6,6 +6,9 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
+PipeWireAO 0.6.20 requires `PipeWireAO_jll` 1.7.2+0 or newer. The resolver
+and import-time check enforce the native scalar-property adoption callback ABI.
+
 The package is being built in layers:
 
 - `PipeWireAO_jll` supplies reproducible Linux artifacts.
