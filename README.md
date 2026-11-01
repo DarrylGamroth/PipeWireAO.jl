@@ -623,7 +623,8 @@ Raw stream consumers pass their supported requirement tuple to
 `buffer_properties(buffer; required_buffer_properties=requirements)` and check
 `buffer_properties_valid(properties)` before accepting the frame.
 
-This opt-in feature requires a native library containing the Properties API;
+PipeWireAO 0.6.21 requires PipeWireAO_jll 1.7.3 or newer, which supplies the
+Properties API. This feature remains opt-in;
 existing Header and Acquisition versions, APIs, and defaults remain unchanged.
 The isolated stream → ndarray callback → stream regression is
 `julia --project --threads=2 test/buffer_properties_private_core.jl`. It uses the
