@@ -4371,6 +4371,7 @@ const SPA_META_PROPERTIES_MAX_FIELDS = 64 % UInt32
 
 const spa_meta_property = UInt32
 const SPA_META_PROPERTY_opticalClassification = 1 % UInt32
+const SPA_META_PROPERTY_triggerClassification = 2 % UInt32
 
 const spa_meta_optical_classification = UInt32
 const SPA_META_OPTICAL_ABSENT = 0 % UInt32
@@ -4423,6 +4424,20 @@ const struct spa_pod *spa_meta_properties_find(const struct spa_meta *meta, uint
 """
 function spa_meta_properties_find(meta, key)
     @ccall libpipewire_ao.spa_meta_properties_find(meta::Ptr{spa_meta}, key::UInt32)::Ptr{spa_pod}
+end
+
+"""
+    spa_meta_properties_acquisition_is_consistent(properties, acquisition)
+
+Check electrical trigger consistency after successful property validation. A missing record/property imposes no comparison. Present Acquisition must be valid; Versions 1/2 can accompany any valid typed trigger value. Version 3 must agree with the typed trigger. Optical classification is independent.
+
+### Prototype
+```c
+bool spa_meta_properties_acquisition_is_consistent( const struct spa_meta *properties, const struct spa_meta *acquisition);
+```
+"""
+function spa_meta_properties_acquisition_is_consistent(properties, acquisition)
+    @ccall libpipewire_ao.spa_meta_properties_acquisition_is_consistent(properties::Ptr{spa_meta}, acquisition::Ptr{spa_meta})::Bool
 end
 
 """

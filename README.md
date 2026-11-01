@@ -587,6 +587,14 @@ whole exposure independently of Acquisition v3 electrical trigger state.
 An omitted optical field reads as `nothing`; explicit absence reads as
 `OPTICAL_ABSENT`.
 
+The separate typed `triggerClassification` field uses
+`trigger_classification(properties)` and `set_trigger_classification!` with
+the existing `AcquisitionTriggerState` enum. It works alongside Acquisition
+Version 2. When Version 3 also carries electrical trigger classification, the
+two values must agree; validation and publication reject contradictions. The
+optical field is never inferred from electrical state. Identity and timing
+remain in Acquisition metadata.
+
 Ordinary streams request `buffer_properties_metadata_param(capacity)` in their
 connection parameters. Capacities are multiples of eight from 16 to 4096 bytes.
 Initialize every recycled output before appending typed fields in increasing
@@ -595,6 +603,7 @@ key order:
 ```julia
 properties = initialize_buffer_properties!(buffer)
 set_optical_classification!(properties, OPTICAL_FRINGED)
+set_trigger_classification!(properties, ACQUISITION_TRIGGER_HIGH)
 set_buffer_property!(properties, 10, Int64(42))
 ```
 

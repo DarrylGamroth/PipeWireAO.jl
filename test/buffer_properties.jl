@@ -13,12 +13,14 @@ function properties_fixture(capacity=256)
         Base.unsafe_convert(Ptr{native.spa_buffer}, spa_buffer), C_NULL, 0, 0, 0,
     ))
     buffer = StreamBuffer(Base.unsafe_convert(Ptr{native.pw_buffer}, native_buffer))
+    GC.@preserve acquisition native.spa_meta_acquisition_init(Ptr{native.spa_meta_acquisition}(pointer(acquisition)))
     return (; storage, acquisition, metas, spa_buffer, native_buffer, buffer)
 end
 
 function properties_hot_path(buffer, requirements)
     properties = initialize_buffer_properties!(buffer)
     set_optical_classification!(properties, OPTICAL_FRINGED)
+    set_trigger_classification!(properties, ACQUISITION_TRIGGER_LOW)
     set_buffer_property!(properties, 10, Int64(42))
     buffer_properties_valid(properties, requirements)
     optical_classification(properties)
@@ -104,7 +106,7 @@ end
     @test default.buffer_properties_capacity == 0
     @test default.acquisition_version == 2
     @test isempty(default.required_buffer_properties)
-    for capacity in (16, 64, 3968)
+    for capacity in (40, 64, 3968)
         port = NdArrayFilterPort("properties", PipeWireAO.DIRECTION_OUTPUT, format;
             buffer_properties_capacity=capacity, required_buffer_properties=(requirement,))
         @test port.buffer_properties_capacity == capacity
@@ -113,6 +115,9 @@ end
         @test isopen(filter)
         close(filter)
     end
+    too_small = NdArrayFilterPort("properties",PipeWireAO.DIRECTION_OUTPUT,format;
+        buffer_properties_capacity=16,required_buffer_properties=(requirement,))
+    @test_throws PipeWireError NdArrayFilter("test.properties.too-small",(too_small,);on_process=(args...)->nothing)
     parameter = buffer_properties_metadata_param(4096)
     properties = Dict(property.key => property for property in parameter.object.properties)
     @test pod_value(SPA.Id, properties[SPA.META_PARAM_TYPE].value) == SPA.Id(SPA.META_PROPERTIES)
@@ -132,6 +137,51 @@ end
         buffer_properties_capacity=64, required_buffer_properties=(requirement, requirement))
     @test sizeof(native.spa_meta_acquisition) == 96
     @test sizeof(native.spa_meta_property_requirement) == 8
+end
+
+@testset "typed trigger classification and Acquisition coexistence" begin
+    fixture = properties_fixture()
+    GC.@preserve fixture begin
+        properties = initialize_buffer_properties!(fixture.buffer)
+        acquisition = buffer_acquisition(fixture.buffer)
+        @test trigger_classification(properties) === nothing
+        for trigger in (ACQUISITION_TRIGGER_ABSENT,ACQUISITION_TRIGGER_LOW,
+                ACQUISITION_TRIGGER_HIGH,ACQUISITION_TRIGGER_MIXED)
+            initialize_acquisition!(acquisition;version=2)
+            initialize_buffer_properties!(properties)
+            set_optical_classification!(properties,OPTICAL_UNFRINGED)
+            @test set_trigger_classification!(properties,trigger) === properties
+            @test trigger_classification(properties) === trigger
+            @test optical_classification(properties) === OPTICAL_UNFRINGED
+            @test acquisition_version(acquisition) == 2
+            @test acquisition_trigger_state(acquisition) === ACQUISITION_TRIGGER_ABSENT
+            @test buffer_properties_valid(properties)
+            initialize_acquisition!(acquisition;version=3)
+            set_acquisition_trigger_state!(acquisition,trigger)
+            @test buffer_properties_valid(properties)
+            @test trigger_classification(properties) === trigger
+        end
+        set_acquisition_trigger_state!(acquisition,ACQUISITION_TRIGGER_LOW)
+        @test !buffer_properties_valid(properties)
+        @test_throws InvalidStateException trigger_classification(properties)
+        @test_throws InvalidStateException optical_classification(properties)
+        initialize_buffer_properties!(properties)
+        @test_throws ArgumentError set_buffer_property!(properties,BUFFER_PROPERTY_TRIGGER_CLASSIFICATION,Int32(1))
+        @test_throws ArgumentError set_buffer_property!(properties,BUFFER_PROPERTY_TRIGGER_CLASSIFICATION,SPA.Id(4))
+        @test_throws ArgumentError BufferPropertyRequirement(BUFFER_PROPERTY_TRIGGER_CLASSIFICATION,Int32)
+        @test_throws MethodError set_trigger_classification!(BufferProperties{false}(properties.metadata),ACQUISITION_TRIGGER_HIGH)
+        @test trigger_classification(properties) === nothing
+    end
+    input,output = properties_fixture(),properties_fixture()
+    GC.@preserve input output begin
+        source = initialize_buffer_properties!(input.buffer)
+        set_optical_classification!(source,OPTICAL_FRINGED)
+        set_trigger_classification!(source,ACQUISITION_TRIGGER_HIGH)
+        initialize_acquisition!(buffer_acquisition(output.buffer);version=3)
+        set_acquisition_trigger_state!(buffer_acquisition(output.buffer),ACQUISITION_TRIGGER_LOW)
+        @test_throws ArgumentError PipeWireAO._propagate_buffer_properties!(output.buffer,input.buffer)
+        @test !buffer_properties_valid(buffer_properties(output.buffer))
+    end
 end
 
 @testset "complete optional property propagation" begin

@@ -1,5 +1,6 @@
 const _BufferPropertyScalar = Union{Bool,SPA.Id,Int32,Int64,Float32,Float64}
 const BUFFER_PROPERTY_OPTICAL_CLASSIFICATION = UInt32(LibPipeWire.SPA_META_PROPERTY_opticalClassification)
+const BUFFER_PROPERTY_TRIGGER_CLASSIFICATION = UInt32(LibPipeWire.SPA_META_PROPERTY_triggerClassification)
 
 "A required per-buffer property key and exact SPA POD scalar type."
 struct BufferPropertyRequirement
@@ -7,8 +8,8 @@ struct BufferPropertyRequirement
     type::UInt32
     function BufferPropertyRequirement(key::Integer, ::Type{T}) where {T<:_BufferPropertyScalar}
         0 < key <= typemax(UInt32) || throw(ArgumentError("a buffer property key must be nonzero UInt32"))
-        key == BUFFER_PROPERTY_OPTICAL_CLASSIFICATION && T != SPA.Id && throw(ArgumentError(
-            "optical classification requires the SPA.Id POD type",
+        key in (BUFFER_PROPERTY_OPTICAL_CLASSIFICATION, BUFFER_PROPERTY_TRIGGER_CLASSIFICATION) && T != SPA.Id && throw(ArgumentError(
+            "optical and trigger classification require the SPA.Id POD type",
         ))
         return new(UInt32(key), _pod_fixed_type(T))
     end
@@ -50,19 +51,25 @@ properties; keys must be added in strictly increasing order.
 """
 struct BufferProperties{Writable,Requirements<:Tuple}
     metadata::LibPipeWire.spa_meta
+    acquisition::LibPipeWire.spa_meta
+    metadata_valid::Ptr{UInt32}
     validated::Bool
     requirements::Requirements
 end
 
+_absent_properties_acquisition() = LibPipeWire.spa_meta(UInt32(0),UInt32(0),C_NULL)
+
 BufferProperties{Writable}(metadata::LibPipeWire.spa_meta) where {Writable} =
-    BufferProperties{Writable,Tuple{}}(metadata, false, ())
+    BufferProperties{Writable,Tuple{}}(metadata, _absent_properties_acquisition(), C_NULL, false, ())
 
 "Return borrowed properties, or `nothing` if this frame has no properties allocation."
 function buffer_properties(buffer::AbstractPipeWireBuffer; required_buffer_properties::Tuple=())
     metadata = buffer_metadata(buffer, UInt32(LibPipeWire.SPA_META_Properties))
     metadata === nothing && return nothing
+    acquisition = buffer_metadata(buffer, UInt32(LibPipeWire.SPA_META_Acquisition))
     return BufferProperties{true,typeof(required_buffer_properties)}(
-        _native_metadata(metadata), false, required_buffer_properties,
+        _native_metadata(metadata), acquisition === nothing ? _absent_properties_acquisition() :
+            _native_metadata(acquisition), C_NULL, false, required_buffer_properties,
     )
 end
 
@@ -74,7 +81,23 @@ function buffer_properties(buffer::NdArrayFilterBuffer{Writable}) where {Writabl
     )
     result in (-Base.Libc.ENOENT, -Base.Libc.EOPNOTSUPP) && return nothing
     _check_result(:pw_ndarray_filter_get_buffer_properties, result)
-    return BufferProperties{Writable,Tuple{}}(metadata[], true, ())
+    native = _native_buffer(buffer)
+    acquisition = LibPipeWire.spa_meta(LibPipeWire.SPA_META_Acquisition,
+        UInt32(sizeof(LibPipeWire.spa_meta_acquisition)), Ptr{Cvoid}(native.acquisition))
+    return BufferProperties{Writable,Tuple{}}(metadata[], acquisition, native.metadata_valid, true, ())
+end
+
+function _buffer_properties_acquisition_is_consistent(properties::BufferProperties)
+    acquisition = properties.acquisition
+    present = acquisition.type == LibPipeWire.SPA_META_Acquisition &&
+        (properties.metadata_valid == C_NULL || !iszero(unsafe_load(properties.metadata_valid) &
+            LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION))
+    if present
+        return LibPipeWire.spa_meta_properties_acquisition_is_consistent(
+            Ref(properties.metadata), Ref(acquisition),
+        )
+    end
+    return LibPipeWire.spa_meta_properties_acquisition_is_consistent(Ref(properties.metadata), C_NULL)
 end
 
 "Return whether the complete bounded per-buffer properties object is valid."
@@ -86,12 +109,13 @@ function buffer_properties_valid(properties::BufferProperties, requirements::NTu
         requirements[index].key, requirements[index].type,
     ), Val(N))
     storage = Ref(native)
-    GC.@preserve storage return LibPipeWire.spa_meta_properties_is_valid(
+    valid = GC.@preserve storage LibPipeWire.spa_meta_properties_is_valid(
         Ref(properties.metadata),
         N == 0 ? Ptr{LibPipeWire.spa_meta_property_requirement}(C_NULL) :
             Ptr{LibPipeWire.spa_meta_property_requirement}(Base.unsafe_convert(Ptr{typeof(native)}, storage)),
         UInt32(N),
     )
+    return valid && _buffer_properties_acquisition_is_consistent(properties)
 end
 
 "Clear writable properties to an empty object, including every recycled field."
@@ -124,8 +148,9 @@ and Float64. Malformed objects and mismatched types are rejected.
 """
 function buffer_property(properties::BufferProperties, key::Integer, ::Type{T}) where {T<:_BufferPropertyScalar}
     0 < key <= typemax(UInt32) || throw(ArgumentError("a buffer property key must be nonzero UInt32"))
-    (properties.validated || buffer_properties_valid(properties)) || throw(InvalidStateException(
-        "the buffer properties object is malformed", :malformed,
+    ((properties.validated && _buffer_properties_acquisition_is_consistent(properties)) ||
+        (!properties.validated && buffer_properties_valid(properties))) || throw(InvalidStateException(
+        "the buffer properties object is malformed or contradicts Acquisition metadata", :malformed,
     ))
     pointer = LibPipeWire.spa_meta_properties_find(Ref(properties.metadata), UInt32(key))
     pointer == C_NULL && return nothing
@@ -166,6 +191,16 @@ end
 set_optical_classification!(properties::BufferProperties{true}, value::OpticalClassification) =
     set_buffer_property!(properties, BUFFER_PROPERTY_OPTICAL_CLASSIFICATION, SPA.Id(UInt32(value)))
 
+"Read typed electrical trigger classification, or `nothing` when its field is absent."
+function trigger_classification(properties::BufferProperties)
+    value = buffer_property(properties, BUFFER_PROPERTY_TRIGGER_CLASSIFICATION, SPA.Id)
+    return value === nothing ? nothing : AcquisitionTriggerState(value.value)
+end
+
+"Set typed electrical trigger classification without changing optical facts or Acquisition."
+set_trigger_classification!(properties::BufferProperties{true}, value::AcquisitionTriggerState) =
+    set_buffer_property!(properties, BUFFER_PROPERTY_TRIGGER_CLASSIFICATION, SPA.Id(UInt32(value)))
+
 "Request a bounded properties object on every negotiated stream or filter buffer."
 buffer_properties_metadata_param(capacity::Integer; id::Integer=LibPipeWire.SPA_PARAM_Meta) =
     metadata_param(UInt32(LibPipeWire.SPA_META_Properties);
@@ -178,7 +213,8 @@ function _propagate_buffer_properties!(output, input)
     destination === nothing && return output
     initialize_buffer_properties!(destination)
     source === nothing && return output
-    (source.validated || buffer_properties_valid(source)) || throw(InvalidStateException(
+    ((source.validated && _buffer_properties_acquisition_is_consistent(source)) ||
+        (!source.validated && buffer_properties_valid(source))) || throw(InvalidStateException(
         "the input buffer properties object is malformed", :malformed,
     ))
     header = unsafe_load(Ptr{LibPipeWire.spa_pod}(source.metadata.data))
@@ -187,5 +223,8 @@ function _propagate_buffer_properties!(output, input)
         "the output buffer properties allocation is too small for metadata propagation",
     ))
     unsafe_copyto!(Ptr{UInt8}(destination.metadata.data), Ptr{UInt8}(source.metadata.data), size)
+    _buffer_properties_acquisition_is_consistent(destination) || throw(ArgumentError(
+        "propagated buffer properties contradict output Acquisition metadata",
+    ))
     return output
 end
