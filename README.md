@@ -578,6 +578,49 @@ Use absolute paths from the same native installation. See
 [validation record](docs/EXCHANGE_COMPLETION_VALIDATION.md) for the controlled
 failure and the packaged regression checks.
 
+## Per-buffer properties
+
+`BufferProperties` is a borrowed, bounded SPA POD object carried alongside
+Header and Acquisition metadata. Optical classification (`OPTICAL_ABSENT`,
+`OPTICAL_UNFRINGED`, `OPTICAL_FRINGED`, or `OPTICAL_MIXED`) describes the
+whole exposure independently of Acquisition v3 electrical trigger state.
+An omitted optical field reads as `nothing`; explicit absence reads as
+`OPTICAL_ABSENT`.
+
+Ordinary streams request `buffer_properties_metadata_param(capacity)` in their
+connection parameters. Capacities are multiples of eight from 16 to 4096 bytes.
+Initialize every recycled output before appending typed fields in increasing
+key order:
+
+```julia
+properties = initialize_buffer_properties!(buffer)
+set_optical_classification!(properties, OPTICAL_FRINGED)
+set_buffer_property!(properties, 10, Int64(42))
+```
+
+Read with `buffer_properties(buffer)`, `optical_classification(properties)`, and
+`buffer_property(properties, key, T)`. Scalar types are `Bool`, `SPA.Id`,
+`Int32`, `Int64`, `Float32`, and `Float64`. Scalar access and initialization
+allocate no Julia heap storage after warmup. Values expire when the callback
+returns or the buffer is returned. No dictionary is built on this path.
+
+An `NdArrayFilterPort` opts in with `buffer_properties_capacity` (maximum 3968)
+and `required_buffer_properties`, a tuple of `BufferPropertyRequirement(key, T)`
+values. The native helper validates required fields before processing and
+publication and clears outputs before each callback. Input properties expose
+no mutators. `propagate_metadata!` copies the complete valid object, including
+unknown optional fields, when the output opted in and has enough capacity.
+Raw stream consumers pass their supported requirement tuple to
+`buffer_properties(buffer; required_buffer_properties=requirements)` and check
+`buffer_properties_valid(properties)` before accepting the frame.
+
+This opt-in feature requires a native library containing the Properties API;
+existing Header and Acquisition versions, APIs, and defaults remain unchanged.
+The isolated stream → ndarray callback → stream regression is
+`julia --project --threads=2 test/buffer_properties_private_core.jl`. It uses the
+same `PIPEWIREAO_EXCHANGE_TEST_PREFIX` and JLL library preferences described
+above, and creates and closes its own core.
+
 ## Multi-port filter
 
 `Filter` provides the managed equivalent of PipeWire's `pw_filter`: add typed

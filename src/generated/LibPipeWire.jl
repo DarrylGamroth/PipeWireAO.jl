@@ -623,7 +623,8 @@ const SPA_TYPE_OBJECT_ParamProcessLatency = 262156 % UInt32
 const SPA_TYPE_OBJECT_ParamTag = 262157 % UInt32
 const SPA_TYPE_OBJECT_PeerParam = 262158 % UInt32
 const SPA_TYPE_OBJECT_ParamDict = 262159 % UInt32
-const _SPA_TYPE_OBJECT_LAST = 262160 % UInt32
+const SPA_TYPE_OBJECT_BufferProperties = 262160 % UInt32
+const _SPA_TYPE_OBJECT_LAST = 262161 % UInt32
 const SPA_TYPE_VENDOR_PipeWire = 33554432 % UInt32
 const SPA_TYPE_VENDOR_Other = 2130706432 % UInt32
 
@@ -3902,6 +3903,7 @@ end
 | SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
 | SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
 | SPA\\_META\\_Acquisition    | struct [`spa_meta_acquisition`](@ref)                                                                         |
+| SPA\\_META\\_Properties     | bounded BufferProperties POD Object                                                                           |
 | \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
 const spa_meta_type = UInt32
@@ -3917,7 +3919,8 @@ const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
 const SPA_META_START_PipeWireAO = 10 % UInt32
 const SPA_META_Acquisition = 11 % UInt32
-const _SPA_META_LAST = 13 % UInt32
+const SPA_META_Properties = 13 % UInt32
+const _SPA_META_LAST = 14 % UInt32
 const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_features = 65536 % UInt32
 
@@ -4352,6 +4355,88 @@ bool spa_meta_acquisition_times_match( const struct spa_meta_acquisition *a, con
 """
 function spa_meta_acquisition_times_match(a, b, tolerance_nsec)
     @ccall libpipewire_ao.spa_meta_acquisition_times_match(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition}, tolerance_nsec::UInt64)::Bool
+end
+
+"""
+    spa_meta_properties_constant
+
+Version 1 per-buffer property schema. See acquisition-metadata.md.
+"""
+const spa_meta_properties_constant = UInt32
+const SPA_META_PROPERTIES_VERSION = 1 % UInt32
+const SPA_META_FEATURE_PROPERTIES_VERSION_1 = 1 % UInt32
+const SPA_META_PROPERTIES_MIN_SIZE = 16 % UInt32
+const SPA_META_PROPERTIES_MAX_SIZE = 4096 % UInt32
+const SPA_META_PROPERTIES_MAX_FIELDS = 64 % UInt32
+
+const spa_meta_property = UInt32
+const SPA_META_PROPERTY_opticalClassification = 1 % UInt32
+
+const spa_meta_optical_classification = UInt32
+const SPA_META_OPTICAL_ABSENT = 0 % UInt32
+const SPA_META_OPTICAL_UNFRINGED = 1 % UInt32
+const SPA_META_OPTICAL_FRINGED = 2 % UInt32
+const SPA_META_OPTICAL_MIXED = 3 % UInt32
+
+struct spa_meta_property_requirement
+    key::UInt32
+    type::UInt32
+end
+
+"""
+    spa_meta_properties_is_valid(meta, requirements, n_requirements)
+
+Validate the complete allocation and the consumer's required key/type pairs.
+
+### Prototype
+```c
+bool spa_meta_properties_is_valid(const struct spa_meta *meta, const struct spa_meta_property_requirement *requirements, uint32_t n_requirements);
+```
+"""
+function spa_meta_properties_is_valid(meta, requirements, n_requirements)
+    @ccall libpipewire_ao.spa_meta_properties_is_valid(meta::Ptr{spa_meta}, requirements::Ptr{spa_meta_property_requirement}, n_requirements::UInt32)::Bool
+end
+
+"""
+    spa_meta_properties_init(meta)
+
+Clear every byte of caller-owned storage and initialize an empty Object.
+
+### Prototype
+```c
+bool spa_meta_properties_init(struct spa_meta *meta);
+```
+"""
+function spa_meta_properties_init(meta)
+    @ccall libpipewire_ao.spa_meta_properties_init(meta::Ptr{spa_meta})::Bool
+end
+
+"""
+    spa_meta_properties_find(meta, key)
+
+Borrow a value after successful validation; never retain it past the buffer lease.
+
+### Prototype
+```c
+const struct spa_pod *spa_meta_properties_find(const struct spa_meta *meta, uint32_t key);
+```
+"""
+function spa_meta_properties_find(meta, key)
+    @ccall libpipewire_ao.spa_meta_properties_find(meta::Ptr{spa_meta}, key::UInt32)::Ptr{spa_pod}
+end
+
+"""
+    spa_meta_properties_add(meta, key, _type, size, value)
+
+Append one optional scalar property in ascending key order. No allocation.
+
+### Prototype
+```c
+bool spa_meta_properties_add(struct spa_meta *meta, uint32_t key, uint32_t type, uint32_t size, const void *value);
+```
+"""
+function spa_meta_properties_add(meta, key, _type, size, value)
+    @ccall libpipewire_ao.spa_meta_properties_add(meta::Ptr{spa_meta}, key::UInt32, _type::UInt32, size::UInt32, value::Ptr{Cvoid})::Bool
 end
 
 """
@@ -8065,6 +8150,36 @@ int pw_ndarray_filter_new(const struct pw_ndarray_filter_config *config, struct 
 """
 function pw_ndarray_filter_new(config, filter)
     @ccall libpipewire_ao.pw_ndarray_filter_new(config::Ptr{pw_ndarray_filter_config}, filter::Ptr{Ptr{pw_ndarray_filter}})::Cint
+end
+
+"""
+    pw_ndarray_filter_set_port_buffer_properties(filter, direction, port_index, capacity, requirements, n_requirements)
+
+Opt one frame-data Port into bounded per-buffer properties before connect.
+
+The direction-local declaration index includes Parameter Ports, which cannot opt in. Capacity is 16..3968, a multiple of 8; zero disables with no required fields. Requirements are copied and checked on every input and publication. The existing callback ABI remains unchanged. A peer must negotiate Properties metadata and the Version 1 schema feature.
+
+### Prototype
+```c
+int pw_ndarray_filter_set_port_buffer_properties(struct pw_ndarray_filter *filter, uint32_t direction, uint32_t port_index, uint32_t capacity, const struct spa_meta_property_requirement *requirements, uint32_t n_requirements);
+```
+"""
+function pw_ndarray_filter_set_port_buffer_properties(filter, direction, port_index, capacity, requirements, n_requirements)
+    @ccall libpipewire_ao.pw_ndarray_filter_set_port_buffer_properties(filter::Ptr{pw_ndarray_filter}, direction::UInt32, port_index::UInt32, capacity::UInt32, requirements::Ptr{spa_meta_property_requirement}, n_requirements::UInt32)::Cint
+end
+
+"""
+    pw_ndarray_filter_get_buffer_properties(filter, direction, port_index, meta)
+
+Borrow opted-in metadata only during process(). Inputs are read-only. Outputs are cleared to an empty Object before each callback. The returned descriptor and its bytes must not outlive the callback; do not alter the descriptor. An unavailable input returns -ENOENT. Other threads must not call this function. Ordinary [`pw_stream`](@ref) users use the same public SPA helpers and ParamMeta negotiation directly.
+
+### Prototype
+```c
+int pw_ndarray_filter_get_buffer_properties(struct pw_ndarray_filter *filter, uint32_t direction, uint32_t port_index, struct spa_meta *meta);
+```
+"""
+function pw_ndarray_filter_get_buffer_properties(filter, direction, port_index, meta)
+    @ccall libpipewire_ao.pw_ndarray_filter_get_buffer_properties(filter::Ptr{pw_ndarray_filter}, direction::UInt32, port_index::UInt32, meta::Ptr{spa_meta})::Cint
 end
 
 """
