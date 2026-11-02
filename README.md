@@ -413,26 +413,18 @@ Data access masks are public as `SPA.DATA_FLAG_READABLE`,
 `SPA.DATA_FLAG_READWRITE`, and `SPA.DATA_FLAG_MAPPABLE`.
 Use `set_buffer_header!(buffer, BufferHeader(...))` to replace an existing
 complete `SPA_META_Header` payload without crossing into native bindings.
-Acquisition metadata carries a stable acquisition identity and either a
-host-local `CLOCK_MONOTONIC` exposure timestamp or a PTP-qualified `CLOCK_TAI`
-timestamp. Cross-host joins compare timestamps only when both records name the
-same PTP grandmaster and PTP domain. Native buffer records are shared-memory
-metadata; this SDK does not expose a cross-host acquisition codec.
+Acquisition facts are typed fields in borrowed `BufferProperties`. Identity is
+an exact nonzero domain, full unsigned generation, and full unsigned acquisition
+sequence. Header sequence describes publication; held acquisitions can appear in
+multiple publications with different Header sequences.
 
-Version 3 adds whole-exposure trigger classification: absent, low throughout, high
-throughout, or mixed. `acquisition_trigger_state` returns that classification;
-`set_acquisition_trigger_state!` upgrades a valid Version 2 record explicitly.
-`acquisition_metadata_param(; version=3)` and
-`NdArrayFilterPort(...; acquisition_version=3)` require the native Version 3
-feature. Defaults remain Version 2. Older peers reject the explicit requirement.
-The fixed native record remains 96 bytes.
+Exposure time is either host-local `CLOCK_MONOTONIC` or qualified `CLOCK_TAI`.
+Cross-host comparisons require matching PTP grandmaster and domain and include
+reported uncertainty. Native Properties are shared-memory state, not a network
+codec. Reinitialize every writable output, then append classification, identity,
+duration, and exposure-start groups in key order. Read-only callback Properties
+expire when the callback returns.
 
-For ndarray callbacks, `buffer_acquisition` returns a borrowed record with the
-same semantic accessors as stream buffers. Do not retain it after the callback.
-`initialize_acquisition!(output_buffer; version=3)` creates writable metadata,
-and `clear_buffer_acquisition!` removes stale metadata from a reused output.
-Projection into an application record must preserve identity, clock qualification,
-duration and classification while the native record is borrowed.
 With `STREAM_ALLOC_BUFFERS`, call `allocate_buffer!` from `on_buffer_added` to
 install Julia-owned `MemPtr` planes. The stream roots those allocations until
 PipeWire removes the corresponding native buffer.
@@ -525,8 +517,9 @@ close(source) # core and loop remain caller-owned
 ```
 
 `submit_array!` promptly stages a payload and requests native processing. Its
-positive lifetime token is independent of Header sequence. A new acquisition
-generation can restart Header sequence at one. Source completion proves native
+positive lifetime token is independent of Header sequence. Acquisition
+generation and sequence do not determine Header publication sequence. Source
+completion proves native
 queue publication; sink completion proves one validated payload was copied.
 Only one submit may be outstanding, and `wait_array_source!` acknowledges it
 before the next submit. Sink rearm requires `wait_array_sink!` to acknowledge
@@ -535,16 +528,16 @@ the previous receipt. `array_values` returns the owned vector without copying;
 duration snapshot. Consume them before rearming.
 
 Arm with an `AcquisitionIdentity` to require its complete domain, generation,
-and sequence, plus matching Header sequence and valid acquisition metadata.
+and sequence in complete Properties; Header publication sequence is independent.
 `exposure_duration_ns` optionally requires an exact exposure duration. Submit
 accepts the same identity and duration keywords. A sequence-only arm requires
 matching Header sequence. Header sequence zero is rejected by default. For a
 native peer that emits zero, a caller may explicitly arm a `UInt64(0)` sequence
 with `allow_zero_sequence=true`; this relaxes only the Header value check. Zero
 does not prove freshness, and the owning protocol must correlate native frame
-identity and the applied figure separately. Acquisition identities always
-require a positive sequence. Phase and acknowledgement checks still reject
-pending, unacknowledged, duplicate, or unarmed receives. Malformed payloads,
+identity and the applied figure separately. Physical acquisition generation and
+sequence accept the full UInt64 range, including zero. Phase and acknowledgement
+checks still reject pending, unacknowledged, duplicate, or unarmed receives. Malformed payloads,
 noncanonical BOOL8 bytes, wrong identity, duplicate or unarmed input,
 disconnect, and deadline expiration latch a failure until close. These
 endpoints contain transport policy only.
@@ -561,11 +554,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2 test/ndarray_exchange_private_core.jl`.
-Prepared exchanges require the stream-buffer ownership fix shipped in
-`PipeWireAO_jll` 1.7.0+19, or a native build containing commit
-`42fdf86f4e66b15e7cc1d22404294f2234dfcb85`. Earlier packaged clients can lose
-buffer capacity after a borrowed buffer is returned and time out waiting for
-source completion. Update the JLL and restart Julia before using this path.
+Source validation requires the native 2.0.0 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -573,7 +562,11 @@ This prefix selects the daemon, modules, and plugins; it does not override the
 client library loaded by the JLL. For a local native installation, also set the
 JLL's `libpipewire_ao_path`, `libspa_ao_path`, and `libspa_support_path` preferences
 in the active environment's `LocalPreferences.toml` before starting Julia.
-Use absolute paths from the same native installation. See
+Use absolute paths from the same native installation. Declare `PipeWireAO_jll`
+and `Preferences` directly in the validation environment, and include that
+environment in `JULIA_LOAD_PATH` for Aqua child processes. Set
+`PIPEWIREAO_TEST_LIBRARY` to the expected client library; tests check its loaded
+path and version before interpreting the callback ABI. See
 [the completion review](docs/EXCHANGE_COMPLETION_REVIEW.md) and
 [validation record](docs/EXCHANGE_COMPLETION_VALIDATION.md) for the controlled
 failure and the packaged regression checks.
@@ -581,19 +574,16 @@ failure and the packaged regression checks.
 ## Per-buffer properties
 
 `BufferProperties` is a borrowed, bounded SPA POD object carried alongside
-Header and Acquisition metadata. Optical classification (`OPTICAL_ABSENT`,
-`OPTICAL_UNFRINGED`, `OPTICAL_FRINGED`, or `OPTICAL_MIXED`) describes the
-whole exposure independently of Acquisition v3 electrical trigger state.
-An omitted optical field reads as `nothing`; explicit absence reads as
-`OPTICAL_ABSENT`.
+standard Header metadata. Optical classification (`OPTICAL_ABSENT`,
+`OPTICAL_UNFRINGED`, `OPTICAL_FRINGED`, or `OPTICAL_MIXED`) and electrical trigger
+classification are independent whole-exposure facts. Missing keys read as
+`nothing`; a present absent-classification value remains explicit.
 
-The separate typed `triggerClassification` field uses
-`trigger_classification(properties)` and `set_trigger_classification!` with
-the existing `AcquisitionTriggerState` enum. It works alongside Acquisition
-Version 2. When Version 3 also carries electrical trigger classification, the
-two values must agree; validation and publication reject contradictions. The
-optical field is never inferred from electrical state. Identity and timing
-remain in Acquisition metadata.
+Identity and exposure facts use dedicated semantic accessors. Append the identity
+as one domain/generation/sequence group, followed by optional positive duration,
+then a complete monotonic or qualified TAI exposure-start group. These fields
+carry mandatory flags and preserve the entire UInt64 range. Partial groups,
+invalid types/ranges, and unqualified clock combinations fail validation.
 
 Ordinary streams request `buffer_properties_metadata_param(capacity)` in their
 connection parameters. Capacities are multiples of eight from 16 to 4096 bytes.
@@ -604,16 +594,16 @@ key order:
 properties = initialize_buffer_properties!(buffer)
 set_optical_classification!(properties, OPTICAL_FRINGED)
 set_trigger_classification!(properties, ACQUISITION_TRIGGER_HIGH)
-set_buffer_property!(properties, 10, Int64(42))
+set_buffer_property!(properties, 20, Int64(42))
 ```
 
 Read with `buffer_properties(buffer)`, `optical_classification(properties)`, and
 `buffer_property(properties, key, T)`. Scalar types are `Bool`, `SPA.Id`,
-`Int32`, `Int64`, `Float32`, and `Float64`. Scalar access and initialization
+`Int32`, `Int64`, `UInt64`, `Float32`, `Float64`, and fixed byte tuples. Scalar access and initialization
 allocate no Julia heap storage after warmup. Values expire when the callback
 returns or the buffer is returned. No dictionary is built on this path.
 
-An `NdArrayFilterPort` opts in with `buffer_properties_capacity` (maximum 3968)
+An `NdArrayFilterPort` defaults to 512 bytes and accepts `buffer_properties_capacity` (maximum 4064)
 and `required_buffer_properties`, a tuple of `BufferPropertyRequirement(key, T)`
 values. The native helper validates required fields before processing and
 publication and clears outputs before each callback. Input properties expose
@@ -623,9 +613,9 @@ Raw stream consumers pass their supported requirement tuple to
 `buffer_properties(buffer; required_buffer_properties=requirements)` and check
 `buffer_properties_valid(properties)` before accepting the frame.
 
-PipeWireAO 0.6.21 requires PipeWireAO_jll 1.7.3 or newer, which supplies the
-Properties API. This feature remains opt-in;
-existing Header and Acquisition versions, APIs, and defaults remain unchanged.
+This callback layout requires native PipeWireAO 2.0.0 and regenerated bindings.
+The old Acquisition metadata record and version-selection API are removed;
+old callback versions and retired metadata IDs fail admission.
 The isolated stream → ndarray callback → stream regression is
 `julia --project --threads=2 test/buffer_properties_private_core.jl`. It uses the
 same `PIPEWIREAO_EXCHANGE_TEST_PREFIX` and JLL library preferences described

@@ -1,5 +1,6 @@
 using PipeWireAO
 using Test
+include("native_sdk.jl")
 
 include("aqua.jl")
 include("current_info.jl")

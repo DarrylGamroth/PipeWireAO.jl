@@ -1,3 +1,4 @@
+include("native_sdk.jl")
 using PipeWireAO, Test
 include("private_core.jl")
 
@@ -21,7 +22,7 @@ end
 function properties_callback_copy!(input, output)
     properties = buffer_properties(input)
     properties isa BufferProperties{false} || error("input properties must be read-only")
-    buffer_property(properties, 10, Int64) === nothing && error("required property is missing")
+    buffer_property(properties, 20, Int64) === nothing && error("required property is missing")
     copyto!(bytes(output), bytes(input))
     propagate_metadata!(output, input)
     return nothing
@@ -45,7 +46,7 @@ end
         callback_allocations = Threads.Atomic{Int}(-1)
         format = NdArrayFormat(NdArray.U8, (4,); layout=NdArray.ROW_MAJOR)
         buffer_parameters = (Pod(buffers_param(buffers=2, blocks=1, size=4)),
-            Pod(header_metadata_param()), Pod(acquisition_metadata_param(; version=3)),
+            Pod(header_metadata_param()),
             Pod(buffer_properties_metadata_param(128)))
         function parameter_changed(stream, id, parameter)
             id == SPA.PARAM_FORMAT && parameter !== nothing && update_params!(stream, buffer_parameters)
@@ -61,11 +62,10 @@ end
                 set_chunk!(data; size=4, stride=1)
                 set_buffer_size!(source_buffer, 4)
                 set_buffer_header!(source_buffer, BufferHeader(0, 0, Int64(sequence[]), 0, sequence[]))
-                acquisition = initialize_acquisition!(buffer_acquisition(source_buffer); version=3)
-                set_acquisition_trigger_state!(acquisition, ACQUISITION_TRIGGER_LOW)
                 properties = initialize_buffer_properties!(source_buffer)
                 expected[] === nothing || set_optical_classification!(properties, expected[])
-                set_buffer_property!(properties, 10, Int64(sequence[] + 100))
+                set_trigger_classification!(properties, ACQUISITION_TRIGGER_LOW)
+                set_buffer_property!(properties, 20, Int64(sequence[] + 100))
                 queue_buffer!(source_buffer, stream)
                 queued = true
                 pending[] = false
@@ -82,8 +82,8 @@ end
                 buffer_properties_valid(properties) || error("received malformed properties")
                 push!(received, (buffer_header(sink_buffer).sequence,
                     optical_classification(properties),
-                    acquisition_trigger_state(buffer_acquisition(sink_buffer)),
-                    something(buffer_property(properties, 10, Int64))))
+                    something(trigger_classification(properties)),
+                    something(buffer_property(properties, 20, Int64))))
             finally
                 queue_buffer!(sink_buffer, stream)
             end
@@ -109,13 +109,13 @@ end
             filter_task = Threads.@spawn begin
                 native_filter = nothing
                 try
-                    requirement = (BufferPropertyRequirement(10, Int64),)
+                    requirement = (BufferPropertyRequirement(20, Int64),)
                     ports = (
                         NdArrayFilterPort("input", PipeWireAO.DIRECTION_INPUT, format;
-                            schema="test.properties/1", acquisition_version=3,
+                            schema="test.properties/1",
                             buffer_properties_capacity=128, required_buffer_properties=requirement),
                         NdArrayFilterPort("output", PipeWireAO.DIRECTION_OUTPUT, format;
-                            schema="test.properties/1", acquisition_version=3,
+                            schema="test.properties/1",
                             buffer_properties_capacity=128, required_buffer_properties=requirement),
                     )
                     native_filter = NdArrayFilter("test.properties.filter", ports; remote,

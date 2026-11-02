@@ -1,3 +1,4 @@
+include("native_sdk.jl")
 using PipeWireAO
 using Test
 

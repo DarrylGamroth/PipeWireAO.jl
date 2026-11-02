@@ -21,7 +21,9 @@ function (callback::InterruptLockCallback)(event::EventSource, ::UInt64)
         if count > 0 && !recorded
             # The main caller has reserved its native access and cannot acquire
             # the mutex until this owner-thread callback returns.
-            write(callback.waiting_path, "reserved=$count holder_thread=$(Threads.threadid())\n")
+            temporary = callback.waiting_path * ".tmp"
+            write(temporary, "reserved=$count holder_thread=$(Threads.threadid())\n")
+            mv(temporary, callback.waiting_path)
             recorded = true
         end
         @ccall gc_safe=true usleep(1000::Cuint)::Cint

@@ -1,3 +1,4 @@
+include("native_sdk.jl")
 using PipeWireAO
 using Test
 
@@ -52,6 +53,16 @@ function (callback::NdArrayFilterDeactivateRecorder)(::NdArrayFilter)
     return nothing
 end
 
+struct NativeNdArrayBufferFixture <: AbstractVector{NativeNdArrayFilterBuffer}
+    buffers::Vector{NativeNdArrayFilterBuffer}
+    properties::Vector{UInt64}
+    payload::Vector{UInt8}
+end
+Base.size(fixture::NativeNdArrayBufferFixture) = size(fixture.buffers)
+Base.getindex(fixture::NativeNdArrayBufferFixture, index::Int) = fixture.buffers[index]
+Base.pointer(fixture::NativeNdArrayBufferFixture) = pointer(fixture.buffers)
+Base.IndexStyle(::Type{NativeNdArrayBufferFixture}) = IndexLinear()
+
 function native_ndarray_filter_buffer(
     data::Vector{UInt8};
     flags=UInt32(0),
@@ -61,27 +72,17 @@ function native_ndarray_filter_buffer(
     sequence=UInt64(0),
 )
     native = PipeWireAO.LibPipeWire
-    storage = [
-        native.pw_ndarray_filter_buffer(
-            ntuple(_ -> UInt8(0), sizeof(native.pw_ndarray_filter_buffer)),
-        ),
-    ]
-    GC.@preserve storage data begin
-        buffer = pointer(storage)
-        unsafe_store!(buffer.struct_size, UInt32(sizeof(native.pw_ndarray_filter_buffer)))
-        unsafe_store!(buffer.flags, flags)
-        unsafe_store!(buffer.data, present ? Ptr{Cvoid}(pointer(data)) : C_NULL)
-        unsafe_store!(buffer.size, present ? UInt32(length(data)) : UInt32(0))
-        unsafe_store!(buffer.capacity, present ? UInt32(length(data)) : UInt32(0))
-        unsafe_store!(buffer.metadata_available, available)
-        unsafe_store!(buffer.metadata_valid, valid)
-        unsafe_store!(
-            buffer.header,
-            native.spa_meta_header(UInt32(0), UInt32(0), 10, 0, sequence),
-        )
-        native.spa_meta_acquisition_init(buffer.acquisition)
-    end
-    return storage
+    properties = zeros(UInt64, 64)
+    metadata = native.spa_meta(native.SPA_META_Properties, UInt32(sizeof(properties)), Ptr{Cvoid}(pointer(properties)))
+    GC.@preserve properties native.spa_meta_properties_init(Ref(metadata))
+    storage = [native.pw_ndarray_filter_buffer(
+        UInt32(sizeof(native.pw_ndarray_filter_buffer)), flags,
+        present ? Ptr{Cvoid}(pointer(data)) : C_NULL,
+        present ? UInt32(length(data)) : UInt32(0),
+        present ? UInt32(length(data)) : UInt32(0), available, valid,
+        native.spa_meta_header(UInt32(0), UInt32(0), 10, 0, sequence), metadata,
+    )]
+    return NativeNdArrayBufferFixture(storage, properties, data)
 end
 
 function invoke_ndarray_filter_prepare(events, filter::T) where {T<:NdArrayFilter}
@@ -95,8 +96,8 @@ end
 function invoke_ndarray_filter_process(
     events,
     filter::T,
-    inputs::Vector{NativeNdArrayFilterBuffer},
-    outputs::Vector{NativeNdArrayFilterBuffer},
+    inputs::AbstractVector{NativeNdArrayFilterBuffer},
+    outputs::AbstractVector{NativeNdArrayFilterBuffer},
 ) where {T<:NdArrayFilter}
     return GC.@preserve inputs outputs ccall(
         events.process,
@@ -116,6 +117,10 @@ function invoke_ndarray_filter_process(
     )
 end
 
+# A function barrier excludes boxing borrowed fixture owners at global test scope.
+ndarray_filter_process_allocations(events, filter, inputs, outputs) =
+    @allocated invoke_ndarray_filter_process(events, filter, inputs, outputs)
+
 function invoke_ndarray_filter_deactivate(events, filter::T) where {T<:NdArrayFilter}
     return ccall(events.deactivate, Cint, (Ref{T},), filter)
 end
@@ -124,7 +129,7 @@ function invoke_ndarray_filter_parameter(
     events,
     filter::T,
     input_port::UInt32,
-    parameter::Vector{NativeNdArrayFilterBuffer},
+    parameter::AbstractVector{NativeNdArrayFilterBuffer},
 ) where {T<:NdArrayFilter}
     return GC.@preserve parameter ccall(
         events.update_parameter,
@@ -180,8 +185,8 @@ end
 mutable struct ForeignNdArrayFilterInvocation{T<:NdArrayFilter}
     events::PipeWireAO.LibPipeWire.pw_ndarray_filter_events
     filter::T
-    inputs::Vector{NativeNdArrayFilterBuffer}
-    outputs::Vector{NativeNdArrayFilterBuffer}
+    inputs::NativeNdArrayBufferFixture
+    outputs::NativeNdArrayBufferFixture
     result::Cint
 end
 
@@ -287,7 +292,9 @@ end
 @testset "generated ndarray filter ABI" begin
     native = PipeWireAO.LibPipeWire
 
-    @test sizeof(native.pw_ndarray_filter_buffer) == 160
+    @test sizeof(native.pw_ndarray_filter_buffer) == 80
+    @test :acquisition ∉ fieldnames(native.pw_ndarray_filter_buffer)
+    @test fieldtype(native.pw_ndarray_filter_buffer, :properties) === native.spa_meta
     @test sizeof(native.pw_ndarray_filter_format) == 40
     @test sizeof(native.pw_ndarray_filter_port) == 64
     @test :profile ∉ fieldnames(native.pw_ndarray_filter_format)
@@ -306,14 +313,14 @@ end
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE == UInt32(1)
     @test native.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE == UInt32(2)
     @test native.PW_NDARRAY_FILTER_METADATA_HEADER == UInt32(1)
-    @test native.PW_NDARRAY_FILTER_METADATA_ACQUISITION == UInt32(2)
+    @test native.PW_NDARRAY_FILTER_METADATA_PROPERTIES == UInt32(4)
 
     shape = UInt32[8]
     names = ["input"]
     schemas = ["org.pipewireao.test.ndarray/1"]
     events = [
         native.pw_ndarray_filter_events(
-            UInt32(2),
+            UInt32(4),
             C_NULL,
             NDARRAY_FILTER_TEST_PROCESS,
             C_NULL,
@@ -359,6 +366,14 @@ end
             pointer(events),
             C_NULL,
         )
+        current_events = events[1]
+        for old_version in UInt32(0):UInt32(3)
+            events[1] = native.pw_ndarray_filter_events(old_version,
+                ntuple(index -> getfield(current_events, index + 1), 9)...)
+            @test native.pw_ndarray_filter_new(Ref(config), result) == -Base.Libc.EINVAL
+            @test result[] == C_NULL
+        end
+        events[1] = current_events
         @test native.pw_ndarray_filter_new(Ref(config), result) == 0
     end
     @test result[] != C_NULL
@@ -412,7 +427,7 @@ end
     )
     events = PipeWireAO._ndarray_filter_events(filter)
     storage = PipeWireAO._native_ndarray_filter_ports(NdArrayFilterPort[parameter_port])
-    @test events.version == UInt32(2)
+    @test events.version == UInt32(4)
     @test events.update_parameter != C_NULL
     @test only(storage.native).flags == native.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER
 
@@ -473,10 +488,10 @@ end
         @test buffer_header(output_buffer) == replacement
 
         @test set_output_available!(output_buffer, false) === output_buffer
-        @test unsafe_load(pointer(output).flags) ==
+        @test unsafe_load(pointer(output)).flags ==
               native.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE
         @test set_output_available!(output_buffer, true) === output_buffer
-        @test unsafe_load(pointer(output).flags) == UInt32(0)
+        @test unsafe_load(pointer(output)).flags == UInt32(0)
 
         buffer_header(input_buffer)
         input_available(input_buffer)
@@ -556,7 +571,7 @@ end
     )
     events = PipeWireAO._ndarray_filter_events(filter)
 
-    @test events.version == UInt32(3)
+    @test events.version == UInt32(4)
 
     status, gain_pointer = invoke_ndarray_filter_prop_info(events, filter, UInt32(0))
     @test status == 0
@@ -648,7 +663,7 @@ end
     @test invoke_ndarray_filter_prepare(events, filter) == 0
 
     metadata = PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER |
-               PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION
+               PipeWireAO.LibPipeWire.PW_NDARRAY_FILTER_METADATA_PROPERTIES
     input_data = collect(UInt8, 1:8)
     output_data = zeros(UInt8, 8)
     input = native_ndarray_filter_buffer(
@@ -669,11 +684,11 @@ end
 
         @test invoke_ndarray_filter_process(events, filter, input, output) == 0
         @test output_data == input_data
-        @test unsafe_load(pointer(output).metadata_valid) == metadata
-        @test unsafe_load(pointer(output).header).seq == 17
+        @test unsafe_load(pointer(output)).metadata_valid == metadata
+        @test unsafe_load(pointer(output)).header.seq == 17
 
         invoke_ndarray_filter_process(events, filter, input, output)
-        @test @allocated(invoke_ndarray_filter_process(events, filter, input, output)) == 0
+        @test ndarray_filter_process_allocations(events, filter, input, output) == 0
     end
     @test prepare_count[] == 1
     @test process_count[] == 3

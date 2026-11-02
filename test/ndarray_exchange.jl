@@ -1,3 +1,4 @@
+include("native_sdk.jl")
 using PipeWireAO
 using Test
 
@@ -6,16 +7,16 @@ function array_exchange_fixture(::Type{T}, count=4) where {T}
     memory = zeros(UInt8, count * sizeof(T))
     chunk = Ref(native.spa_chunk(UInt32(0), UInt32(length(memory)), Int32(sizeof(T)), Int32(0)))
     header = Ref(native.spa_meta_header(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(1)))
-    acquisition = zeros(UInt64, Int(native.SPA_META_ACQUISITION_SIZE) ÷ sizeof(UInt64))
+    properties = zeros(UInt64, 64)
     metadata = native.spa_meta[
         native.spa_meta(native.SPA_META_Header, UInt32(sizeof(native.spa_meta_header)), Base.unsafe_convert(Ptr{Cvoid}, header)),
-        native.spa_meta(native.SPA_META_Acquisition, UInt32(sizeof(acquisition)), Ptr{Cvoid}(pointer(acquisition))),
+        native.spa_meta(native.SPA_META_Properties, UInt32(sizeof(properties)), Ptr{Cvoid}(pointer(properties))),
     ]
     data = Ref(native.spa_data(native.SPA_DATA_MemPtr, SPA.DATA_FLAG_READWRITE, Int64(-1), UInt32(0), UInt32(length(memory)), pointer(memory), Base.unsafe_convert(Ptr{native.spa_chunk}, chunk)))
     spa_buffer = Ref(native.spa_buffer(UInt32(2), UInt32(1), pointer(metadata), Base.unsafe_convert(Ptr{native.spa_data}, data)))
     native_buffer = Ref(native.pw_buffer(Base.unsafe_convert(Ptr{native.spa_buffer}, spa_buffer), C_NULL, UInt64(0), UInt64(0), UInt64(0)))
     buffer = StreamBuffer(Base.unsafe_convert(Ptr{native.pw_buffer}, native_buffer))
-    return (; memory, chunk, header, acquisition, metadata, data, spa_buffer, native_buffer, buffer)
+    return (; memory, chunk, header, properties, metadata, data, spa_buffer, native_buffer, buffer)
 end
 
 @testset "prepared ndarray negotiation is exact" begin
@@ -143,7 +144,7 @@ end
             set_chunk!(buffer_data(fixture.buffer); size=sizeof(T)*4, stride=0)
             @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
             PipeWireAO._array_write!(write_state, fixture.buffer)
-            fill!(fixture.acquisition, UInt64(0))
+            fill!(fixture.properties, UInt64(0))
             @test_throws InvalidStateException PipeWireAO._array_read!(read_state, fixture.buffer)
             PipeWireAO._array_write!(write_state, fixture.buffer)
             if T == Bool
@@ -173,8 +174,8 @@ end
         sink.state.acknowledged = true
         @test arm_array_sink!(sink, UInt64(0); allow_zero_sequence=true) === sink
 
-        @test_throws ArgumentError PipeWireAO._array_validate_expected_sequence(
-            AcquisitionIdentity(domain, UInt64(1), UInt64(0)), true)
+        @test PipeWireAO._array_validate_expected_sequence(
+            AcquisitionIdentity(domain, UInt64(1), UInt64(0)), true) === nothing
     finally
         close(sink)
         close(core)
@@ -208,6 +209,16 @@ end
         PipeWireAO._array_write!(write_state, fixture.buffer)
         @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
         @test read_state.identity == identity
+        for physical_sequence in (UInt64(0), typemax(UInt64))
+            identity = AcquisitionIdentity(domain, typemax(UInt64), physical_sequence)
+            write_state.identity = identity
+            write_state.header = BufferHeader(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(321))
+            read_state.expected = identity
+            PipeWireAO._array_write!(write_state, fixture.buffer)
+            @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
+            @test read_state.identity == identity
+            @test read_state.header.sequence == 321 != physical_sequence
+        end
     end
 end
 

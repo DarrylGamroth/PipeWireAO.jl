@@ -1,223 +1,124 @@
-using PipeWireAO
-using Test
+using PipeWireAO, Test
+include("native_sdk.jl")
 
-function acquisition_fixture(storage)
-    native = PipeWireAO.LibPipeWire
-    metas = native.spa_meta[
-        native.spa_meta(
-            native.SPA_META_Acquisition,
-            UInt32(sizeof(native.spa_meta_acquisition)),
-            Ptr{Cvoid}(Base.pointer(storage)),
-        ),
-    ]
-    spa_buffer = Ref(native.spa_buffer(UInt32(1), UInt32(0), pointer(metas), C_NULL))
-    native_buffer = Ref(
-        native.pw_buffer(
-            Base.unsafe_convert(Ptr{native.spa_buffer}, spa_buffer),
-            C_NULL,
-            UInt64(0),
-            UInt64(0),
-            UInt64(0),
-        ),
-    )
-    buffer = StreamBuffer(Base.unsafe_convert(Ptr{native.pw_buffer}, native_buffer))
-    return (; buffer, metas, spa_buffer, native_buffer)
-end
-
-function update_acquisition_hot_path(metadata, identity)
-    initialize_acquisition!(metadata)
-    set_acquisition_identity!(metadata, identity)
-    set_acquisition_exposure_start!(metadata, Int64(123_456), UInt64(9))
-    set_acquisition_exposure_duration!(metadata, UInt64(5_000))
-    acquisition_flags(metadata)
-    acquisition_identity(metadata)
-    acquisition_exposure_start(metadata)
-    acquisition_timebase(metadata)
-    acquisition_ptp_reference(metadata)
-    acquisition_exposure_duration(metadata)
+function acquisition_update!(properties, identity)
+    initialize_buffer_properties!(properties)
+    set_acquisition_identity!(properties, identity)
+    set_acquisition_exposure_duration!(properties, UInt64(5_000))
+    set_acquisition_exposure_start!(properties, Int64(123_456), UInt64(9))
+    acquisition_identity(properties)
+    acquisition_exposure_start(properties)
+    acquisition_timebase(properties)
+    acquisition_ptp_reference(properties)
+    acquisition_exposure_duration(properties)
     return nothing
 end
 
-function acquisition_hot_path_allocations(metadata, identity)
-    update_acquisition_hot_path(metadata, identity)
-    return @allocated update_acquisition_hot_path(metadata, identity)
+function acquisition_allocations(properties, identity)
+    acquisition_update!(properties, identity)
+    return @allocated acquisition_update!(properties, identity)
 end
 
-@testset "acquisition metadata" begin
+@testset "complete acquisition facts in Properties" begin
     native = PipeWireAO.LibPipeWire
-    words = div(Int(native.SPA_META_ACQUISITION_SIZE), sizeof(UInt64))
-    storage_a = zeros(UInt64, words)
-    storage_b = zeros(UInt64, words)
-    fixture_a = acquisition_fixture(storage_a)
-    fixture_b = acquisition_fixture(storage_b)
-
-    domain_bytes = ntuple(
-        index -> index == 1 ? UInt8(1) : UInt8(0),
-        Val(ACQUISITION_DOMAIN_SIZE),
-    )
-    grandmaster_bytes = ntuple(
-        index -> index == 1 ? UInt8(2) : UInt8(0),
-        Val(ACQUISITION_PTP_CLOCK_ID_SIZE),
-    )
-    other_grandmaster_bytes = ntuple(
-        index -> index == 1 ? UInt8(3) : UInt8(0),
-        Val(ACQUISITION_PTP_CLOCK_ID_SIZE),
-    )
-    domain = AcquisitionDomain(domain_bytes)
-    identity = AcquisitionIdentity(domain, UInt64(7), UInt64(42))
-    grandmaster = PtpClockIdentity(grandmaster_bytes)
-    reference = AcquisitionPtpReference(grandmaster, 7)
-
-    @test_throws ArgumentError AcquisitionDomain(
-        ntuple(_ -> UInt8(0), Val(ACQUISITION_DOMAIN_SIZE)),
-    )
-    @test_throws ArgumentError PtpClockIdentity(
-        ntuple(_ -> UInt8(0), Val(ACQUISITION_PTP_CLOCK_ID_SIZE)),
-    )
+    a, b = properties_fixture(512), properties_fixture(512)
+    domain = AcquisitionDomain(ntuple(UInt8, 16))
+    grandmaster = PtpClockIdentity(ntuple(UInt8, 8))
+    reference = AcquisitionPtpReference(grandmaster, 255)
+    @test ACQUISITION_DOMAIN_SIZE == native.SPA_ACQUISITION_DOMAIN_SIZE == 16
+    @test ACQUISITION_PTP_CLOCK_ID_SIZE == native.SPA_EXPOSURE_PTP_CLOCK_ID_SIZE == 8
+    @test isbitstype(AcquisitionIdentity) && isbitstype(AcquisitionExposureStart)
+    @test isbitstype(AcquisitionDomain) && isbitstype(AcquisitionPtpReference)
+    @test_throws ArgumentError AcquisitionDomain(ntuple(_ -> UInt8(0), 16))
+    @test_throws ArgumentError PtpClockIdentity(ntuple(_ -> UInt8(0), 8))
     @test_throws ArgumentError AcquisitionPtpReference(grandmaster, -1)
     @test_throws ArgumentError AcquisitionPtpReference(grandmaster, 256)
-    @test isbitstype(AcquisitionDomain)
-    @test isbitstype(AcquisitionIdentity)
-    @test isbitstype(AcquisitionExposureStart)
-    @test isbitstype(AcquisitionPtpReference)
-    @test isbitstype(PtpClockIdentity)
-    @test sizeof(native.spa_meta_acquisition) == Int(native.SPA_META_ACQUISITION_SIZE) == 96
-    @test ACQUISITION_DOMAIN_SIZE == Int(native.SPA_META_ACQUISITION_DOMAIN_SIZE) == 16
-    @test ACQUISITION_PTP_CLOCK_ID_SIZE ==
-          Int(native.SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE) == 8
-    @test ACQUISITION_FLAG_IDENTITY_VALID ==
-          native.SPA_META_ACQUISITION_FLAG_IDENTITY_VALID
-    @test ACQUISITION_FLAG_EXPOSURE_START_VALID ==
-          native.SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID
-    @test ACQUISITION_FLAG_EXPOSURE_DURATION_VALID ==
-          native.SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID
-    @test ACQUISITION_FLAG_PTP_REFERENCE_VALID ==
-          native.SPA_META_ACQUISITION_FLAG_PTP_REFERENCE_VALID
-
-    GC.@preserve storage_a storage_b fixture_a fixture_b begin
-        metadata_a = buffer_acquisition(fixture_a.buffer)
-        metadata_b = buffer_acquisition(fixture_b.buffer)
-        @test metadata_a isa AcquisitionMetadata{StreamBuffer}
-        @test metadata_b isa AcquisitionMetadata{StreamBuffer}
-        @test !acquisition_valid(metadata_a)
-
-        pointer_a = Ptr{native.spa_meta_acquisition}(Base.pointer(storage_a))
-        base = UInt(pointer_a)
-        @test base & UInt(7) == 0
-        @test UInt(pointer_a.timebase) - base == 12
-        @test UInt(pointer_a.domain) - base == 16
-        @test UInt(pointer_a.generation) - base == 32
-        @test UInt(pointer_a.sequence) - base == 40
-        @test UInt(pointer_a.exposure_start_nsec) - base == 48
-        @test UInt(pointer_a.ptp_grandmaster_id) - base == 72
-        @test UInt(pointer_a.ptp_domain_number) - base == 80
-        @test UInt(pointer_a.reserved2) - base == 88
-
-        @test initialize_acquisition!(metadata_a) === metadata_a
-        @test initialize_acquisition!(metadata_b) === metadata_b
-        @test acquisition_valid(metadata_a)
-        @test unsafe_load(pointer_a.version) == native.SPA_META_ACQUISITION_VERSION_2
-        @test acquisition_flags(metadata_a) == UInt32(0)
-        @test acquisition_identity(metadata_a) === nothing
-        @test acquisition_exposure_start(metadata_a) === nothing
-        @test acquisition_timebase(metadata_a) === nothing
-        @test acquisition_ptp_reference(metadata_a) === nothing
-        @test acquisition_exposure_duration(metadata_a) === nothing
-        @test !acquisition_identity_equal(metadata_a, metadata_b)
-
-        @test set_acquisition_identity!(metadata_a, identity) === metadata_a
-        @test set_acquisition_identity!(metadata_b, identity) === metadata_b
-        @test acquisition_identity(metadata_a) == identity
-        @test acquisition_identity_equal(metadata_a, metadata_b)
-
-        @test set_acquisition_exposure_start!(metadata_a, 123_456, 9) === metadata_a
-        @test set_acquisition_exposure_duration!(metadata_a, 5_000) === metadata_a
-        @test acquisition_exposure_start(metadata_a) ==
-              AcquisitionExposureStart(Int64(123_456), UInt64(9))
-        @test acquisition_timebase(metadata_a) == ACQUISITION_TIMEBASE_MONOTONIC
-        @test acquisition_ptp_reference(metadata_a) === nothing
-        @test acquisition_exposure_duration(metadata_a) == UInt64(5_000)
-        @test acquisition_valid(metadata_a)
-        @test_throws ArgumentError set_acquisition_exposure_start!(metadata_a, -1, 0)
-        @test_throws ArgumentError set_acquisition_exposure_duration!(metadata_a, 0)
-
-        different = AcquisitionIdentity(domain, UInt64(7), UInt64(43))
-        initialize_acquisition!(metadata_b)
-        set_acquisition_identity!(metadata_b, different)
-        @test !acquisition_identity_equal(metadata_a, metadata_b)
-
-        update_acquisition_hot_path(metadata_a, identity)
-        @test acquisition_hot_path_allocations(metadata_a, identity) == 0
-
-        initialize_acquisition!(metadata_a)
-        initialize_acquisition!(metadata_b)
-        set_acquisition_identity!(metadata_a, identity)
-        set_acquisition_identity!(metadata_b, identity)
-        @test set_acquisition_exposure_start_ptp!(metadata_a, 123_456, 9, reference) ===
-              metadata_a
-        @test set_acquisition_exposure_start_ptp!(metadata_b, 123_500, 11, reference) ===
-              metadata_b
-        @test acquisition_timebase(metadata_a) == ACQUISITION_TIMEBASE_TAI
-        @test acquisition_ptp_reference(metadata_a) == reference
-        @test acquisition_time_difference(metadata_a, metadata_b) == (Int64(-44), UInt64(20))
-        @test !acquisition_times_match(metadata_a, metadata_b, 23)
-        @test acquisition_times_match(metadata_a, metadata_b, 24)
-        @test_throws ArgumentError acquisition_times_match(metadata_a, metadata_b, -1)
-
-        other_reference = AcquisitionPtpReference(
-            PtpClockIdentity(other_grandmaster_bytes),
-            7,
-        )
-        set_acquisition_exposure_start_ptp!(metadata_b, 123_500, 11, other_reference)
-        @test acquisition_time_difference(metadata_a, metadata_b) === nothing
-        @test !acquisition_times_match(metadata_a, metadata_b, typemax(UInt64))
-        set_acquisition_exposure_start!(metadata_b, 123_500, 11)
-        @test acquisition_timebase(metadata_b) == ACQUISITION_TIMEBASE_MONOTONIC
-        @test acquisition_ptp_reference(metadata_b) === nothing
-        @test acquisition_time_difference(metadata_a, metadata_b) === nothing
-
-        initialize_acquisition!(metadata_a)
-        unsafe_store!(pointer_a.version, native.SPA_META_ACQUISITION_VERSION_1)
-        @test acquisition_valid(metadata_a)
-        set_acquisition_exposure_start!(metadata_a, 123_456, 9)
-        @test acquisition_timebase(metadata_a) == ACQUISITION_TIMEBASE_MONOTONIC
-        initialize_acquisition!(metadata_a)
-        set_acquisition_identity!(metadata_a, identity)
-        unsafe_store!(
-            pointer_a.reserved,
-            ntuple(index -> index == 1 ? UInt8(1) : UInt8(0), Val(7)),
-        )
-        @test !acquisition_valid(metadata_a)
-        @test_throws InvalidStateException acquisition_identity(metadata_a)
-        initialize_acquisition!(metadata_a)
-        set_acquisition_identity!(metadata_a, identity)
-        unsafe_store!(pointer_a.flags, unsafe_load(pointer_a.flags) | UInt32(1 << 31))
-        @test !acquisition_valid(metadata_a)
-        initialize_acquisition!(metadata_a)
-        set_acquisition_identity!(metadata_a, identity)
-        unsafe_store!(pointer_a.domain, ntuple(_ -> UInt8(0), Val(ACQUISITION_DOMAIN_SIZE)))
-        @test !acquisition_valid(metadata_a)
-
-        fixture_a.metas[1] = native.spa_meta(
-            native.SPA_META_Acquisition,
-            UInt32(sizeof(native.spa_meta_acquisition) - 1),
-            Ptr{Cvoid}(Base.pointer(storage_a)),
-        )
-        @test_throws InvalidStateException buffer_acquisition(fixture_a.buffer)
-        fixture_a.metas[1] = native.spa_meta(
-            native.SPA_META_Acquisition,
-            UInt32(sizeof(native.spa_meta_acquisition)),
-            Ptr{Cvoid}(Ptr{UInt8}(Base.pointer(storage_a)) + 1),
-        )
-        @test_throws InvalidStateException buffer_acquisition(fixture_a.buffer)
+    GC.@preserve a b begin
+        left, right = initialize_buffer_properties!(a.buffer), initialize_buffer_properties!(b.buffer)
+        @test acquisition_identity(left) === nothing
+        @test acquisition_exposure_start(left) === nothing
+        @test acquisition_exposure_duration(left) === nothing
+        @test acquisition_timebase(left) === nothing
+        @test acquisition_ptp_reference(left) === nothing
+        @test !acquisition_identity_equal(left, right)
+        for value in (UInt64(0), UInt64(typemax(Int64)), UInt64(1) << 63, typemax(UInt64))
+            identity = AcquisitionIdentity(domain, value, value)
+            initialize_buffer_properties!(left)
+            @test set_acquisition_identity!(left, identity) === left
+            @test acquisition_identity(left) == identity
+            @test set_acquisition_exposure_duration!(left, typemax(UInt64)) === left
+            @test acquisition_exposure_duration(left) == typemax(UInt64)
+            @test buffer_properties_valid(left)
+        end
+        identity = AcquisitionIdentity(domain, UInt64(7), UInt64(42))
+        acquisition_update!(left, identity)
+        @test acquisition_exposure_start(left) == AcquisitionExposureStart(123_456, UInt64(9))
+        @test acquisition_timebase(left) == ACQUISITION_TIMEBASE_MONOTONIC
+        @test acquisition_ptp_reference(left) === nothing
+        @test acquisition_allocations(left, identity) == 0
+        for bad in (-1, big(typemax(UInt64)) + 1)
+            @test_throws ArgumentError set_acquisition_exposure_duration!(left, bad)
+        end
+        @test_throws ArgumentError set_acquisition_exposure_duration!(left, 0)
+        @test_throws ArgumentError set_acquisition_exposure_start!(left, -1, 0)
+        @test_throws ArgumentError set_acquisition_exposure_start!(left, 0, -1)
+        initialize_buffer_properties!(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_ACQUISITION_DOMAIN, domain.bytes)
+        @test !buffer_properties_valid(left)
+        @test_throws InvalidStateException acquisition_identity(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_ACQUISITION_GENERATION, typemax(UInt64))
+        @test !buffer_properties_valid(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_ACQUISITION_SEQUENCE, UInt64(0))
+        @test buffer_properties_valid(left)
+        @test acquisition_identity(left) == AcquisitionIdentity(domain, typemax(UInt64), UInt64(0))
+        for (start, error) in ((Int64(123_456), UInt64(9)), (typemax(Int64), typemax(UInt64)))
+            initialize_buffer_properties!(left)
+            initialize_buffer_properties!(right)
+            set_acquisition_exposure_start_ptp!(left, start, error, reference)
+            set_acquisition_exposure_start_ptp!(right, start, error, reference)
+            @test acquisition_ptp_reference(left) == reference
+            @test acquisition_timebase(left) == ACQUISITION_TIMEBASE_TAI
+            expected_error = error == typemax(UInt64) ? typemax(UInt64) : 2error
+            @test acquisition_time_difference(left, right) == (Int64(0), expected_error)
+            @test acquisition_times_match(left, right, typemax(UInt64))
+        end
+        initialize_buffer_properties!(left); initialize_buffer_properties!(right)
+        set_acquisition_exposure_start_ptp!(left, 123_456, 9, reference)
+        set_acquisition_exposure_start_ptp!(right, 123_500, 11, reference)
+        @test acquisition_time_difference(left, right) == (Int64(-44), UInt64(20))
+        @test !acquisition_times_match(left, right, 23)
+        @test acquisition_times_match(left, right, 24)
+        @test_throws ArgumentError acquisition_times_match(left, right, -1)
+        initialize_buffer_properties!(right)
+        set_acquisition_exposure_start_ptp!(right, 123_500, 11, AcquisitionPtpReference(grandmaster, 254))
+        @test acquisition_time_difference(left, right) === nothing
+        initialize_buffer_properties!(right)
+        other_clock = PtpClockIdentity(ntuple(i -> UInt8(i + 1), 8))
+        set_acquisition_exposure_start_ptp!(right, 123_500, 11, AcquisitionPtpReference(other_clock, 255))
+        @test acquisition_time_difference(left, right) === nothing
+        initialize_buffer_properties!(right)
+        set_acquisition_exposure_start!(right, 123_500, 11)
+        @test acquisition_time_difference(left, right) === nothing
+        @test !acquisition_times_match(left, right, typemax(UInt64))
+        initialize_buffer_properties!(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_EXPOSURE_START, Int64(0))
+        @test !buffer_properties_valid(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_EXPOSURE_TIMEBASE, SPA.Id(UInt32(ACQUISITION_TIMEBASE_TAI)))
+        set_buffer_property!(left, BUFFER_PROPERTY_TIMESTAMP_UNCERTAINTY, UInt64(0))
+        @test !buffer_properties_valid(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_PTP_GRANDMASTER_IDENTITY, grandmaster.bytes)
+        @test !buffer_properties_valid(left)
+        set_buffer_property!(left, BUFFER_PROPERTY_PTP_DOMAIN_NUMBER, SPA.Id(UInt32(255)))
+        @test buffer_properties_valid(left)
+        initialize_buffer_properties!(left)
+        set_buffer_property!(left, 20, UInt64(0x0102030405060708))
+        pod = native.spa_meta_properties_find(Ref(left.metadata), UInt32(20))
+        @test unsafe_load(Ptr{NTuple{8,UInt8}}(Ptr{UInt8}(pod) + sizeof(native.spa_pod))) ==
+            (0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01)
+        @test buffer_property(left, 20, UInt64) == UInt64(0x0102030405060708)
+        initialize_buffer_properties!(left)
+        @test acquisition_identity(left) === nothing
+        @test acquisition_exposure_start(left) === nothing
+        @test !acquisition_identity_equal(left, right)
     end
-
-    parameter = acquisition_metadata_param()
-    properties = Dict(property.key => property for property in parameter.object.properties)
-    @test pod_value(SPA.Id, properties[SPA.META_PARAM_TYPE].value) ==
-          SPA.Id(SPA.META_ACQUISITION)
-    @test pod_value(Int32, properties[SPA.META_PARAM_SIZE].value) ==
-          Int32(native.SPA_META_ACQUISITION_SIZE)
-    @test pod_value(Int32, properties[SPA.META_PARAM_FEATURES].value) ==
-          Int32(native.SPA_META_FEATURE_ACQUISITION_CURRENT)
 end

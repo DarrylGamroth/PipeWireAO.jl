@@ -1,3 +1,5 @@
+> Historical review of the retired 1.x Acquisition record. Current code uses Header and Properties; see the root README for the replacement API.
+
 # Acquisition Version 3 release review
 
 Independent review, October 15, 2026. Native candidate 62a3aff803e5330d32a3a790e36fef69f2b35759
