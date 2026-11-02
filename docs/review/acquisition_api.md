@@ -1,6 +1,33 @@
-> Historical review of the retired 1.x Acquisition record. Current code uses Header and Properties; see the root README for the replacement API.
+# Header and Properties replacement review
 
-# Acquisition Version 3 release review
+Independent source assessment, November 1, 2026: native `55e80a78a`, Julia
+production/generated diff above test commit `c7fddf1`. Production changes were
+owned separately from this assessment and remain uncommitted at this review.
+The native acquisition contract is the semantic authority.
+
+| Finding | Evidence | Disposition |
+| --- | --- | --- |
+| PWAO-PROP-001 — high confidence, required Properties admission | A Header-only synthetic stream buffer completed `_array_read!` and copied its payload for a UInt64-only arm. The buffer parameters did not require Properties. | Fixed: parameters require Header and Properties, and reads reject a missing Properties allocation. A valid empty Object still permits absent facts. |
+
+The same rejection case, required metadata mask, full UInt64 identity range,
+independent Header sequence, and cleared derived output now have regression
+coverage in `test/ndarray_exchange.jl` and `test/acquisition_trigger.jl`.
+Focused regressions and 136 private-core exchange assertions passed after the
+fix. The earlier full unit run passed 2,244 assertions across 70 testset
+summaries, including Aqua; three private-core selectors passed 171 assertions.
+All new ABI checks used Julia 1.13.3 and the exact native 2.0.0 SDK library.
+
+The assessment checked generated layouts/signatures, field offsets, borrowed
+read-only lifetimes and validity masks, required fields, unsigned byte encoding,
+clock qualification, unknown optional preservation, and recycled output clearing.
+No further confirmed production defect remains from this assessment. Successful
+warmed getters, metadata copies and the complete callback measured zero heap
+bytes through function barriers; global fixture boxing was excluded from the
+measurement. Hardware PTP mapping and physical deadlines remain unqualified.
+
+---
+
+# Historical Acquisition Version 3 release review
 
 Independent review, October 15, 2026. Native candidate 62a3aff803e5330d32a3a790e36fef69f2b35759
 reviewed against existing main 9cf200645. SDK 0.6.18 candidate reviewed against 1417b69.
