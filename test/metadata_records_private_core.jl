@@ -19,16 +19,18 @@ function properties_link(core, registry, source, sink)
     end
 end
 
-function properties_callback_copy!(input, output)
-    properties = buffer_properties(input)
-    properties isa BufferProperties{false} || error("input properties must be read-only")
-    buffer_property(properties, 20, Int64) === nothing && error("required property is missing")
+function metadata_callback_copy!(input, output)
+    properties = metadata_records(input)
+    properties isa MetadataRecords{false} || error("input records must be read-only")
+    metadata_record(properties, UInt32(0x900)) === nothing && error("required metadata is missing")
     copyto!(bytes(output), bytes(input))
     propagate_metadata!(output, input)
     return nothing
 end
 
-@testset "private-core typed properties through an ndarray callback" begin
+@testset "private-core independent metadata through an ndarray callback" begin
+    Threads.nthreads(:default)>=2 && Threads.nthreads(:interactive)>=1 ||
+        error("blocking native filter fixture requires --threads=2,1 or more")
     with_array_exchange_private_core() do remote
         loop = ThreadLoop("test.buffer.properties")
         context, core, registry = with_thread_loop_lock(loop) do _
@@ -45,9 +47,10 @@ end
         source_buffer, sink_buffer = StreamBuffer(), StreamBuffer()
         callback_allocations = Threads.Atomic{Int}(-1)
         format = NdArrayFormat(NdArray.U8, (4,); layout=NdArray.ROW_MAJOR)
+        layouts=(MetadataRequirement(SPA.META_OPTICAL_CHOPPING),MetadataRequirement(SPA.META_ELECTRICAL_TRIGGER;required=true),MetadataRequirement(0x900,8;required=true))
         buffer_parameters = (Pod(buffers_param(buffers=2, blocks=1, size=4)),
             Pod(header_metadata_param()),
-            Pod(buffer_properties_metadata_param(128)))
+            (Pod(metadata_param(r)) for r in layouts)...)
         function parameter_changed(stream, id, parameter)
             id == SPA.PARAM_FORMAT && parameter !== nothing && update_params!(stream, buffer_parameters)
             return nothing
@@ -61,11 +64,12 @@ end
                 fill!(buffer_memory(data, 4), UInt8(sequence[]))
                 set_chunk!(data; size=4, stride=1)
                 set_buffer_size!(source_buffer, 4)
+                initialize_metadata!(source_buffer)
                 set_buffer_header!(source_buffer, BufferHeader(0, 0, Int64(sequence[]), 0, sequence[]))
-                properties = initialize_buffer_properties!(source_buffer)
+                properties = writable_metadata_records(source_buffer)
                 expected[] === nothing || set_optical_classification!(properties, expected[])
                 set_trigger_classification!(properties, ACQUISITION_TRIGGER_LOW)
-                set_buffer_property!(properties, 20, Int64(sequence[] + 100))
+                set_metadata_bytes!(properties,UInt32(0x900),ntuple(i -> UInt8(((sequence[]+100) >> (8*(i-1))) & 0xff),8))
                 queue_buffer!(source_buffer, stream)
                 queued = true
                 pending[] = false
@@ -77,13 +81,13 @@ end
         function consume(stream)
             dequeue_buffer!(sink_buffer, stream) || return nothing
             try
-                properties = buffer_properties(sink_buffer)
+                properties = metadata_records(sink_buffer)
                 properties === nothing && error("negotiated properties are missing")
-                buffer_properties_valid(properties) || error("received malformed properties")
+                metadata_records_valid(properties) || error("received malformed properties")
                 push!(received, (buffer_header(sink_buffer).sequence,
                     optical_classification(properties),
                     something(trigger_classification(properties)),
-                    something(buffer_property(properties, 20, Int64))))
+                    Int64(sum(UInt64(byte) << (8*(i-1)) for (i,byte) in enumerate(metadata_bytes(something(metadata_record(properties,UInt32(0x900)))))))))
             finally
                 queue_buffer!(sink_buffer, stream)
             end
@@ -109,20 +113,20 @@ end
             filter_task = Threads.@spawn begin
                 native_filter = nothing
                 try
-                    requirement = (BufferPropertyRequirement(20, Int64),)
+                    requirement = layouts
                     ports = (
                         NdArrayFilterPort("input", PipeWireAO.DIRECTION_INPUT, format;
                             schema="test.properties/1",
-                            buffer_properties_capacity=128, required_buffer_properties=requirement),
+                            metadata=requirement,propagation=:preserve),
                         NdArrayFilterPort("output", PipeWireAO.DIRECTION_OUTPUT, format;
                             schema="test.properties/1",
-                            buffer_properties_capacity=128, required_buffer_properties=requirement),
+                            metadata=requirement,propagation=:preserve),
                     )
                     native_filter = NdArrayFilter("test.properties.filter", ports; remote,
                         on_process=(filter, inputs, outputs) -> begin
-                            properties_callback_copy!(inputs[1], outputs[1])
+                            metadata_callback_copy!(inputs[1], outputs[1])
                             if callback_allocations[] < 0
-                                callback_allocations[] = @allocated properties_callback_copy!(inputs[1], outputs[1])
+                                callback_allocations[] = @allocated metadata_callback_copy!(inputs[1], outputs[1])
                             end
                             nothing
                         end)

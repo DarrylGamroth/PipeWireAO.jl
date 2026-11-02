@@ -14,7 +14,7 @@ end
 """
     NdArrayFilterPort(name, direction, format;
                       schema=nothing, parameter=false,
-                      buffer_properties_capacity=512, required_buffer_properties=())
+                      metadata=(), propagation=:produce)
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
@@ -22,12 +22,10 @@ the semantic meaning of the ndarray independently of its element type, shape,
 layout, and rate. It must include every schema-specific coordinate or ordering
 meaning needed to interpret the payload.
 
-Set `buffer_properties_capacity` to an eight-byte multiple from 16 to 4064 to
-negotiate a bounded Version 1 per-buffer properties object. Declare exact
-required key/type pairs with [`BufferPropertyRequirement`](@ref) values in
-`required_buffer_properties`. Missing or incompatible required fields reject
-the frame. Unknown optional fields remain valid. Frame ports default to 512 bytes. Parameter ports default to no per-frame
-Properties. These observations are independent of ordinary node controls.
+`metadata` declares additional independent record types and exact layouts with
+[`MetadataRequirement`](@ref). Header is always required on frame ports.
+`propagation` declares `:preserve`, `:produce`, `:replace` or `:drop`.
+Required records must contain valid information on every admitted buffer.
 
 Set `parameter=true` for a sparse input Parameter Port. A Parameter Port must
 have input direction and a format without a repeated rate. Its buffers are
@@ -39,8 +37,8 @@ struct NdArrayFilterPort{N}
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
     parameter::Bool
-    buffer_properties_capacity::UInt32
-    required_buffer_properties::Vector{LibPipeWire.spa_meta_property_requirement}
+    metadata::Vector{LibPipeWire.spa_meta_requirement}
+    propagation::UInt32
 end
 
 function NdArrayFilterPort(
@@ -49,17 +47,14 @@ function NdArrayFilterPort(
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
     parameter::Bool=false,
-    buffer_properties_capacity::Integer=parameter ? 0 : 512,
-    required_buffer_properties=(),
+    metadata=(),
+    propagation::Symbol=:produce,
 ) where {N}
-    property_capacity = _buffer_properties_capacity(buffer_properties_capacity; optional=true)
-    property_capacity <= 4064 || throw(ArgumentError(
-        "ndarray filter buffer properties capacity must not exceed 4064 bytes",
-    ))
-    requirements = _buffer_property_requirements(required_buffer_properties)
-    property_capacity == 0 && !isempty(requirements) && throw(ArgumentError(
-        "required buffer properties need a nonzero buffer_properties_capacity",
-    ))
+    requirements = _metadata_requirements(metadata;header=true)
+    popfirst!(requirements) # native ports declare additional records; Header is implicit.
+    propagation_value = propagation === :produce ? UInt32(0) : propagation === :preserve ? UInt32(1) :
+        propagation === :replace ? UInt32(2) : propagation === :drop ? UInt32(3) :
+        throw(ArgumentError("invalid metadata propagation"))
     port_name = _validate_c_string(String(name), "ndarray filter port name")
     isempty(port_name) && throw(ArgumentError("an ndarray filter port name cannot be empty"))
     semantic_schema = if schema === nothing
@@ -70,8 +65,8 @@ function NdArrayFilterPort(
         value
     end
     if parameter
-        property_capacity == 0 || throw(ArgumentError(
-            "an ndarray Parameter Port cannot declare per-frame buffer properties",
+        isempty(requirements) || throw(ArgumentError(
+            "an ndarray Parameter Port cannot declare per-frame metadata",
         ))
         direction == DIRECTION_INPUT ||
             throw(ArgumentError("an ndarray Parameter Port must be an input"))
@@ -84,8 +79,8 @@ function NdArrayFilterPort(
         format,
         semantic_schema,
         parameter,
-        property_capacity,
         requirements,
+        propagation_value,
     )
 end
 
@@ -190,46 +185,17 @@ end
 
 "Return copied SPA header metadata, or `nothing` when absent or invalid."
 function buffer_header(buffer::NdArrayFilterBuffer)
-    native = _native_buffer(buffer)
-    valid = unsafe_load(_ndarray_buffer_field(native, Val(:metadata_valid)))
-    iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && return nothing
-    header = unsafe_load(_ndarray_buffer_field(native, Val(:header)))
-    return BufferHeader(
-        header.flags,
-        header.offset,
-        header.pts,
-        header.dts_offset,
-        header.seq,
-    )
+    m = _record(metadata_records(buffer), UInt32(LibPipeWire.SPA_META_Header);required=true)
+    m === nothing && return nothing
+    header = unsafe_load(Ptr{LibPipeWire.spa_meta_header}(m.data))
+    return BufferHeader(header.flags,header.offset,header.pts,header.dts_offset,header.seq)
 end
 
-"""
-    set_buffer_header!(buffer, header)
-
-Set valid SPA header metadata on a writable ndarray callback buffer. The
-destination buffer must provide header metadata.
-"""
+"Set Header on the exclusively writable output's canonical metadata slot."
 function set_buffer_header!(buffer::NdArrayFilterBuffer{true}, header::BufferHeader)
-    native = _native_buffer(buffer)
-    available = unsafe_load(_ndarray_buffer_field(native, Val(:metadata_available)))
-    iszero(available & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && throw(
-        InvalidStateException("the ndarray callback buffer has no header metadata", :no_metadata),
-    )
-    unsafe_store!(
-        _ndarray_buffer_field(native, Val(:header)),
-        LibPipeWire.spa_meta_header(
-            header.flags,
-            header.offset,
-            header.pts,
-            header.dts_offset,
-            header.sequence,
-        ),
-    )
-    unsafe_store!(
-        _ndarray_buffer_field(native, Val(:metadata_valid)),
-        unsafe_load(_ndarray_buffer_field(native, Val(:metadata_valid))) |
-        LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER,
-    )
+    m = unsafe_load(_writable_record(metadata_records(buffer),UInt32(LibPipeWire.SPA_META_Header)))
+    unsafe_store!(Ptr{LibPipeWire.spa_meta_header}(m.data),LibPipeWire.spa_meta_header(
+        header.flags,header.offset,header.pts,header.dts_offset,header.sequence))
     return buffer
 end
 
@@ -258,15 +224,9 @@ function propagate_metadata!(
     output::NdArrayFilterBuffer{true},
     input::NdArrayFilterBuffer{false},
 )
-    native_output = _native_buffer(output)
-    native_input = _native_buffer(input)
-    valid = unsafe_load(_ndarray_buffer_field(native_input, Val(:metadata_valid))) &
-            unsafe_load(_ndarray_buffer_field(native_output, Val(:metadata_available)))
-    unsafe_store!(_ndarray_buffer_field(native_output, Val(:metadata_valid)), valid)
-    if !iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER)
-        unsafe_store!(_ndarray_buffer_field(native_output, Val(:header)), unsafe_load(_ndarray_buffer_field(native_input, Val(:header))))
-    end
-    _propagate_buffer_properties!(output, input)
+    source,destination = metadata_records(input),metadata_records(output)
+    LibPipeWire.spa_meta_records_copy(destination.data,destination.count,source.data,source.count) ||
+        throw(InvalidStateException("output metadata layout cannot preserve the input records",:metadata))
     return output
 end
 
@@ -357,7 +317,7 @@ mutable struct NdArrayFilter{Callbacks}
     callback_pod::Union{Nothing,Pod}
     input_port_indices::Vector{UInt32}
     output_port_indices::Vector{UInt32}
-    buffer_properties_enabled::Bool
+    metadata_enabled::Bool
 end
 
 function _record_ndarray_filter_callback_error(filter::NdArrayFilter, error)
@@ -417,7 +377,7 @@ function _ndarray_filter_process(
     n_outputs::UInt32,
 )::Cint
     try
-        properties_filter = filter.buffer_properties_enabled ? filter.handle : Ptr{Cvoid}(C_NULL)
+        properties_filter = filter.metadata_enabled ? filter.handle : Ptr{Cvoid}(C_NULL)
         filter.callbacks.on_process(
             filter,
             NdArrayFilterBuffers{false}(
@@ -553,7 +513,7 @@ function _ndarray_filter_events(filter::T) where {T<:NdArrayFilter}
     apply_props = filter.callbacks.on_apply_properties === nothing ? C_NULL :
         @cfunction(_ndarray_filter_apply_properties, Cint, (Ref{T},))
     return LibPipeWire.pw_ndarray_filter_events(
-        UInt32(4),
+        UInt32(5),
         prepare,
         process,
         deactivate,
@@ -570,11 +530,12 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
     names = getfield.(ports, :name)
     schemas = getfield.(ports, :schema)
     shapes = Vector{Vector{UInt32}}(undef, length(ports))
+    metadata = getfield.(ports, :metadata)
     native = Vector{LibPipeWire.pw_ndarray_filter_port}(undef, length(ports))
     for index in eachindex(ports)
         shapes[index] = collect(UInt32, ports[index].format.shape)
     end
-    GC.@preserve names schemas shapes begin
+    GC.@preserve names schemas shapes metadata begin
         for index in eachindex(ports)
             port = ports[index]
             format = port.format
@@ -598,10 +559,12 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
                     pointer(shapes[index]),
                     schema === nothing ? C_NULL : pointer(schema),
                 ),
+                UInt32(length(metadata[index])),port.propagation,
+                isempty(metadata[index]) ? C_NULL : pointer(metadata[index]),
             )
         end
     end
-    return (; names, schemas, shapes, native)
+    return (; names, schemas, shapes, metadata, native)
 end
 
 function NdArrayFilter(
@@ -675,7 +638,7 @@ function NdArrayFilter(
         nothing,
         UInt32[index - 1 for (index, port) in enumerate(p for p in ports if p.direction == DIRECTION_INPUT) if !port.parameter],
         UInt32[index - 1 for (index, port) in enumerate(p for p in ports if p.direction == DIRECTION_OUTPUT)],
-        any(port -> port.buffer_properties_capacity != 0, ports),
+        any(port -> !isempty(port.metadata), ports),
     )
     storage = _native_ndarray_filter_ports(ports)
     events = [_ndarray_filter_events(filter)]
@@ -710,33 +673,6 @@ function NdArrayFilter(
         ),
     )
     filter.handle = Ptr{Cvoid}(result[])
-    try
-        input_index = UInt32(0)
-        output_index = UInt32(0)
-        for port in ports
-            index = port.direction == DIRECTION_INPUT ? input_index : output_index
-            if port.buffer_properties_capacity != 0
-                requirements = port.required_buffer_properties
-                GC.@preserve requirements _check_result(
-                    :pw_ndarray_filter_set_port_buffer_properties,
-                    LibPipeWire.pw_ndarray_filter_set_port_buffer_properties(
-                        result[], UInt32(port.direction), index,
-                        port.buffer_properties_capacity,
-                        isempty(requirements) ? C_NULL : pointer(requirements),
-                        UInt32(length(requirements)),
-                    ),
-                )
-            end
-            if port.direction == DIRECTION_INPUT
-                input_index += UInt32(1)
-            else
-                output_index += UInt32(1)
-            end
-        end
-    catch
-        close(filter)
-        rethrow()
-    end
     return filter
 end
 

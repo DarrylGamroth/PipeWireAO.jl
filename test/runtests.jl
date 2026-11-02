@@ -9,7 +9,7 @@ include("thread_loop_interrupt.jl")
 include("stream_state_allocations.jl")
 include("filter_state_allocations.jl")
 include("ndarray_filter.jl")
-include("buffer_properties.jl")
+include("metadata_records.jl")
 include("object_callbacks.jl")
 include("ndarray_exchange.jl")
 include("run_control.jl")
@@ -776,8 +776,8 @@ end
 
 include("loop.jl")
 include("spa.jl")
-include("acquisition_metadata.jl")
-include("acquisition_trigger.jl")
+
+
 include("filter.jl")
 include("listeners.jl")
 include("examples.jl")

@@ -413,17 +413,11 @@ Data access masks are public as `SPA.DATA_FLAG_READABLE`,
 `SPA.DATA_FLAG_READWRITE`, and `SPA.DATA_FLAG_MAPPABLE`.
 Use `set_buffer_header!(buffer, BufferHeader(...))` to replace an existing
 complete `SPA_META_Header` payload without crossing into native bindings.
-Acquisition facts are typed fields in borrowed `BufferProperties`. Identity is
-an exact nonzero domain, full unsigned generation, and full unsigned acquisition
-sequence. Header sequence describes publication; held acquisitions can appear in
-multiple publications with different Header sequences.
-
-Exposure time is either host-local `CLOCK_MONOTONIC` or qualified `CLOCK_TAI`.
-Cross-host comparisons require matching PTP grandmaster and domain and include
-reported uncertainty. Native Properties are shared-memory state, not a network
-codec. Reinitialize every writable output, then append classification, identity,
-duration, and exposure-start groups in key order. Read-only callback Properties
-expire when the callback returns.
+Independent records carry acquisition identity, exposure timing, absolute event
+time, optical chopping and electrical trigger alongside standard Header.
+Header sequence and PTS describe publication, and never imply acquisition time.
+Retained exposures preserve full UInt64 identity while publications advance.
+Clock domains are explicit; REALTIME/TAI labels alone do not assert synchronization.
 
 With `STREAM_ALLOC_BUFFERS`, call `allocate_buffer!` from `on_buffer_added` to
 install Julia-owned `MemPtr` planes. The stream roots those allocations until
@@ -528,7 +522,7 @@ the previous receipt. `array_values` returns the owned vector without copying;
 duration snapshot. Consume them before rearming.
 
 Arm with an `AcquisitionIdentity` to require its complete domain, generation,
-and sequence in complete Properties; Header publication sequence is independent.
+and sequence in the identity record; Header publication sequence is independent.
 `exposure_duration_ns` optionally requires an exact exposure duration. Submit
 accepts the same identity and duration keywords. A sequence-only arm requires
 matching Header sequence. Header sequence zero is rejected by default. For a
@@ -553,8 +547,8 @@ contract. Julia callbacks make no hard real-time execution claim.
 
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
-`julia --project --threads=2 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 2.0.0 cohort.
+`julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
+Source validation requires the native 3.0.0 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -571,55 +565,66 @@ path and version before interpreting the callback ABI. See
 [validation record](docs/EXCHANGE_COMPLETION_VALIDATION.md) for the controlled
 failure and the packaged regression checks.
 
-## Per-buffer properties
+## Independent per-buffer metadata
 
-`BufferProperties` is a borrowed, bounded SPA POD object carried alongside
-standard Header metadata. Optical classification (`OPTICAL_ABSENT`,
-`OPTICAL_UNFRINGED`, `OPTICAL_FRINGED`, or `OPTICAL_MIXED`) and electrical trigger
-classification are independent whole-exposure facts. Missing keys read as
-`nothing`; a present absent-classification value remains explicit.
-
-Identity and exposure facts use dedicated semantic accessors. Append the identity
-as one domain/generation/sequence group, followed by optional positive duration,
-then a complete monotonic or qualified TAI exposure-start group. These fields
-carry mandatory flags and preserve the entire UInt64 range. Partial groups,
-invalid types/ranges, and unqualified clock combinations fail validation.
-
-Ordinary streams request `buffer_properties_metadata_param(capacity)` in their
-connection parameters. Capacities are multiples of eight from 16 to 4096 bytes.
-Initialize every recycled output before appending typed fields in increasing
-key order:
+All ndarray ports, including sparse Parameter ports, require Header. Other capabilities are explicit cold layout
+declarations, independently required or optional:
 
 ```julia
-properties = initialize_buffer_properties!(buffer)
-set_optical_classification!(properties, OPTICAL_FRINGED)
-set_trigger_classification!(properties, ACQUISITION_TRIGGER_HIGH)
-set_buffer_property!(properties, 20, Int64(42))
+records = (MetadataRequirement(SPA.META_ACQUISITION_IDENTITY; required=true),
+           MetadataRequirement(SPA.META_EXPOSURE_TIMING; required=true),
+           MetadataRequirement(SPA.META_ABSOLUTE_TIME))
+port = NdArrayFilterPort("pixels", DIRECTION_INPUT, format; metadata=records)
 ```
 
-Read with `buffer_properties(buffer)`, `optical_classification(properties)`, and
-`buffer_property(properties, key, T)`. Scalar types are `Bool`, `SPA.Id`,
-`Int32`, `Int64`, `UInt64`, `Float32`, `Float64`, and fixed byte tuples. Scalar access and initialization
-allocate no Julia heap storage after warmup. Values expire when the callback
-returns or the buffer is returned. No dictionary is built on this path.
+Ordinary streams pass `metadata_param(requirement)` for each record; custom IDs
+are never shifted into the standard metadata bitmask. Required records must
+contain valid facts on every buffer. Pools are bounded to 64 entries and 4096
+aligned payload bytes, including Header. Changing layouts requires cold pool
+replacement. Retired IDs 11–13 and old acquisition Properties APIs are unsupported.
 
-An `NdArrayFilterPort` defaults to 512 bytes and accepts `buffer_properties_capacity` (maximum 4064)
-and `required_buffer_properties`, a tuple of `BufferPropertyRequirement(key, T)`
-values. The native helper validates required fields before processing and
-publication and clears outputs before each callback. Input properties expose
-no mutators. `propagate_metadata!` copies the complete valid object, including
-unknown optional fields, when the output opted in and has enough capacity.
-Raw stream consumers pass their supported requirement tuple to
-`buffer_properties(buffer; required_buffer_properties=requirements)` and check
-`buffer_properties_valid(properties)` before accepting the frame.
+Initialize exclusively owned outputs with `initialize_metadata!`, then populate
+`set_acquisition_identity!`, `set_exposure_timing!`, `set_absolute_times!`,
+`set_optical_classification!` and `set_trigger_classification!` as applicable.
+Allocated invalid records, missing slots and explicit ABSENT classifications are
+distinct. `exposure_timing`, `absolute_times` and `acquisition_identity` return
+owned semantic values; `metadata_records` exposes borrowed records only for the
+callback or lease. Read access is read-only, including raw stream buffers.
+Only an exclusively owned output may acquire `writable_metadata_records`;
+`initialize_metadata!` returns that writable view. Native transport-owned Busy,
+SyncTimeline and feature state is never retained or propagated between pools.
+`validate_metadata_requirements(requirements; header=true)` checks a complete
+cold profile without allocating payloads or claiming that facts are valid.
 
-This callback layout requires native PipeWireAO 2.0.0 and regenerated bindings.
-The old Acquisition metadata record and version-selection API are removed;
-old callback versions and retired metadata IDs fail admission.
-The isolated stream → ndarray callback → stream regression is
-`julia --project --threads=2 test/buffer_properties_private_core.jl`. It uses the
-same `PIPEWIREAO_EXCHANGE_TEST_PREFIX` and JLL library preferences described
-above, and creates and closes its own core.
+`MetadataSnapshot()` owns prepared, bounded storage. `capture_metadata!` retains
+all accepted records before releasing an input, including opaque optional bytes.
+`metadata_fits` preflights preservation and `copy_metadata!` rejects incompatible
+output storage without truncation. Snapshot byte views retain their owner and are
+read-only. `MetadataSnapshot(requirements)` and `writable_metadata_records` are
+available for cold owned construction. Native metadata bytes are not a network
+codec.
+
+`AbsoluteClock()` defaults to REALTIME; explicit TAI requires its configured
+TAI−UTC offset. `absolute_time_now` uses integer clock reads and labels the event
+and producer origin. The cold-cached Linux boot identity identifies local host
+clocks across processes. No synchronization or accuracy bound is inferred.
+Passing a previous event detects backward jumps; arbitrary forward jumps require
+a qualified clock provider. Deadlines continue to use monotonic time.
+
+Native 3.0.0, JLL 3.0.0 and regenerated bindings are required together. Private-core
+checks are `test/ndarray_exchange_private_core.jl` and
+`test/metadata_records_private_core.jl`; both create and close their own cores.
+The blocking-filter fixture requires `--threads=2,1` or more: the interactive
+main thread controls a filter running on the separate default thread pool.
+
+The Julia 1.13 software check `test/metadata_records_benchmark.jl` measures common
+identity/start/duration facts after warmup, including clock overhead. Three
+20,000-sample runs on the development host measured 291 ns median and 301–341 ns
+p99 for a 512-byte/four-record pool; the 4096-byte/64-record bound measured
+9.53–9.65 µs median and 12.18–12.38 µs p99. Both allocated zero warmed bytes.
+The earlier Properties-512 representation measured 2.725 µs median/2.915 µs p99;
+its separate field getters differ from the new owned timing getter. These loaded
+host measurements qualify neither hardware timing nor a deadline.
 
 ## Multi-port filter
 

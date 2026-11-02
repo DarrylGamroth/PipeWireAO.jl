@@ -912,11 +912,7 @@ end
 const StreamMetadata = BufferMetadata{StreamBuffer}
 
 "Number of bytes in an opaque PipeWireAO acquisition-domain identifier."
-const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_ACQUISITION_DOMAIN_SIZE)
-"Number of bytes in an IEEE 1588 PTP clock identity."
-const ACQUISITION_PTP_CLOCK_ID_SIZE =
-    Int(LibPipeWire.SPA_EXPOSURE_PTP_CLOCK_ID_SIZE)
-
+const ACQUISITION_DOMAIN_SIZE = sizeof(fieldtype(LibPipeWire.spa_meta_acquisition_identity, :domain))
 """
     AcquisitionDomain(bytes)
 
@@ -941,58 +937,6 @@ struct AcquisitionIdentity
     domain::AcquisitionDomain
     generation::UInt64
     sequence::UInt64
-end
-
-"The clock domain used for an acquisition exposure timestamp."
-@enum AcquisitionTimebase::UInt32 begin
-    ACQUISITION_TIMEBASE_MONOTONIC =
-        LibPipeWire.SPA_EXPOSURE_TIMEBASE_MONOTONIC
-    ACQUISITION_TIMEBASE_TAI = LibPipeWire.SPA_EXPOSURE_TIMEBASE_TAI
-end
-
-"A nonzero IEEE 1588 grandmaster clock identity."
-struct PtpClockIdentity
-    bytes::NTuple{ACQUISITION_PTP_CLOCK_ID_SIZE,UInt8}
-
-    function PtpClockIdentity(
-        bytes::NTuple{ACQUISITION_PTP_CLOCK_ID_SIZE,UInt8},
-    )
-        all(iszero, bytes) && throw(ArgumentError("the PTP clock identity must be nonzero"))
-        return new(bytes)
-    end
-end
-
-"The PTP authority that qualifies a cross-host exposure timestamp."
-struct AcquisitionPtpReference
-    grandmaster::PtpClockIdentity
-    domain_number::UInt8
-end
-
-function AcquisitionPtpReference(grandmaster::PtpClockIdentity, domain_number::Integer)
-    0 <= domain_number <= typemax(UInt8) ||
-        throw(ArgumentError("the PTP domain number is outside UInt8 range"))
-    return AcquisitionPtpReference(grandmaster, UInt8(domain_number))
-end
-
-"""
-    AcquisitionExposureStart(nanoseconds, uncertainty_nanoseconds)
-
-Represent exposure start in nanoseconds and its inclusive uncertainty bound.
-Use [`acquisition_timebase`](@ref) to determine its clock domain.
-"""
-struct AcquisitionExposureStart
-    nanoseconds::Int64
-    uncertainty_nanoseconds::UInt64
-end
-
-@inline function _checked_acquisition_int64(value::Integer, description::AbstractString)
-    0 <= value <= typemax(Int64) || throw(ArgumentError("$description must be nonnegative and fit Int64"))
-    return Int64(value)
-end
-
-@inline function _checked_acquisition_uint64(value::Integer, description::AbstractString)
-    0 <= value <= typemax(UInt64) || throw(ArgumentError("$description is outside UInt64 range"))
-    return UInt64(value)
 end
 
 "Whole-exposure digital trigger classification, independent of optical classification."

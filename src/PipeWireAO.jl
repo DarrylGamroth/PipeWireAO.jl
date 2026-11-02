@@ -2,23 +2,23 @@ module PipeWireAO
 
 using UnsafeArrays: UnsafeArray
 
-export CoreConnection,
+export metadata_is_transport_owned, validate_absolute_clock, MetadataRecord, metadata_record, set_metadata_bytes!, writable_metadata_records, MetadataSnapshot, capture_metadata!, clear_metadata!, copy_metadata!, metadata_fits,
+    AbsoluteClock, absolute_time_now, host_clock_domain,
+    MetadataClock, METADATA_CLOCK_MONOTONIC, METADATA_CLOCK_REALTIME, METADATA_CLOCK_TAI, METADATA_CLOCK_MODEL,
+    TimeEvent, TIME_EVENT_ACQUISITION, TIME_EVENT_PRODUCTION, TIME_EVENT_RECEIPT, TIME_EVENT_FILE_WRITE,
+    ExposureTiming, AbsoluteTime, AbsoluteTimes, validate_metadata_requirements, MetadataRequirement, MetadataRecords,
+    metadata_records, metadata_records_valid, initialize_metadata!, exposure_timing, absolute_times,
+    set_exposure_timing!, set_absolute_times!,
+    CoreConnection,
     ContextModule,
     AcquisitionDomain,
-    AcquisitionExposureStart,
     AcquisitionIdentity,
-    AcquisitionPtpReference,
-    AcquisitionTimebase,
     AcquisitionTriggerState,
     ACQUISITION_TRIGGER_ABSENT,
     ACQUISITION_TRIGGER_LOW,
     ACQUISITION_TRIGGER_HIGH,
     ACQUISITION_TRIGGER_MIXED,
-    PtpClockIdentity,
     ACQUISITION_DOMAIN_SIZE,
-    ACQUISITION_PTP_CLOCK_ID_SIZE,
-    ACQUISITION_TIMEBASE_MONOTONIC,
-    ACQUISITION_TIMEBASE_TAI,
     AudioInfoRaw,
     CoreInfo,
     CoreMemory,
@@ -38,19 +38,6 @@ export CoreConnection,
     FilterPosition,
     BufferInfo,
     BufferMetadata,
-    BufferProperties,
-    BufferPropertyRequirement,
-    BUFFER_PROPERTY_OPTICAL_CLASSIFICATION,
-    BUFFER_PROPERTY_TRIGGER_CLASSIFICATION,
-    BUFFER_PROPERTY_ACQUISITION_DOMAIN,
-    BUFFER_PROPERTY_ACQUISITION_GENERATION,
-    BUFFER_PROPERTY_ACQUISITION_SEQUENCE,
-    BUFFER_PROPERTY_EXPOSURE_DURATION,
-    BUFFER_PROPERTY_EXPOSURE_START,
-    BUFFER_PROPERTY_EXPOSURE_TIMEBASE,
-    BUFFER_PROPERTY_TIMESTAMP_UNCERTAINTY,
-    BUFFER_PROPERTY_PTP_GRANDMASTER_IDENTITY,
-    BUFFER_PROPERTY_PTP_DOMAIN_NUMBER,
     OpticalClassification,
     OPTICAL_ABSENT,
     OPTICAL_UNFRINGED,
@@ -167,14 +154,7 @@ export CoreConnection,
     SPA,
     Video,
     VideoInfoRaw,
-    acquisition_exposure_duration,
-    acquisition_exposure_start,
     acquisition_identity,
-    acquisition_identity_equal,
-    acquisition_ptp_reference,
-    acquisition_time_difference,
-    acquisition_timebase,
-    acquisition_times_match,
     arm_array_sink!,
     array_values,
     array_receipt,
@@ -191,10 +171,6 @@ export CoreConnection,
     buffer_header,
     buffer_info,
     buffer_metadata,
-    buffer_properties,
-    buffer_properties_valid,
-    buffer_property,
-    buffer_properties_metadata_param,
     buffers_param,
     bytes,
     capacity,
@@ -234,10 +210,8 @@ export CoreConnection,
     get_permissions!,
     has_current_info,
     header_metadata_param,
-    initialize_buffer_properties!,
     clear_buffer_metadata!,
     optical_classification,
-    set_buffer_property!,
     set_optical_classification!,
     trigger_classification,
     set_trigger_classification!,
@@ -301,9 +275,6 @@ export CoreConnection,
     report_error!,
     run!,
     set_active!,
-    set_acquisition_exposure_duration!,
-    set_acquisition_exposure_start!,
-    set_acquisition_exposure_start_ptp!,
     set_acquisition_identity!,
     set_error!,
     set_chunk!,
@@ -367,22 +338,23 @@ include("props_buffer.jl")
 include("objects.jl")
 include("ndarray_filter.jl")
 include("stream.jl")
-include("buffer_properties.jl")
+include("metadata_records.jl")
 include("filter.jl")
 include("listeners.jl")
 include("ndarray_exchange.jl")
 
-const _MINIMUM_JLL_VERSION = v"2.0.0+0"
+const _MINIMUM_JLL_VERSION = v"3.0.0+0"
 
 function __init__()
+    _initialize_host_clock_domain!()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)
     version >= _MINIMUM_JLL_VERSION || error(
         "PipeWireAO requires PipeWireAO_jll $_MINIMUM_JLL_VERSION or newer; " *
         "found $version. Update PipeWireAO_jll and restart Julia.",
     )
     native_version = VersionNumber(unsafe_string(LibPipeWire.pw_get_library_version()))
-    native_version >= v"2.0.0" || error(
-        "PipeWireAO's Properties metadata ABI requires native 2.0.0 or newer; found $native_version.",
+    native_version >= v"3.0.0" || error(
+        "PipeWireAO's independent metadata ABI requires native 3.0.0 or newer; found $native_version.",
     )
 end
 

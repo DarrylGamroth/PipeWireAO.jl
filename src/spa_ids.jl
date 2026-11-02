@@ -271,7 +271,11 @@ const DATA_FLAG_HUGE_1GB = UInt32(1 << 6)
     META_BUSY = LibPipeWire.SPA_META_Busy
     META_VIDEO_TRANSFORM = LibPipeWire.SPA_META_VideoTransform
     META_SYNC_TIMELINE = LibPipeWire.SPA_META_SyncTimeline
-    META_PROPERTIES = LibPipeWire.SPA_META_Properties
+    META_ACQUISITION_IDENTITY = LibPipeWire.SPA_META_AcquisitionIdentity
+    META_EXPOSURE_TIMING = LibPipeWire.SPA_META_ExposureTiming
+    META_ABSOLUTE_TIME = LibPipeWire.SPA_META_AbsoluteTime
+    META_OPTICAL_CHOPPING = LibPipeWire.SPA_META_OpticalChopping
+    META_ELECTRICAL_TRIGGER = LibPipeWire.SPA_META_ElectricalTrigger
 end
 
 # Flags stored in `spa_meta_header.flags`.

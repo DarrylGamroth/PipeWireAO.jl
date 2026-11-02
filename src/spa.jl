@@ -778,6 +778,7 @@ function metadata_param(
     type;
     size=nothing,
     features=nothing,
+    required::Bool=false,
     id::Integer=LibPipeWire.SPA_PARAM_Meta,
 )
     properties = SPA.Property[]
@@ -792,6 +793,7 @@ function metadata_param(
         LibPipeWire.SPA_PARAM_META_features,
         _parameter_int(features, "metadata features"),
     )
+    required && _parameter_property!(properties, LibPipeWire.SPA_PARAM_META_required, true)
     return SPA.Parameter(LibPipeWire.SPA_TYPE_OBJECT_ParamMeta, id, properties)
 end
 
@@ -799,6 +801,7 @@ end
 header_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
     SPA.META_HEADER;
     size=sizeof(LibPipeWire.spa_meta_header),
+    required=true,
     id,
 )
 

@@ -163,8 +163,10 @@ function _array_buffer_parameters(state::_ArrayExchangeState)
     # the packed contiguous-axis size; leave it unconstrained for negotiation.
     return (
         Pod(buffers_param(buffers=2, blocks=1, size=payload_size(state.format),
-            metadata_types=Int32((1 << LibPipeWire.SPA_META_Header) | (1 << LibPipeWire.SPA_META_Properties)))),
-        Pod(header_metadata_param()), Pod(buffer_properties_metadata_param(512)),
+            metadata_types=Int32(1 << LibPipeWire.SPA_META_Header))),
+        Pod(header_metadata_param()),
+        Pod(metadata_param(MetadataRequirement(SPA.META_ACQUISITION_IDENTITY))),
+        Pod(metadata_param(MetadataRequirement(SPA.META_EXPOSURE_TIMING))),
     )
 end
 
@@ -213,11 +215,10 @@ function _array_write!(state::_ArrayExchangeState{T}, buffer) where {T}
     set_chunk!(data; offset=0, size=payload_size(state.format), stride=sizeof(T))
     set_buffer_size!(buffer, element_count(state.format))
     set_buffer_header!(buffer, something(state.header))
-    metadata = buffer_properties(buffer)
-    metadata === nothing && throw(InvalidStateException("the ndarray output has no buffer Properties", :no_metadata))
-    initialize_buffer_properties!(metadata)
+    metadata = initialize_metadata!(buffer)
+    set_buffer_header!(buffer,something(state.header))
     state.identity === nothing || set_acquisition_identity!(metadata, state.identity)
-    state.duration === nothing || set_acquisition_exposure_duration!(metadata, state.duration)
+    state.duration === nothing || set_exposure_timing!(metadata, ExposureTiming(;duration_nanoseconds=state.duration))
     return nothing
 end
 
@@ -258,10 +259,11 @@ function _array_read!(state::_ArrayExchangeState{T}, buffer) where {T}
     header === nothing && throw(InvalidStateException("the ndarray input has no Header", :no_metadata))
     _array_matches_publication(state.expected, header.sequence) || throw(ArgumentError("the ndarray Header sequence differs from the armed sequence"))
     header.flags & (SPA.META_HEADER_FLAG_CORRUPTED | SPA.META_HEADER_FLAG_GAP) == 0 || throw(ArgumentError("the ndarray Header marks invalid data"))
-    metadata = buffer_properties(buffer)
-    metadata === nothing && throw(InvalidStateException("the ndarray input has no Properties", :no_metadata))
+    metadata = metadata_records(buffer)
+    metadata_records_valid(metadata) || throw(InvalidStateException("invalid ndarray input metadata", :metadata))
     identity = acquisition_identity(metadata)
-    duration = acquisition_exposure_duration(metadata)
+    timing = exposure_timing(metadata)
+    duration = timing === nothing || !timing.has_duration ? nothing : timing.duration_nanoseconds
     _array_matches_identity(state.expected, identity) || throw(ArgumentError("the ndarray acquisition identity differs from the armed identity"))
     state.expected_duration === nothing || duration == state.expected_duration || throw(ArgumentError("the ndarray exposure duration differs from the armed duration"))
     data = buffer_data(buffer)
