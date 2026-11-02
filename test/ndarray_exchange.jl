@@ -74,6 +74,8 @@ end
         declaration = first(PipeWireAO._array_buffer_parameters(writer))
         object = pod_value(SPA.Parameter, declaration).object
         @test !haskey(object, native.SPA_PARAM_BUFFERS_stride)
+        @test pod_value(Int32, object[native.SPA_PARAM_BUFFERS_metaType].value) ==
+            Int32((UInt32(1) << SPA.META_HEADER) | (UInt32(1) << SPA.META_PROPERTIES))
         @test pod_value(Int32, object[native.SPA_PARAM_BUFFERS_size].value) == payload_size(format)
         @test pod_value(Int32, object[native.SPA_PARAM_BUFFERS_blocks].value) == 1
         fixture = array_exchange_fixture(Float32, length(values))
@@ -105,6 +107,7 @@ end
 end
 
 @testset "prepared ndarray encoding and captured metadata" begin
+    native = PipeWireAO.LibPipeWire
     domain = AcquisitionDomain(ntuple(i -> UInt8(i), ACQUISITION_DOMAIN_SIZE))
     identity = AcquisitionIdentity(domain, UInt64(5), UInt64(1))
     for (T, element, values) in ((Float32, NdArray.F32_LE, Float32[1, -2, 3, 4]),
@@ -130,6 +133,16 @@ end
             @test read_state.duration == UInt64(10)
             @test fixture.memory == collect(reinterpret(UInt8, write_state.values))
             @test array_exchange_copy_allocations(write_state, read_state, fixture.buffer) == 0
+
+            # A Header-only legacy peer must fail even for a sequence-only arm.
+            original = fixture.spa_buffer[]
+            fixture.spa_buffer[] = native.spa_buffer(UInt32(1), original.n_datas,
+                original.metas, original.datas)
+            read_state.expected = UInt64(1)
+            @test_throws InvalidStateException PipeWireAO._array_read!(read_state, fixture.buffer)
+            fixture.spa_buffer[] = original
+            read_state.expected = identity
+            @test PipeWireAO._array_read!(read_state, fixture.buffer) === nothing
 
             read_state.expected = AcquisitionIdentity(domain, UInt64(6), UInt64(1))
             @test_throws ArgumentError PipeWireAO._array_read!(read_state, fixture.buffer)

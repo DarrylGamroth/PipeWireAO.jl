@@ -41,3 +41,30 @@ include("native_sdk.jl")
         @test !acquisition_times_match(borrowed, borrowed, 0)
     end
 end
+
+clear_metadata_allocations(buffer) = @allocated clear_buffer_metadata!(buffer)
+
+@testset "cleared derived callback output cannot expose stale facts" begin
+    native = PipeWireAO.LibPipeWire
+    mask = native.PW_NDARRAY_FILTER_METADATA_HEADER | native.PW_NDARRAY_FILTER_METADATA_PROPERTIES
+    storage = native_ndarray_filter_buffer(UInt8[1]; available=mask, valid=mask, sequence=UInt64(9))
+    GC.@preserve storage begin
+        output = NdArrayFilterBuffer{true}(Ptr{Cvoid}(pointer(storage)))
+        input = NdArrayFilterBuffer{false}(Ptr{Cvoid}(pointer(storage)))
+        properties = initialize_buffer_properties!(output)
+        set_trigger_classification!(properties, ACQUISITION_TRIGGER_HIGH)
+        set_acquisition_identity!(properties, AcquisitionIdentity(AcquisitionDomain(ntuple(UInt8, 16)), UInt64(3), UInt64(7)))
+        @test clear_buffer_metadata!(output) === output
+        @test buffer_properties(input) === nothing
+        @test buffer_header(input) === nothing
+        @test unsafe_load(pointer(storage)).metadata_valid == 0
+        @test all(iszero, @view(storage.properties[3:end]))
+        @test clear_metadata_allocations(output) == 0
+        properties = initialize_buffer_properties!(output)
+        @test buffer_properties(input) isa BufferProperties{false}
+        @test buffer_header(input) === nothing
+        @test acquisition_identity(properties) === nothing
+        @test trigger_classification(properties) === nothing
+        @test_throws MethodError clear_buffer_metadata!(input)
+    end
+end
