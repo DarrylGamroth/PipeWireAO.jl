@@ -259,6 +259,10 @@ function set_absolute_times!(records::MetadataRecords{true},values::Union{Tuple,
         zero_event=LibPipeWire.spa_meta_absolute_time_event(0,0,0,0,0,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,0)
         native=LibPipeWire.spa_meta_absolute_time(UInt32(length(times)),(UInt32(0),UInt32(0),UInt32(0)),
             ntuple(i -> i<=length(times) ? _native_absolute(times[i]) : zero_event,4))
+        probe=Ref(native)
+        check=LibPipeWire.spa_meta(m.type,m.size,Base.unsafe_convert(Ptr{Cvoid},probe))
+        GC.@preserve probe LibPipeWire.spa_meta_record_validate(Ref(check),!isempty(times)) ||
+            throw(ArgumentError("invalid absolute event time"))
         unsafe_store!(Ptr{typeof(native)}(m.data),native)
         return records
     end

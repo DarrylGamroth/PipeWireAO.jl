@@ -84,6 +84,8 @@ end
         end
         @test records_allocations(buffer,AcquisitionIdentity(AcquisitionDomain(_METADATA_TEST_DOMAIN),1,2),stamp,retained)==0
         @test metadata_count(retained)==7
+        @test_throws ArgumentError set_absolute_times!(buffer,(PipeWireAO._EMPTY_ABSOLUTE_TIME,))
+        @test absolute_times(buffer)[1]==stamp
         initialize_metadata!(buffer)
         @test acquisition_identity(buffer)===nothing
         @test optical_classification(buffer)===nothing
