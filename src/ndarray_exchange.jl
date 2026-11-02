@@ -162,8 +162,9 @@ function _array_buffer_parameters(state::_ArrayExchangeState)
     # Allocation stride describes data-block memory. Native ndarray peers use
     # the packed contiguous-axis size; leave it unconstrained for negotiation.
     return (
-        Pod(buffers_param(buffers=2, blocks=1, size=payload_size(state.format))),
-        Pod(header_metadata_param()), Pod(acquisition_metadata_param()),
+        Pod(buffers_param(buffers=2, blocks=1, size=payload_size(state.format),
+            metadata_types=Int32((1 << LibPipeWire.SPA_META_Header) | (1 << LibPipeWire.SPA_META_Properties)))),
+        Pod(header_metadata_param()), Pod(buffer_properties_metadata_param(512)),
     )
 end
 
@@ -212,9 +213,9 @@ function _array_write!(state::_ArrayExchangeState{T}, buffer) where {T}
     set_chunk!(data; offset=0, size=payload_size(state.format), stride=sizeof(T))
     set_buffer_size!(buffer, element_count(state.format))
     set_buffer_header!(buffer, something(state.header))
-    metadata = buffer_acquisition(buffer)
-    metadata === nothing && throw(InvalidStateException("the ndarray output has no acquisition metadata", :no_metadata))
-    initialize_acquisition!(metadata)
+    metadata = buffer_properties(buffer)
+    metadata === nothing && throw(InvalidStateException("the ndarray output has no buffer Properties", :no_metadata))
+    initialize_buffer_properties!(metadata)
     state.identity === nothing || set_acquisition_identity!(metadata, state.identity)
     state.duration === nothing || set_acquisition_exposure_duration!(metadata, state.duration)
     return nothing
@@ -241,16 +242,13 @@ function (callback::_ArraySourceProcess)(stream)
     return nothing
 end
 
-_array_expected_sequence(expected::UInt64) = expected
-_array_expected_sequence(expected::AcquisitionIdentity) = expected.sequence
+_array_matches_publication(expected::UInt64, sequence::UInt64) = expected == sequence
+_array_matches_publication(::AcquisitionIdentity, ::UInt64) = true
 function _array_validate_expected_sequence(expected::UInt64, allow_zero_sequence::Bool)
     (expected > 0 || allow_zero_sequence) || throw(ArgumentError("expected sequence must be positive"))
     return nothing
 end
-function _array_validate_expected_sequence(expected::AcquisitionIdentity, ::Bool)
-    expected.sequence > 0 || throw(ArgumentError("acquisition identity sequence must be positive"))
-    return nothing
-end
+_array_validate_expected_sequence(::AcquisitionIdentity, ::Bool) = nothing
 _array_matches_identity(::UInt64, identity) = true
 _array_matches_identity(expected::AcquisitionIdentity, ::Nothing) = false
 _array_matches_identity(expected::AcquisitionIdentity, identity::AcquisitionIdentity) = expected == identity
@@ -258,13 +256,13 @@ _array_matches_identity(expected::AcquisitionIdentity, identity::AcquisitionIden
 function _array_read!(state::_ArrayExchangeState{T}, buffer) where {T}
     header = buffer_header(buffer)
     header === nothing && throw(InvalidStateException("the ndarray input has no Header", :no_metadata))
-    header.sequence == _array_expected_sequence(state.expected) || throw(ArgumentError("the ndarray Header sequence differs from the armed sequence"))
+    _array_matches_publication(state.expected, header.sequence) || throw(ArgumentError("the ndarray Header sequence differs from the armed sequence"))
     header.flags & (SPA.META_HEADER_FLAG_CORRUPTED | SPA.META_HEADER_FLAG_GAP) == 0 || throw(ArgumentError("the ndarray Header marks invalid data"))
-    metadata = buffer_acquisition(buffer)
-    identity = metadata === nothing ? nothing : acquisition_identity(metadata)
-    duration = metadata === nothing ? nothing : acquisition_exposure_duration(metadata)
+    metadata = buffer_properties(buffer)
+    metadata === nothing && throw(InvalidStateException("the ndarray input has no Properties", :no_metadata))
+    identity = acquisition_identity(metadata)
+    duration = acquisition_exposure_duration(metadata)
     _array_matches_identity(state.expected, identity) || throw(ArgumentError("the ndarray acquisition identity differs from the armed identity"))
-    identity === nothing || identity.sequence == header.sequence || throw(ArgumentError("the ndarray Header and acquisition sequence differ"))
     state.expected_duration === nothing || duration == state.expected_duration || throw(ArgumentError("the ndarray exposure duration differs from the armed duration"))
     data = buffer_data(buffer)
     chunk = chunk_info(data)
@@ -392,7 +390,6 @@ function submit_array!(source::NdArraySource{T}, values::AbstractVector{T}, head
     identity::Union{Nothing,AcquisitionIdentity}=nothing, exposure_duration_ns=nothing) where {T}
     length(values) == length(source.state.values) || throw(DimensionMismatch("submitted payload length differs from the wire shape"))
     header.sequence > 0 || throw(ArgumentError("Header sequence must be positive"))
-    identity === nothing || identity.sequence == header.sequence || throw(ArgumentError("Header and acquisition sequences must match"))
     duration = _array_duration(exposure_duration_ns)
     return _array_loop_lock(source) do
         state = source.state
@@ -422,10 +419,11 @@ end
     arm_array_sink!(sink, expected::Union{UInt64,AcquisitionIdentity}; exposure_duration_ns=nothing, allow_zero_sequence=false)
 
 Arm one receive slot. A sequence expectation matches Header sequence; an
-acquisition expectation also requires complete valid domain/generation/sequence
-metadata. An optional duration must match exactly. Sequence zero is rejected
-unless `allow_zero_sequence=true` is explicitly used with a `UInt64` expectation;
-acquisition identities always require a positive sequence. This opt-in permits
+acquisition expectation matches complete domain/generation/sequence metadata
+independently of Header publication sequence. An optional duration must match
+exactly. A Header sequence expectation of zero is rejected unless
+`allow_zero_sequence=true` is explicitly used with a `UInt64` expectation.
+Acquisition counters permit the full UInt64 range. The Header opt-in permits
 native peers with a constant zero Header sequence, but does not establish
 freshness or replace phase and acknowledgement checks. After `wait_array_sink!`,
 read or copy the values and receipt before rearming. Unexpected, duplicate, or

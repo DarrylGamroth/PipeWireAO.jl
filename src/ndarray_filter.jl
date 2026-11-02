@@ -13,8 +13,8 @@ end
 
 """
     NdArrayFilterPort(name, direction, format;
-                      schema=nothing, parameter=false, acquisition_version=2,
-                      buffer_properties_capacity=0, required_buffer_properties=())
+                      schema=nothing, parameter=false,
+                      buffer_properties_capacity=512, required_buffer_properties=())
 
 Declare one exact packed-ndarray port for a standalone [`NdArrayFilter`](@ref).
 The declaration is copied when the filter is constructed. `schema` identifies
@@ -22,15 +22,12 @@ the semantic meaning of the ndarray independently of its element type, shape,
 layout, and rate. It must include every schema-specific coordinate or ordering
 meaning needed to interpret the payload.
 
-Set `acquisition_version=3` to require the native Version 3 trigger-classification
-feature on this port. Version 2 remains the default.
-
-Set `buffer_properties_capacity` to an eight-byte multiple from 16 to 3968 to
+Set `buffer_properties_capacity` to an eight-byte multiple from 16 to 4064 to
 negotiate a bounded Version 1 per-buffer properties object. Declare exact
 required key/type pairs with [`BufferPropertyRequirement`](@ref) values in
 `required_buffer_properties`. Missing or incompatible required fields reject
-the frame. Unknown optional fields remain valid. The default disables this
-metadata, independently of Acquisition metadata and ordinary node properties.
+the frame. Unknown optional fields remain valid. Frame ports default to 512 bytes. Parameter ports default to no per-frame
+Properties. These observations are independent of ordinary node controls.
 
 Set `parameter=true` for a sparse input Parameter Port. A Parameter Port must
 have input direction and a format without a repeated rate. Its buffers are
@@ -42,7 +39,6 @@ struct NdArrayFilterPort{N}
     format::NdArrayFormat{N}
     schema::Union{Nothing,String}
     parameter::Bool
-    acquisition_version::UInt32
     buffer_properties_capacity::UInt32
     required_buffer_properties::Vector{LibPipeWire.spa_meta_property_requirement}
 end
@@ -53,14 +49,12 @@ function NdArrayFilterPort(
     format::NdArrayFormat{N};
     schema::Union{Nothing,AbstractString}=nothing,
     parameter::Bool=false,
-    acquisition_version::Integer=2,
-    buffer_properties_capacity::Integer=0,
+    buffer_properties_capacity::Integer=parameter ? 0 : 512,
     required_buffer_properties=(),
 ) where {N}
-    _acquisition_feature(acquisition_version)
     property_capacity = _buffer_properties_capacity(buffer_properties_capacity; optional=true)
-    property_capacity <= 3968 || throw(ArgumentError(
-        "ndarray filter buffer properties capacity must not exceed 3968 bytes",
+    property_capacity <= 4064 || throw(ArgumentError(
+        "ndarray filter buffer properties capacity must not exceed 4064 bytes",
     ))
     requirements = _buffer_property_requirements(required_buffer_properties)
     property_capacity == 0 && !isempty(requirements) && throw(ArgumentError(
@@ -90,7 +84,6 @@ function NdArrayFilterPort(
         format,
         semantic_schema,
         parameter,
-        UInt32(acquisition_version),
         property_capacity,
         requirements,
     )
@@ -141,7 +134,7 @@ An unavailable input appears only when the filter was constructed with
 @inline function input_available(buffer::NdArrayFilterBuffer{false})
     native = _native_buffer(buffer)
     unavailable = LibPipeWire.PW_NDARRAY_FILTER_BUFFER_FLAG_INPUT_UNAVAILABLE
-    return iszero(unsafe_load(native.flags) & unavailable)
+    return iszero(unsafe_load(_ndarray_buffer_field(native, Val(:flags))) & unavailable)
 end
 
 Base.size(buffers::NdArrayFilterBuffers) = (Int(buffers.count),)
@@ -163,6 +156,13 @@ Base.IndexStyle(::Type{<:NdArrayFilterBuffers}) = IndexLinear()
     )
 end
 
+# Field offsets and types follow the generated ABI, without extending Ptr.getproperty.
+@inline function _ndarray_buffer_field(pointer::Ptr{LibPipeWire.pw_ndarray_filter_buffer}, ::Val{field}) where {field}
+    T = LibPipeWire.pw_ndarray_filter_buffer
+    index = Base.fieldindex(T, field)
+    return Ptr{fieldtype(T, index)}(Ptr{UInt8}(pointer) + fieldoffset(T, index))
+end
+
 function _native_buffer(buffer::NdArrayFilterBuffer)
     buffer.handle == C_NULL &&
         throw(InvalidStateException("the ndarray callback buffer is unavailable", :unavailable))
@@ -171,17 +171,17 @@ end
 
 "Return the borrowed payload pointer for an ndarray callback buffer."
 function data_pointer(buffer::NdArrayFilterBuffer)
-    pointer = unsafe_load(_native_buffer(buffer).data)
+    pointer = unsafe_load(_ndarray_buffer_field(_native_buffer(buffer), Val(:data)))
     pointer == C_NULL &&
         throw(InvalidStateException("the ndarray callback payload is unavailable", :unavailable))
     return Ptr{UInt8}(pointer)
 end
 
 "Return the declared payload size of an ndarray callback buffer in bytes."
-payload_size(buffer::NdArrayFilterBuffer) = Int(unsafe_load(_native_buffer(buffer).size))
+payload_size(buffer::NdArrayFilterBuffer) = Int(unsafe_load(_ndarray_buffer_field(_native_buffer(buffer), Val(:size))))
 
 "Return the mapped capacity of an ndarray callback buffer in bytes."
-capacity(buffer::NdArrayFilterBuffer) = Int(unsafe_load(_native_buffer(buffer).capacity))
+capacity(buffer::NdArrayFilterBuffer) = Int(unsafe_load(_ndarray_buffer_field(_native_buffer(buffer), Val(:capacity))))
 
 "Return a borrowed byte view of an ndarray callback payload."
 function bytes(buffer::NdArrayFilterBuffer)
@@ -191,9 +191,9 @@ end
 "Return copied SPA header metadata, or `nothing` when absent or invalid."
 function buffer_header(buffer::NdArrayFilterBuffer)
     native = _native_buffer(buffer)
-    valid = unsafe_load(native.metadata_valid)
+    valid = unsafe_load(_ndarray_buffer_field(native, Val(:metadata_valid)))
     iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && return nothing
-    header = unsafe_load(native.header)
+    header = unsafe_load(_ndarray_buffer_field(native, Val(:header)))
     return BufferHeader(
         header.flags,
         header.offset,
@@ -201,65 +201,6 @@ function buffer_header(buffer::NdArrayFilterBuffer)
         header.dts_offset,
         header.seq,
     )
-end
-
-"A borrowed acquisition record in an ndarray callback; do not retain it."
-struct NdArrayAcquisitionMetadata{Writable} <: _AcquisitionMetadata
-    buffer::NdArrayFilterBuffer{Writable}
-end
-
-function buffer_acquisition(buffer::NdArrayFilterBuffer{Writable}) where {Writable}
-    native = _native_buffer(buffer)
-    available = unsafe_load(native.metadata_available)
-    iszero(available & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION) && return nothing
-    if !Writable && iszero(unsafe_load(native.metadata_valid) & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
-        return nothing
-    end
-    record = NdArrayAcquisitionMetadata(buffer)
-    Writable || acquisition_valid(record) || throw(
-        InvalidStateException("the ndarray acquisition metadata is malformed", :malformed),
-    )
-    return record
-end
-
-_acquisition_storage_pointer(record::NdArrayAcquisitionMetadata) =
-    _native_buffer(record.buffer).acquisition
-_writable_acquisition_storage_pointer(record::NdArrayAcquisitionMetadata{true}) =
-    _acquisition_storage_pointer(record)
-
-function acquisition_valid(record::NdArrayAcquisitionMetadata)
-    native = _native_buffer(record.buffer)
-    iszero(unsafe_load(native.metadata_valid) & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION) && return false
-    storage = Ref(LibPipeWire.spa_meta(
-        LibPipeWire.SPA_META_Acquisition, UInt32(_ACQUISITION_SIZE),
-        Ptr{Cvoid}(native.acquisition),
-    ))
-    return LibPipeWire.spa_meta_acquisition_is_valid(storage)
-end
-
-"Initialize writable callback acquisition metadata and mark it valid."
-function initialize_acquisition!(buffer::NdArrayFilterBuffer{true}; version::Integer=2)
-    record = buffer_acquisition(buffer)
-    record === nothing && throw(InvalidStateException(
-        "the ndarray callback buffer has no acquisition metadata", :no_metadata,
-    ))
-    return initialize_acquisition!(record; version)
-end
-
-function initialize_acquisition!(record::NdArrayAcquisitionMetadata{true}; version::Integer=2)
-    _initialize_acquisition!(record; version)
-    native = _native_buffer(record.buffer)
-    unsafe_store!(native.metadata_valid, unsafe_load(native.metadata_valid) |
-        LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
-    return record
-end
-
-"Clear acquisition validity on a reused writable callback buffer."
-function clear_buffer_acquisition!(buffer::NdArrayFilterBuffer{true})
-    native = _native_buffer(buffer)
-    unsafe_store!(native.metadata_valid, unsafe_load(native.metadata_valid) &
-        ~LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
-    return buffer
 end
 
 """
@@ -270,12 +211,12 @@ destination buffer must provide header metadata.
 """
 function set_buffer_header!(buffer::NdArrayFilterBuffer{true}, header::BufferHeader)
     native = _native_buffer(buffer)
-    available = unsafe_load(native.metadata_available)
+    available = unsafe_load(_ndarray_buffer_field(native, Val(:metadata_available)))
     iszero(available & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER) && throw(
         InvalidStateException("the ndarray callback buffer has no header metadata", :no_metadata),
     )
     unsafe_store!(
-        native.header,
+        _ndarray_buffer_field(native, Val(:header)),
         LibPipeWire.spa_meta_header(
             header.flags,
             header.offset,
@@ -285,8 +226,8 @@ function set_buffer_header!(buffer::NdArrayFilterBuffer{true}, header::BufferHea
         ),
     )
     unsafe_store!(
-        native.metadata_valid,
-        unsafe_load(native.metadata_valid) |
+        _ndarray_buffer_field(native, Val(:metadata_valid)),
+        unsafe_load(_ndarray_buffer_field(native, Val(:metadata_valid))) |
         LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER,
     )
     return buffer
@@ -301,9 +242,9 @@ later callback. Outputs are available by default on every callback.
 """
 function set_output_available!(buffer::NdArrayFilterBuffer{true}, available::Bool)
     native = _native_buffer(buffer)
-    flags = unsafe_load(native.flags)
+    flags = unsafe_load(_ndarray_buffer_field(native, Val(:flags)))
     unavailable = LibPipeWire.PW_NDARRAY_FILTER_BUFFER_FLAG_OUTPUT_UNAVAILABLE
-    unsafe_store!(native.flags, available ? flags & ~unavailable : flags | unavailable)
+    unsafe_store!(_ndarray_buffer_field(native, Val(:flags)), available ? flags & ~unavailable : flags | unavailable)
     return buffer
 end
 
@@ -319,19 +260,13 @@ function propagate_metadata!(
 )
     native_output = _native_buffer(output)
     native_input = _native_buffer(input)
-    valid = unsafe_load(native_input.metadata_valid) &
-            unsafe_load(native_output.metadata_available)
-    unsafe_store!(native_output.metadata_valid, valid)
+    valid = unsafe_load(_ndarray_buffer_field(native_input, Val(:metadata_valid))) &
+            unsafe_load(_ndarray_buffer_field(native_output, Val(:metadata_available)))
+    unsafe_store!(_ndarray_buffer_field(native_output, Val(:metadata_valid)), valid)
     if !iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_HEADER)
-        unsafe_store!(native_output.header, unsafe_load(native_input.header))
+        unsafe_store!(_ndarray_buffer_field(native_output, Val(:header)), unsafe_load(_ndarray_buffer_field(native_input, Val(:header))))
     end
-    if !iszero(valid & LibPipeWire.PW_NDARRAY_FILTER_METADATA_ACQUISITION)
-        unsafe_store!(native_output.acquisition, unsafe_load(native_input.acquisition))
-    end
-    # Filters without opted-in ports keep the existing metadata-only path.
-    if output.filter != C_NULL && input.filter != C_NULL
-        _propagate_buffer_properties!(output, input)
-    end
+    _propagate_buffer_properties!(output, input)
     return output
 end
 
@@ -362,7 +297,7 @@ callbacks are ordinary Julia callables:
   the processing loop without consuming or publishing a frame. It runs after
   `on_properties` returns while prepared, serialized with `on_process`.
   Stopped requests remain staged until preparation. This callback requires
-  native ndarray filter events version 3; older libraries reject construction.
+  native ndarray filter events version 4; older libraries reject construction.
 
 With `independent_inputs=true`, `on_process` runs when any frame-data input
 arrives. Every declared input remains present in the collection; call
@@ -618,7 +553,7 @@ function _ndarray_filter_events(filter::T) where {T<:NdArrayFilter}
     apply_props = filter.callbacks.on_apply_properties === nothing ? C_NULL :
         @cfunction(_ndarray_filter_apply_properties, Cint, (Ref{T},))
     return LibPipeWire.pw_ndarray_filter_events(
-        apply_props == C_NULL ? UInt32(2) : UInt32(3),
+        UInt32(4),
         prepare,
         process,
         deactivate,
@@ -648,9 +583,6 @@ function _native_ndarray_filter_ports(ports::Vector{NdArrayFilterPort})
             schema = schemas[index]
             flags = port.parameter ?
                 LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER : UInt32(0)
-            if port.acquisition_version == 3
-                flags |= LibPipeWire.PW_NDARRAY_FILTER_PORT_FLAG_ACQUISITION_V3
-            end
             native[index] = LibPipeWire.pw_ndarray_filter_port(
                 UInt32(sizeof(LibPipeWire.pw_ndarray_filter_port)),
                 flags,

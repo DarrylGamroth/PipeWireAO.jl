@@ -2,28 +2,20 @@ module PipeWireAO
 
 using UnsafeArrays: UnsafeArray
 
-abstract type _AcquisitionMetadata end
-
 export CoreConnection,
     ContextModule,
     AcquisitionDomain,
     AcquisitionExposureStart,
     AcquisitionIdentity,
-    AcquisitionMetadata,
     AcquisitionPtpReference,
     AcquisitionTimebase,
     AcquisitionTriggerState,
-    NdArrayAcquisitionMetadata,
     ACQUISITION_TRIGGER_ABSENT,
     ACQUISITION_TRIGGER_LOW,
     ACQUISITION_TRIGGER_HIGH,
     ACQUISITION_TRIGGER_MIXED,
     PtpClockIdentity,
     ACQUISITION_DOMAIN_SIZE,
-    ACQUISITION_FLAG_EXPOSURE_DURATION_VALID,
-    ACQUISITION_FLAG_EXPOSURE_START_VALID,
-    ACQUISITION_FLAG_IDENTITY_VALID,
-    ACQUISITION_FLAG_PTP_REFERENCE_VALID,
     ACQUISITION_PTP_CLOCK_ID_SIZE,
     ACQUISITION_TIMEBASE_MONOTONIC,
     ACQUISITION_TIMEBASE_TAI,
@@ -50,6 +42,15 @@ export CoreConnection,
     BufferPropertyRequirement,
     BUFFER_PROPERTY_OPTICAL_CLASSIFICATION,
     BUFFER_PROPERTY_TRIGGER_CLASSIFICATION,
+    BUFFER_PROPERTY_ACQUISITION_DOMAIN,
+    BUFFER_PROPERTY_ACQUISITION_GENERATION,
+    BUFFER_PROPERTY_ACQUISITION_SEQUENCE,
+    BUFFER_PROPERTY_EXPOSURE_DURATION,
+    BUFFER_PROPERTY_EXPOSURE_START,
+    BUFFER_PROPERTY_EXPOSURE_TIMEBASE,
+    BUFFER_PROPERTY_TIMESTAMP_UNCERTAINTY,
+    BUFFER_PROPERTY_PTP_GRANDMASTER_IDENTITY,
+    BUFFER_PROPERTY_PTP_DOMAIN_NUMBER,
     OpticalClassification,
     OPTICAL_ABSENT,
     OPTICAL_UNFRINGED,
@@ -168,19 +169,12 @@ export CoreConnection,
     VideoInfoRaw,
     acquisition_exposure_duration,
     acquisition_exposure_start,
-    clear_buffer_acquisition!,
-    acquisition_flags,
-    acquisition_version,
-    acquisition_trigger_state,
-    set_acquisition_trigger_state!,
     acquisition_identity,
     acquisition_identity_equal,
-    acquisition_metadata_param,
     acquisition_ptp_reference,
     acquisition_time_difference,
     acquisition_timebase,
     acquisition_times_match,
-    acquisition_valid,
     arm_array_sink!,
     array_values,
     array_receipt,
@@ -190,7 +184,6 @@ export CoreConnection,
     audio_format,
     audio_format_param,
     buffer_data,
-    buffer_acquisition,
     buffer_bitmap,
     buffer_busy,
     buffer_control,
@@ -241,8 +234,8 @@ export CoreConnection,
     get_permissions!,
     has_current_info,
     header_metadata_param,
-    initialize_acquisition!,
     initialize_buffer_properties!,
+    clear_buffer_metadata!,
     optical_classification,
     set_buffer_property!,
     set_optical_classification!,
@@ -379,13 +372,17 @@ include("filter.jl")
 include("listeners.jl")
 include("ndarray_exchange.jl")
 
-const _MINIMUM_JLL_VERSION = v"1.7.2+0"
+const _MINIMUM_JLL_VERSION = v"2.0.0+0"
 
 function __init__()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)
     version >= _MINIMUM_JLL_VERSION || error(
         "PipeWireAO requires PipeWireAO_jll $_MINIMUM_JLL_VERSION or newer; " *
         "found $version. Update PipeWireAO_jll and restart Julia.",
+    )
+    native_version = VersionNumber(unsafe_string(LibPipeWire.pw_get_library_version()))
+    native_version >= v"2.0.0" || error(
+        "PipeWireAO's Properties metadata ABI requires native 2.0.0 or newer; found $native_version.",
     )
 end
 

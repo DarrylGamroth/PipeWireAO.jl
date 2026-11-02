@@ -3902,7 +3902,6 @@ end
 | SPA\\_META\\_Busy           | don't write to buffer when count > 0                                                                          |
 | SPA\\_META\\_VideoTransform | struct spa\\_meta\\_transform                                                                                 |
 | SPA\\_META\\_SyncTimeline   | struct [`spa_meta_sync_timeline`](@ref)                                                                       |
-| SPA\\_META\\_Acquisition    | struct [`spa_meta_acquisition`](@ref)                                                                         |
 | SPA\\_META\\_Properties     | bounded BufferProperties POD Object                                                                           |
 | \\_SPA\\_META\\_LAST        | not part of ABI/API                                                                                           |
 """
@@ -3918,7 +3917,6 @@ const SPA_META_Busy = 7 % UInt32
 const SPA_META_VideoTransform = 8 % UInt32
 const SPA_META_SyncTimeline = 9 % UInt32
 const SPA_META_START_PipeWireAO = 10 % UInt32
-const SPA_META_Acquisition = 11 % UInt32
 const SPA_META_Properties = 13 % UInt32
 const _SPA_META_LAST = 14 % UInt32
 const SPA_META_START_custom = 512 % UInt32
@@ -4110,251 +4108,36 @@ struct spa_meta_sync_timeline
 end
 
 """
-    spa_meta_acquisition_constant
+    spa_acquisition_constant
 
-Acquisition metadata ABI constants.
+Owned acquisition facts; not metadata allocations or wire records.
 """
-const spa_meta_acquisition_constant = UInt32
-const SPA_META_ACQUISITION_VERSION_1 = 1 % UInt32
-const SPA_META_ACQUISITION_VERSION_2 = 2 % UInt32
-const SPA_META_ACQUISITION_VERSION_3 = 3 % UInt32
-const SPA_META_ACQUISITION_VERSION = 2 % UInt32
-const SPA_META_ACQUISITION_SIZE = 96 % UInt32
-const SPA_META_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
-const SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE = 8 % UInt32
-const SPA_META_FEATURE_ACQUISITION_VERSION_1 = 1 % UInt32
-const SPA_META_FEATURE_ACQUISITION_VERSION_2 = 2 % UInt32
-const SPA_META_FEATURE_ACQUISITION_VERSION_3 = 4 % UInt32
-const SPA_META_FEATURE_ACQUISITION_CURRENT = 2 % UInt32
+const spa_acquisition_constant = UInt32
+const SPA_ACQUISITION_DOMAIN_SIZE = 16 % UInt32
+const SPA_EXPOSURE_PTP_CLOCK_ID_SIZE = 8 % UInt32
 
-const spa_meta_acquisition_flag = UInt32
-const SPA_META_ACQUISITION_FLAG_IDENTITY_VALID = 1 % UInt32
-const SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID = 2 % UInt32
-const SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID = 4 % UInt32
-const SPA_META_ACQUISITION_FLAG_PTP_REFERENCE_VALID = 8 % UInt32
-const SPA_META_ACQUISITION_FLAG_ALL = 15 % UInt32
+const spa_exposure_timebase = UInt32
+const SPA_EXPOSURE_TIMEBASE_MONOTONIC = 1 % UInt32
+const SPA_EXPOSURE_TIMEBASE_TAI = 2 % UInt32
 
-const spa_meta_acquisition_timebase = UInt32
-const SPA_META_ACQUISITION_TIMEBASE_NONE = 0 % UInt32
-const SPA_META_ACQUISITION_TIMEBASE_MONOTONIC = 1 % UInt32
-const SPA_META_ACQUISITION_TIMEBASE_TAI = 2 % UInt32
+const spa_meta_trigger_classification = UInt32
+const SPA_META_TRIGGER_ABSENT = 0 % UInt32
+const SPA_META_TRIGGER_LOW = 1 % UInt32
+const SPA_META_TRIGGER_HIGH = 2 % UInt32
+const SPA_META_TRIGGER_MIXED = 3 % UInt32
 
-const spa_meta_acquisition_trigger_classification = UInt32
-const SPA_META_ACQUISITION_TRIGGER_ABSENT = 0 % UInt32
-const SPA_META_ACQUISITION_TRIGGER_LOW = 1 % UInt32
-const SPA_META_ACQUISITION_TRIGGER_HIGH = 2 % UInt32
-const SPA_META_ACQUISITION_TRIGGER_MIXED = 3 % UInt32
-
-"""
-    spa_meta_acquisition
-
-Physical acquisition identity and qualified exposure time.
-
-The producer initializes this structure before publishing a complete buffer. It remains immutable until every producer and consumer lease on that buffer ends.
-
-Identity is the complete (domain, generation, sequence) tuple. The domain is opaque and compared bytewise. Version 1 exposure timestamps are in the local Linux CLOCK\\_MONOTONIC domain and are never comparable across hosts.
-
-Version 2 makes the timebase explicit. Cross-host timestamps use CLOCK\\_TAI nanoseconds and identify the PTP grandmaster and PTP domain that established the mapping. timestamp\\_uncertainty\\_nsec is an inclusive error bound for the exposure-start mapping. A PTP time is comparable only with another valid Version 2 or 3 PTP time carrying the same grandmaster identity and domain number. Version 3 encodes trigger classification in reserved2; all upper bits are zero.
-
-| Field     | Note                                                     |
-| :-------- | :------------------------------------------------------- |
-| reserved2 | Version 3 trigger classification; zero in Versions 1/2.  |
-"""
-struct spa_meta_acquisition
-    data::NTuple{96, UInt8}
+struct spa_acquisition_identity
+    domain::NTuple{16, UInt8}
+    generation::UInt64
+    sequence::UInt64
 end
 
-function Base.getproperty(x::Ptr{spa_meta_acquisition}, f::Symbol)
-    f === :version && return Ptr{UInt32}(x + 0)
-    f === :abi_size && return Ptr{UInt32}(x + 4)
-    f === :flags && return Ptr{UInt32}(x + 8)
-    f === :timebase && return Ptr{UInt32}(x + 12)
-    f === :domain && return Ptr{NTuple{16, UInt8}}(x + 16)
-    f === :generation && return Ptr{UInt64}(x + 32)
-    f === :sequence && return Ptr{UInt64}(x + 40)
-    f === :exposure_start_nsec && return Ptr{Int64}(x + 48)
-    f === :exposure_duration_nsec && return Ptr{UInt64}(x + 56)
-    f === :timestamp_uncertainty_nsec && return Ptr{UInt64}(x + 64)
-    f === :ptp_grandmaster_id && return Ptr{NTuple{8, UInt8}}(x + 72)
-    f === :ptp_domain_number && return Ptr{UInt8}(x + 80)
-    f === :reserved && return Ptr{NTuple{7, UInt8}}(x + 81)
-    f === :reserved2 && return Ptr{UInt64}(x + 88)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::spa_meta_acquisition, f::Symbol)
-    r = Ref{spa_meta_acquisition}(x)
-    ptr = Base.unsafe_convert(Ptr{spa_meta_acquisition}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{spa_meta_acquisition}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::spa_meta_acquisition, private::Bool = false)
-    (:version, :abi_size, :flags, :timebase, :domain, :generation, :sequence, :exposure_start_nsec, :exposure_duration_nsec, :timestamp_uncertainty_nsec, :ptp_grandmaster_id, :ptp_domain_number, :reserved, :reserved2, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
-end
-
-"""
-    spa_meta_acquisition_init(acquisition)
-
-Initialize reusable acquisition metadata with no valid identity or time.
-
-### Prototype
-```c
-bool spa_meta_acquisition_init(struct spa_meta_acquisition *acquisition);
-```
-"""
-function spa_meta_acquisition_init(acquisition)
-    @ccall libpipewire_ao.spa_meta_acquisition_init(acquisition::Ptr{spa_meta_acquisition})::Bool
-end
-
-"""
-    spa_meta_acquisition_set_identity(acquisition, domain, generation, sequence)
-
-Establish the acquisition identity tuple.
-
-### Prototype
-```c
-bool spa_meta_acquisition_set_identity( struct spa_meta_acquisition *acquisition, const uint8_t domain[SPA_META_ACQUISITION_DOMAIN_SIZE], uint64_t generation, uint64_t sequence);
-```
-"""
-function spa_meta_acquisition_set_identity(acquisition, domain, generation, sequence)
-    @ccall libpipewire_ao.spa_meta_acquisition_set_identity(acquisition::Ptr{spa_meta_acquisition}, domain::Ptr{UInt8}, generation::UInt64, sequence::UInt64)::Bool
-end
-
-"""
-    spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
-
-Establish a host-local CLOCK\\_MONOTONIC exposure-start mapping.
-
-### Prototype
-```c
-bool spa_meta_acquisition_set_exposure_start( struct spa_meta_acquisition *acquisition, int64_t exposure_start_nsec, uint64_t timestamp_uncertainty_nsec);
-```
-"""
-function spa_meta_acquisition_set_exposure_start(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec)
-    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_start(acquisition::Ptr{spa_meta_acquisition}, exposure_start_nsec::Int64, timestamp_uncertainty_nsec::UInt64)::Bool
-end
-
-"""
-    spa_meta_acquisition_set_exposure_start_ptp(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec, ptp_grandmaster_id, ptp_domain_number)
-
-Establish a PTP-qualified CLOCK\\_TAI exposure-start mapping.
-
-### Prototype
-```c
-bool spa_meta_acquisition_set_exposure_start_ptp( struct spa_meta_acquisition *acquisition, int64_t exposure_start_nsec, uint64_t timestamp_uncertainty_nsec, const uint8_t ptp_grandmaster_id[SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE], uint8_t ptp_domain_number);
-```
-"""
-function spa_meta_acquisition_set_exposure_start_ptp(acquisition, exposure_start_nsec, timestamp_uncertainty_nsec, ptp_grandmaster_id, ptp_domain_number)
-    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_start_ptp(acquisition::Ptr{spa_meta_acquisition}, exposure_start_nsec::Int64, timestamp_uncertainty_nsec::UInt64, ptp_grandmaster_id::Ptr{UInt8}, ptp_domain_number::UInt8)::Bool
-end
-
-"""
-    spa_meta_acquisition_set_exposure_duration(acquisition, exposure_duration_nsec)
-
-Establish a positive exposure duration.
-
-### Prototype
-```c
-bool spa_meta_acquisition_set_exposure_duration( struct spa_meta_acquisition *acquisition, uint64_t exposure_duration_nsec);
-```
-"""
-function spa_meta_acquisition_set_exposure_duration(acquisition, exposure_duration_nsec)
-    @ccall libpipewire_ao.spa_meta_acquisition_set_exposure_duration(acquisition::Ptr{spa_meta_acquisition}, exposure_duration_nsec::UInt64)::Bool
-end
-
-"""
-    spa_meta_acquisition_get_trigger_classification(acquisition, classification)
-
-Read trigger classification; valid Versions 1/2 report absent.
-
-### Prototype
-```c
-bool spa_meta_acquisition_get_trigger_classification( const struct spa_meta_acquisition *acquisition, enum spa_meta_acquisition_trigger_classification *classification);
-```
-"""
-function spa_meta_acquisition_get_trigger_classification(acquisition, classification)
-    @ccall libpipewire_ao.spa_meta_acquisition_get_trigger_classification(acquisition::Ptr{spa_meta_acquisition}, classification::Ptr{spa_meta_acquisition_trigger_classification})::Bool
-end
-
-"""
-    spa_meta_acquisition_set_trigger_classification(acquisition, classification)
-
-Set trigger classification, upgrading valid Version 2 metadata to Version 3.
-
-### Prototype
-```c
-bool spa_meta_acquisition_set_trigger_classification( struct spa_meta_acquisition *acquisition, enum spa_meta_acquisition_trigger_classification classification);
-```
-"""
-function spa_meta_acquisition_set_trigger_classification(acquisition, classification)
-    @ccall libpipewire_ao.spa_meta_acquisition_set_trigger_classification(acquisition::Ptr{spa_meta_acquisition}, classification::spa_meta_acquisition_trigger_classification)::Bool
-end
-
-"""
-    spa_meta_acquisition_is_valid(meta)
-
-Validate a mapped Version 1, 2 or 3 acquisition metadata allocation.
-
-### Prototype
-```c
-bool spa_meta_acquisition_is_valid(const struct spa_meta *meta);
-```
-"""
-function spa_meta_acquisition_is_valid(meta)
-    @ccall libpipewire_ao.spa_meta_acquisition_is_valid(meta::Ptr{spa_meta})::Bool
-end
-
-"""
-    spa_meta_acquisition_identity_equal(a, b)
-
-Compare two complete, valid acquisition identity tuples.
-
-### Prototype
-```c
-bool spa_meta_acquisition_identity_equal( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b);
-```
-"""
-function spa_meta_acquisition_identity_equal(a, b)
-    @ccall libpipewire_ao.spa_meta_acquisition_identity_equal(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition})::Bool
-end
-
-"""
-    spa_meta_acquisition_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
-
-Compare PTP-qualified time domains and return a - b with their summed error.
-
-The returned uncertainty saturates at UINT64\\_MAX. Join policy remains with the caller; this helper only proves that the two timestamps are comparable.
-
-### Prototype
-```c
-bool spa_meta_acquisition_time_difference( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b, int64_t *difference_nsec, uint64_t *combined_uncertainty_nsec);
-```
-"""
-function spa_meta_acquisition_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
-    @ccall libpipewire_ao.spa_meta_acquisition_time_difference(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition}, difference_nsec::Ptr{Int64}, combined_uncertainty_nsec::Ptr{UInt64})::Bool
-end
-
-"""
-    spa_meta_acquisition_times_match(a, b, tolerance_nsec)
-
-Test whether comparable PTP times overlap within an additional tolerance.
-
-### Prototype
-```c
-bool spa_meta_acquisition_times_match( const struct spa_meta_acquisition *a, const struct spa_meta_acquisition *b, uint64_t tolerance_nsec);
-```
-"""
-function spa_meta_acquisition_times_match(a, b, tolerance_nsec)
-    @ccall libpipewire_ao.spa_meta_acquisition_times_match(a::Ptr{spa_meta_acquisition}, b::Ptr{spa_meta_acquisition}, tolerance_nsec::UInt64)::Bool
+struct spa_exposure_start
+    nsec::Int64
+    uncertainty_nsec::UInt64
+    timebase::UInt32
+    ptp_grandmaster_identity::NTuple{8, UInt8}
+    ptp_domain_number::UInt8
 end
 
 """
@@ -4372,6 +4155,15 @@ const SPA_META_PROPERTIES_MAX_FIELDS = 64 % UInt32
 const spa_meta_property = UInt32
 const SPA_META_PROPERTY_opticalClassification = 1 % UInt32
 const SPA_META_PROPERTY_triggerClassification = 2 % UInt32
+const SPA_META_PROPERTY_acquisitionDomain = 3 % UInt32
+const SPA_META_PROPERTY_acquisitionGeneration = 4 % UInt32
+const SPA_META_PROPERTY_acquisitionSequence = 5 % UInt32
+const SPA_META_PROPERTY_exposureDuration = 6 % UInt32
+const SPA_META_PROPERTY_exposureStart = 7 % UInt32
+const SPA_META_PROPERTY_exposureTimebase = 8 % UInt32
+const SPA_META_PROPERTY_timestampUncertainty = 9 % UInt32
+const SPA_META_PROPERTY_ptpGrandmasterIdentity = 10 % UInt32
+const SPA_META_PROPERTY_ptpDomainNumber = 11 % UInt32
 
 const spa_meta_optical_classification = UInt32
 const SPA_META_OPTICAL_ABSENT = 0 % UInt32
@@ -4382,20 +4174,6 @@ const SPA_META_OPTICAL_MIXED = 3 % UInt32
 struct spa_meta_property_requirement
     key::UInt32
     type::UInt32
-end
-
-"""
-    spa_meta_properties_is_valid(meta, requirements, n_requirements)
-
-Validate the complete allocation and the consumer's required key/type pairs.
-
-### Prototype
-```c
-bool spa_meta_properties_is_valid(const struct spa_meta *meta, const struct spa_meta_property_requirement *requirements, uint32_t n_requirements);
-```
-"""
-function spa_meta_properties_is_valid(meta, requirements, n_requirements)
-    @ccall libpipewire_ao.spa_meta_properties_is_valid(meta::Ptr{spa_meta}, requirements::Ptr{spa_meta_property_requirement}, n_requirements::UInt32)::Bool
 end
 
 """
@@ -4427,31 +4205,131 @@ function spa_meta_properties_find(meta, key)
 end
 
 """
-    spa_meta_properties_acquisition_is_consistent(properties, acquisition)
+    spa_meta_properties_is_valid(meta, requirements, n_requirements)
 
-Check electrical trigger consistency after successful property validation. A missing record/property imposes no comparison. Present Acquisition must be valid; Versions 1/2 can accompany any valid typed trigger value. Version 3 must agree with the typed trigger. Optical classification is independent.
+Validate complete facts and the consumer's understanding of mandatory keys.
 
 ### Prototype
 ```c
-bool spa_meta_properties_acquisition_is_consistent( const struct spa_meta *properties, const struct spa_meta *acquisition);
+bool spa_meta_properties_is_valid(const struct spa_meta *meta, const struct spa_meta_property_requirement *requirements, uint32_t n_requirements);
 ```
 """
-function spa_meta_properties_acquisition_is_consistent(properties, acquisition)
-    @ccall libpipewire_ao.spa_meta_properties_acquisition_is_consistent(properties::Ptr{spa_meta}, acquisition::Ptr{spa_meta})::Bool
+function spa_meta_properties_is_valid(meta, requirements, n_requirements)
+    @ccall libpipewire_ao.spa_meta_properties_is_valid(meta::Ptr{spa_meta}, requirements::Ptr{spa_meta_property_requirement}, n_requirements::UInt32)::Bool
 end
 
 """
-    spa_meta_properties_add(meta, key, _type, size, value)
+    spa_meta_properties_add(meta, key, flags, _type, size, value)
 
-Append one optional scalar property in ascending key order. No allocation.
+Append a scalar in ascending key order. Private groups may be incomplete.
 
 ### Prototype
 ```c
-bool spa_meta_properties_add(struct spa_meta *meta, uint32_t key, uint32_t type, uint32_t size, const void *value);
+bool spa_meta_properties_add(struct spa_meta *meta, uint32_t key, uint32_t flags, uint32_t type, uint32_t size, const void *value);
 ```
 """
-function spa_meta_properties_add(meta, key, _type, size, value)
-    @ccall libpipewire_ao.spa_meta_properties_add(meta::Ptr{spa_meta}, key::UInt32, _type::UInt32, size::UInt32, value::Ptr{Cvoid})::Bool
+function spa_meta_properties_add(meta, key, flags, _type, size, value)
+    @ccall libpipewire_ao.spa_meta_properties_add(meta::Ptr{spa_meta}, key::UInt32, flags::UInt32, _type::UInt32, size::UInt32, value::Ptr{Cvoid})::Bool
+end
+
+"""
+    spa_meta_properties_add_uint64(meta, key, flags, value)
+
+Append one unsigned integer as exactly eight little-endian Bytes.
+
+### Prototype
+```c
+bool spa_meta_properties_add_uint64(struct spa_meta *meta, uint32_t key, uint32_t flags, uint64_t value);
+```
+"""
+function spa_meta_properties_add_uint64(meta, key, flags, value)
+    @ccall libpipewire_ao.spa_meta_properties_add_uint64(meta::Ptr{spa_meta}, key::UInt32, flags::UInt32, value::UInt64)::Bool
+end
+
+"""
+    spa_meta_properties_get_uint64(meta, key, value)
+
+Read facts after complete admission with the consumer's requirements. These getters recheck values and complete groups, but do not establish understanding of application-defined mandatory keys. As with find(), the caller MUST first call [`spa_meta_properties_is_valid`](@ref)(meta, requirements, n).
+
+### Prototype
+```c
+bool spa_meta_properties_get_uint64(const struct spa_meta *meta, uint32_t key, uint64_t *value);
+```
+"""
+function spa_meta_properties_get_uint64(meta, key, value)
+    @ccall libpipewire_ao.spa_meta_properties_get_uint64(meta::Ptr{spa_meta}, key::UInt32, value::Ptr{UInt64})::Bool
+end
+
+"""
+    spa_meta_properties_get_acquisition_identity(meta, identity)
+
+### Prototype
+```c
+bool spa_meta_properties_get_acquisition_identity(const struct spa_meta *meta, struct spa_acquisition_identity *identity);
+```
+"""
+function spa_meta_properties_get_acquisition_identity(meta, identity)
+    @ccall libpipewire_ao.spa_meta_properties_get_acquisition_identity(meta::Ptr{spa_meta}, identity::Ptr{spa_acquisition_identity})::Bool
+end
+
+"""
+    spa_meta_properties_get_exposure_duration(meta, duration_nsec)
+
+### Prototype
+```c
+bool spa_meta_properties_get_exposure_duration(const struct spa_meta *meta, uint64_t *duration_nsec);
+```
+"""
+function spa_meta_properties_get_exposure_duration(meta, duration_nsec)
+    @ccall libpipewire_ao.spa_meta_properties_get_exposure_duration(meta::Ptr{spa_meta}, duration_nsec::Ptr{UInt64})::Bool
+end
+
+"""
+    spa_meta_properties_get_exposure_start(meta, start)
+
+### Prototype
+```c
+bool spa_meta_properties_get_exposure_start(const struct spa_meta *meta, struct spa_exposure_start *start);
+```
+"""
+function spa_meta_properties_get_exposure_start(meta, start)
+    @ccall libpipewire_ao.spa_meta_properties_get_exposure_start(meta::Ptr{spa_meta}, start::Ptr{spa_exposure_start})::Bool
+end
+
+"""
+    spa_acquisition_identity_equal(a, b)
+
+### Prototype
+```c
+bool spa_acquisition_identity_equal(const struct spa_acquisition_identity *a, const struct spa_acquisition_identity *b);
+```
+"""
+function spa_acquisition_identity_equal(a, b)
+    @ccall libpipewire_ao.spa_acquisition_identity_equal(a::Ptr{spa_acquisition_identity}, b::Ptr{spa_acquisition_identity})::Bool
+end
+
+"""
+    spa_exposure_start_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
+
+### Prototype
+```c
+bool spa_exposure_start_time_difference(const struct spa_exposure_start *a, const struct spa_exposure_start *b, int64_t *difference_nsec, uint64_t *combined_uncertainty_nsec);
+```
+"""
+function spa_exposure_start_time_difference(a, b, difference_nsec, combined_uncertainty_nsec)
+    @ccall libpipewire_ao.spa_exposure_start_time_difference(a::Ptr{spa_exposure_start}, b::Ptr{spa_exposure_start}, difference_nsec::Ptr{Int64}, combined_uncertainty_nsec::Ptr{UInt64})::Bool
+end
+
+"""
+    spa_exposure_start_times_match(a, b, tolerance_nsec)
+
+### Prototype
+```c
+bool spa_exposure_start_times_match(const struct spa_exposure_start *a, const struct spa_exposure_start *b, uint64_t tolerance_nsec);
+```
+"""
+function spa_exposure_start_times_match(a, b, tolerance_nsec)
+    @ccall libpipewire_ao.spa_exposure_start_times_match(a::Ptr{spa_exposure_start}, b::Ptr{spa_exposure_start}, tolerance_nsec::UInt64)::Bool
 end
 
 """
@@ -7965,15 +7843,13 @@ const PW_NDARRAY_FILTER_FLAG_FIFO_INPUTS = 32 % UInt32
 
 Static ndarray-filter Port roles.
 
-| Enumerator                                             | Note                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| :----------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_PARAMETER        | Sparse input Parameter Port prepared away from repeated processing.  Parameter Ports must be inputs and must not declare a repeated rate. Their buffers are delivered to update\\_parameter() on a bounded worker rather than to the frame process callback. A buffer whose first data chunk has size zero means that no replacement is present in that graph cycle; it is recycled without invoking update\\_parameter().  |
-| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_ACQUISITION\\_V3 | Require Acquisition Version 3 metadata with trigger classification.                                                                                                                                                                                                                                                                                                                                                         |
+| Enumerator                                      | Note                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| :---------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PW\\_NDARRAY\\_FILTER\\_PORT\\_FLAG\\_PARAMETER | Sparse input Parameter Port prepared away from repeated processing.  Parameter Ports must be inputs and must not declare a repeated rate. Their buffers are delivered to update\\_parameter() on a bounded worker rather than to the frame process callback. A buffer whose first data chunk has size zero means that no replacement is present in that graph cycle; it is recycled without invoking update\\_parameter().  |
 """
 const pw_ndarray_filter_port_flags = UInt32
 const PW_NDARRAY_FILTER_PORT_FLAG_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_PORT_FLAG_PARAMETER = 1 % UInt32
-const PW_NDARRAY_FILTER_PORT_FLAG_ACQUISITION_V3 = 2 % UInt32
 
 """
     pw_ndarray_filter_metadata
@@ -7983,7 +7859,7 @@ Metadata stored by value in one callback buffer.
 const pw_ndarray_filter_metadata = UInt32
 const PW_NDARRAY_FILTER_METADATA_NONE = 0 % UInt32
 const PW_NDARRAY_FILTER_METADATA_HEADER = 1 % UInt32
-const PW_NDARRAY_FILTER_METADATA_ACQUISITION = 2 % UInt32
+const PW_NDARRAY_FILTER_METADATA_PROPERTIES = 4 % UInt32
 
 """
     pw_ndarray_filter_buffer_flags
@@ -8016,39 +7892,15 @@ One borrowed packed ndarray supplied to a process callback.
 | metadata\\_valid     | subset of metadata\\_available                         |
 """
 struct pw_ndarray_filter_buffer
-    data::NTuple{160, UInt8}
-end
-
-function Base.getproperty(x::Ptr{pw_ndarray_filter_buffer}, f::Symbol)
-    f === :struct_size && return Ptr{UInt32}(x + 0)
-    f === :flags && return Ptr{UInt32}(x + 4)
-    f === :data && return Ptr{Ptr{Cvoid}}(x + 8)
-    f === :size && return Ptr{UInt32}(x + 16)
-    f === :capacity && return Ptr{UInt32}(x + 20)
-    f === :metadata_available && return Ptr{UInt32}(x + 24)
-    f === :metadata_valid && return Ptr{UInt32}(x + 28)
-    f === :header && return Ptr{spa_meta_header}(x + 32)
-    f === :acquisition && return Ptr{spa_meta_acquisition}(x + 64)
-    return getfield(x, f)
-end
-
-function Base.getproperty(x::pw_ndarray_filter_buffer, f::Symbol)
-    r = Ref{pw_ndarray_filter_buffer}(x)
-    ptr = Base.unsafe_convert(Ptr{pw_ndarray_filter_buffer}, r)
-    fptr = getproperty(ptr, f)
-    GC.@preserve r unsafe_load(fptr)
-end
-
-function Base.setproperty!(x::Ptr{pw_ndarray_filter_buffer}, f::Symbol, v)
-    unsafe_store!(getproperty(x, f), v)
-end
-
-function Base.propertynames(x::pw_ndarray_filter_buffer, private::Bool = false)
-    (:struct_size, :flags, :data, :size, :capacity, :metadata_available, :metadata_valid, :header, :acquisition, if private
-            fieldnames(typeof(x))
-        else
-            ()
-        end...)
+    struct_size::UInt32
+    flags::UInt32
+    data::Ptr{Cvoid}
+    size::UInt32
+    capacity::UInt32
+    metadata_available::UInt32
+    metadata_valid::UInt32
+    header::spa_meta_header
+    properties::spa_meta
 end
 
 """
@@ -8170,9 +8022,9 @@ end
 """
     pw_ndarray_filter_set_port_buffer_properties(filter, direction, port_index, capacity, requirements, n_requirements)
 
-Opt one frame-data Port into bounded per-buffer properties before connect.
+Configure one frame-data Port's buffer Properties before connect.
 
-The direction-local declaration index includes Parameter Ports, which cannot opt in. Capacity is 16..3968, a multiple of 8; zero disables with no required fields. Requirements are copied and checked on every input and publication. The existing callback ABI remains unchanged. A peer must negotiate Properties metadata and the Version 1 schema feature.
+The direction-local declaration index includes Parameter Ports, which cannot use Properties. Capacity is 16..4064, a multiple of 8; zero disables with no required fields. An allocation too small for the required fields returns -ENOSPC. Requirements are copied and checked on every input and publication. Callback ABI version 4 borrows the Properties descriptor. A peer must negotiate Properties metadata and the Version 1 schema feature.
 
 ### Prototype
 ```c

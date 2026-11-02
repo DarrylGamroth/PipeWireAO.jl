@@ -802,19 +802,6 @@ header_metadata_param(; id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param
     id,
 )
 
-"""
-    acquisition_metadata_param(; version=2, id=LibPipeWire.SPA_PARAM_Meta)
-
-Request acquisition metadata on every negotiated buffer. Version 2 is the default;
-Version 3 explicitly requires whole-exposure trigger classification support.
-"""
-acquisition_metadata_param(; version::Integer=2, id::Integer=LibPipeWire.SPA_PARAM_Meta) = metadata_param(
-    SPA.META_ACQUISITION;
-    size=_ACQUISITION_SIZE,
-    features=_acquisition_feature(version),
-    id,
-)
-
 "Build a typed SPA I/O-area parameter."
 function io_param(
     type;

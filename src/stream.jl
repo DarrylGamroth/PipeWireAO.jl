@@ -912,10 +912,10 @@ end
 const StreamMetadata = BufferMetadata{StreamBuffer}
 
 "Number of bytes in an opaque PipeWireAO acquisition-domain identifier."
-const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_META_ACQUISITION_DOMAIN_SIZE)
+const ACQUISITION_DOMAIN_SIZE = Int(LibPipeWire.SPA_ACQUISITION_DOMAIN_SIZE)
 "Number of bytes in an IEEE 1588 PTP clock identity."
 const ACQUISITION_PTP_CLOCK_ID_SIZE =
-    Int(LibPipeWire.SPA_META_ACQUISITION_PTP_CLOCK_ID_SIZE)
+    Int(LibPipeWire.SPA_EXPOSURE_PTP_CLOCK_ID_SIZE)
 
 """
     AcquisitionDomain(bytes)
@@ -946,8 +946,8 @@ end
 "The clock domain used for an acquisition exposure timestamp."
 @enum AcquisitionTimebase::UInt32 begin
     ACQUISITION_TIMEBASE_MONOTONIC =
-        LibPipeWire.SPA_META_ACQUISITION_TIMEBASE_MONOTONIC
-    ACQUISITION_TIMEBASE_TAI = LibPipeWire.SPA_META_ACQUISITION_TIMEBASE_TAI
+        LibPipeWire.SPA_EXPOSURE_TIMEBASE_MONOTONIC
+    ACQUISITION_TIMEBASE_TAI = LibPipeWire.SPA_EXPOSURE_TIMEBASE_TAI
 end
 
 "A nonzero IEEE 1588 grandmaster clock identity."
@@ -985,98 +985,22 @@ struct AcquisitionExposureStart
     uncertainty_nanoseconds::UInt64
 end
 
-"A borrowed versioned acquisition metadata allocation belonging to a buffer."
-struct AcquisitionMetadata{BufferType<:AbstractPipeWireBuffer} <: _AcquisitionMetadata
-    metadata::BufferMetadata{BufferType}
-end
-
-"Acquisition identity is valid."
-const ACQUISITION_FLAG_IDENTITY_VALID =
-    LibPipeWire.SPA_META_ACQUISITION_FLAG_IDENTITY_VALID
-"Exposure start and timestamp uncertainty are valid."
-const ACQUISITION_FLAG_EXPOSURE_START_VALID =
-    LibPipeWire.SPA_META_ACQUISITION_FLAG_EXPOSURE_START_VALID
-"Exposure duration is valid."
-const ACQUISITION_FLAG_EXPOSURE_DURATION_VALID =
-    LibPipeWire.SPA_META_ACQUISITION_FLAG_EXPOSURE_DURATION_VALID
-"A PTP grandmaster identity and domain qualify the exposure start."
-const ACQUISITION_FLAG_PTP_REFERENCE_VALID =
-    LibPipeWire.SPA_META_ACQUISITION_FLAG_PTP_REFERENCE_VALID
-
-const _ACQUISITION_SIZE = Int32(LibPipeWire.SPA_META_ACQUISITION_SIZE)
-const _ACQUISITION_FEATURE_CURRENT =
-    Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_CURRENT)
-
-@inline function _acquisition_storage_pointer(metadata::AcquisitionMetadata)
-    native = _native_metadata(metadata.metadata)
-    native.type == SPA.META_ACQUISITION || throw(
-        InvalidStateException("the metadata entry is not acquisition metadata", :wrong_type),
-    )
-    native.size >= UInt32(_ACQUISITION_SIZE) || throw(
-        InvalidStateException("the acquisition metadata payload is truncated", :truncated),
-    )
-    native.data == C_NULL && throw(
-        InvalidStateException("the acquisition metadata payload is unavailable", :unavailable),
-    )
-    pointer = Ptr{LibPipeWire.spa_meta_acquisition}(native.data)
-    UInt(pointer) & UInt(7) == 0 || throw(
-        InvalidStateException("the acquisition metadata payload is misaligned", :misaligned),
-    )
-    return pointer
-end
-
-_writable_acquisition_storage_pointer(metadata::AcquisitionMetadata) =
-    _acquisition_storage_pointer(metadata)
-
 @inline function _checked_acquisition_int64(value::Integer, description::AbstractString)
-    typemin(Int64) <= value <= typemax(Int64) ||
-        throw(ArgumentError("$description is outside Int64 range"))
+    0 <= value <= typemax(Int64) || throw(ArgumentError("$description must be nonnegative and fit Int64"))
     return Int64(value)
 end
 
 @inline function _checked_acquisition_uint64(value::Integer, description::AbstractString)
-    0 <= value <= typemax(UInt64) ||
-        throw(ArgumentError("$description is outside UInt64 range"))
+    0 <= value <= typemax(UInt64) || throw(ArgumentError("$description is outside UInt64 range"))
     return UInt64(value)
 end
 
-
-"Whole-exposure digital trigger classification, independent of Header flags."
+"Whole-exposure digital trigger classification, independent of optical classification."
 @enum AcquisitionTriggerState::UInt32 begin
     ACQUISITION_TRIGGER_ABSENT = 0
     ACQUISITION_TRIGGER_LOW = 1
     ACQUISITION_TRIGGER_HIGH = 2
     ACQUISITION_TRIGGER_MIXED = 3
-end
-
-function _acquisition_feature(version::Integer)
-    version == 2 && return Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_VERSION_2)
-    version == 3 && return Int32(LibPipeWire.SPA_META_FEATURE_ACQUISITION_VERSION_3)
-    throw(ArgumentError("acquisition_version must be 2 or 3"))
-end
-
-"Return the validated native acquisition metadata version."
-function acquisition_version(metadata::_AcquisitionMetadata)
-    acquisition_flags(metadata)
-    return Int(unsafe_load(_acquisition_storage_pointer(metadata).version))
-end
-
-"Return absent, low throughout, high throughout, or mixed for the whole exposure."
-function acquisition_trigger_state(metadata::_AcquisitionMetadata)
-    acquisition_version(metadata) < 3 && return ACQUISITION_TRIGGER_ABSENT
-    result = Ref{UInt32}(0)
-    LibPipeWire.spa_meta_acquisition_get_trigger_classification(
-        _acquisition_storage_pointer(metadata), result,
-    ) || throw(InvalidStateException("the acquisition trigger classification is malformed", :malformed))
-    return AcquisitionTriggerState(result[])
-end
-
-"Set whole-exposure trigger classification; upgrade valid Version 2 to Version 3."
-function set_acquisition_trigger_state!(metadata::_AcquisitionMetadata, state::AcquisitionTriggerState)
-    LibPipeWire.spa_meta_acquisition_set_trigger_classification(
-        _writable_acquisition_storage_pointer(metadata), UInt32(state),
-    ) || throw(ArgumentError("the acquisition trigger classification is invalid"))
-    return metadata
 end
 
 "An owned snapshot of a SPA buffer chunk."
@@ -1240,277 +1164,6 @@ _native_metadata(metadata::BufferMetadata) = unsafe_load(_native_metadata_pointe
 metadata_type(metadata::BufferMetadata) = _native_metadata(metadata).type
 metadata_size(metadata::BufferMetadata) = Int(_native_metadata(metadata).size)
 metadata_pointer(metadata::BufferMetadata) = _native_metadata(metadata).data
-
-"""
-    buffer_acquisition(buffer)
-
-Return borrowed Version 1, Version 2 or Version 3 acquisition metadata, or `nothing` when absent.
-Reject a present allocation that is undersized, unavailable, or misaligned.
-"""
-function buffer_acquisition(buffer::AbstractPipeWireBuffer)
-    metadata = buffer_metadata(buffer, SPA.META_ACQUISITION)
-    metadata === nothing && return nothing
-    acquisition = AcquisitionMetadata(metadata)
-    _acquisition_storage_pointer(acquisition)
-    return acquisition
-end
-
-"""
-    acquisition_valid(metadata)
-
-Return whether acquisition metadata satisfies the native Version 1, Version 2 or Version 3 contract.
-"""
-function acquisition_valid(metadata::AcquisitionMetadata)
-    return LibPipeWire.spa_meta_acquisition_is_valid(
-        _native_metadata_pointer(metadata.metadata),
-    )
-end
-
-"""
-    acquisition_flags(metadata)
-
-Return the validated acquisition validity flags.
-"""
-function acquisition_flags(metadata::_AcquisitionMetadata)
-    acquisition_valid(metadata) || throw(
-        InvalidStateException("the acquisition metadata is malformed", :malformed),
-    )
-    return unsafe_load(_acquisition_storage_pointer(metadata).flags)
-end
-
-"""
-    acquisition_identity(metadata)
-
-Return the complete validated acquisition identity, or `nothing` when absent.
-"""
-function acquisition_identity(metadata::_AcquisitionMetadata)
-    flags = acquisition_flags(metadata)
-    flags & ACQUISITION_FLAG_IDENTITY_VALID == 0 && return nothing
-    pointer = _acquisition_storage_pointer(metadata)
-    return AcquisitionIdentity(
-        AcquisitionDomain(unsafe_load(pointer.domain)),
-        unsafe_load(pointer.generation),
-        unsafe_load(pointer.sequence),
-    )
-end
-
-"""
-    acquisition_exposure_start(metadata)
-
-Return validated exposure start and uncertainty, or `nothing` when absent.
-Use [`acquisition_timebase`](@ref) to determine its clock domain.
-"""
-function acquisition_exposure_start(metadata::_AcquisitionMetadata)
-    flags = acquisition_flags(metadata)
-    flags & ACQUISITION_FLAG_EXPOSURE_START_VALID == 0 && return nothing
-    pointer = _acquisition_storage_pointer(metadata)
-    return AcquisitionExposureStart(
-        unsafe_load(pointer.exposure_start_nsec),
-        unsafe_load(pointer.timestamp_uncertainty_nsec),
-    )
-end
-
-"""
-    acquisition_timebase(metadata)
-
-Return the exposure timestamp's clock domain, or `nothing` when exposure start
-is absent. Version 1 metadata is always host-local `CLOCK_MONOTONIC`; Version 2
-metadata records either `CLOCK_MONOTONIC` or PTP-qualified `CLOCK_TAI`.
-"""
-function acquisition_timebase(metadata::_AcquisitionMetadata)
-    flags = acquisition_flags(metadata)
-    flags & ACQUISITION_FLAG_EXPOSURE_START_VALID == 0 && return nothing
-    pointer = _acquisition_storage_pointer(metadata)
-    version = unsafe_load(pointer.version)
-    version == LibPipeWire.SPA_META_ACQUISITION_VERSION_1 &&
-        return ACQUISITION_TIMEBASE_MONOTONIC
-    return AcquisitionTimebase(unsafe_load(pointer.timebase))
-end
-
-"""
-    acquisition_ptp_reference(metadata)
-
-Return the PTP grandmaster identity and PTP domain for a cross-host-comparable
-timestamp, or `nothing` when the timestamp is not PTP-qualified.
-"""
-function acquisition_ptp_reference(metadata::_AcquisitionMetadata)
-    flags = acquisition_flags(metadata)
-    flags & ACQUISITION_FLAG_PTP_REFERENCE_VALID == 0 && return nothing
-    pointer = _acquisition_storage_pointer(metadata)
-    return AcquisitionPtpReference(
-        PtpClockIdentity(unsafe_load(pointer.ptp_grandmaster_id)),
-        unsafe_load(pointer.ptp_domain_number),
-    )
-end
-
-"""
-    acquisition_exposure_duration(metadata)
-
-Return the validated exposure duration in nanoseconds, or `nothing` when absent.
-"""
-function acquisition_exposure_duration(metadata::_AcquisitionMetadata)
-    flags = acquisition_flags(metadata)
-    flags & ACQUISITION_FLAG_EXPOSURE_DURATION_VALID == 0 && return nothing
-    return unsafe_load(_acquisition_storage_pointer(metadata).exposure_duration_nsec)
-end
-
-"""
-    initialize_acquisition!(metadata)
-
-Clear reusable acquisition metadata to its valid, empty current-version state.
-"""
-initialize_acquisition!(metadata::_AcquisitionMetadata; version::Integer=2) =
-    _initialize_acquisition!(metadata; version)
-
-function _initialize_acquisition!(metadata::_AcquisitionMetadata; version::Integer=2)
-    _acquisition_feature(version)
-    LibPipeWire.spa_meta_acquisition_init(_writable_acquisition_storage_pointer(metadata)) ||
-        throw(InvalidStateException("the acquisition metadata cannot be initialized", :invalid))
-    version == 3 && set_acquisition_trigger_state!(metadata, ACQUISITION_TRIGGER_ABSENT)
-    return metadata
-end
-
-"""
-    set_acquisition_identity!(metadata, identity)
-
-Establish the complete acquisition identity tuple.
-"""
-function set_acquisition_identity!(
-    metadata::_AcquisitionMetadata,
-    identity::AcquisitionIdentity,
-)
-    domain = Ref(identity.domain.bytes)
-    domain_pointer = Ptr{UInt8}(Base.unsafe_convert(Ptr{typeof(identity.domain.bytes)}, domain))
-    valid = GC.@preserve domain LibPipeWire.spa_meta_acquisition_set_identity(
-        _writable_acquisition_storage_pointer(metadata),
-        domain_pointer,
-        identity.generation,
-        identity.sequence,
-    )
-    valid || throw(ArgumentError("the acquisition identity is invalid"))
-    return metadata
-end
-
-"""
-    set_acquisition_exposure_start!(metadata, nanoseconds, uncertainty_nanoseconds)
-
-Establish exposure start in local `CLOCK_MONOTONIC` nanoseconds and its
-inclusive uncertainty bound.
-"""
-function set_acquisition_exposure_start!(
-    metadata::_AcquisitionMetadata,
-    nanoseconds::Integer,
-    uncertainty_nanoseconds::Integer,
-)
-    valid = LibPipeWire.spa_meta_acquisition_set_exposure_start(
-        _writable_acquisition_storage_pointer(metadata),
-        _checked_acquisition_int64(nanoseconds, "exposure start"),
-        _checked_acquisition_uint64(uncertainty_nanoseconds, "timestamp uncertainty"),
-    )
-    valid || throw(ArgumentError("the acquisition exposure start is invalid"))
-    return metadata
-end
-
-"""
-    set_acquisition_exposure_start_ptp!(metadata, nanoseconds,
-                                        uncertainty_nanoseconds, reference)
-
-Establish exposure start in Linux `CLOCK_TAI` nanoseconds, qualified by a PTP
-grandmaster identity and PTP domain. This form is comparable across hosts that
-carry the same valid PTP reference.
-"""
-function set_acquisition_exposure_start_ptp!(
-    metadata::_AcquisitionMetadata,
-    nanoseconds::Integer,
-    uncertainty_nanoseconds::Integer,
-    reference::AcquisitionPtpReference,
-)
-    grandmaster = Ref(reference.grandmaster.bytes)
-    grandmaster_pointer = Ptr{UInt8}(
-        Base.unsafe_convert(Ptr{typeof(reference.grandmaster.bytes)}, grandmaster),
-    )
-    valid = GC.@preserve grandmaster LibPipeWire.spa_meta_acquisition_set_exposure_start_ptp(
-        _writable_acquisition_storage_pointer(metadata),
-        _checked_acquisition_int64(nanoseconds, "exposure start"),
-        _checked_acquisition_uint64(uncertainty_nanoseconds, "timestamp uncertainty"),
-        grandmaster_pointer,
-        reference.domain_number,
-    )
-    valid || throw(ArgumentError("the PTP-qualified acquisition exposure start is invalid"))
-    return metadata
-end
-
-"""
-    set_acquisition_exposure_duration!(metadata, nanoseconds)
-
-Establish a positive exposure duration in nanoseconds.
-"""
-function set_acquisition_exposure_duration!(
-    metadata::_AcquisitionMetadata,
-    nanoseconds::Integer,
-)
-    valid = LibPipeWire.spa_meta_acquisition_set_exposure_duration(
-        _writable_acquisition_storage_pointer(metadata),
-        _checked_acquisition_uint64(nanoseconds, "exposure duration"),
-    )
-    valid || throw(ArgumentError("the acquisition exposure duration is invalid"))
-    return metadata
-end
-
-"""
-    acquisition_identity_equal(a, b)
-
-Return whether two allocations contain the same complete, valid acquisition
-identity. Return `false` when either allocation is malformed or lacks identity.
-"""
-function acquisition_identity_equal(a::_AcquisitionMetadata, b::_AcquisitionMetadata)
-    acquisition_valid(a) && acquisition_valid(b) || return false
-    return LibPipeWire.spa_meta_acquisition_identity_equal(
-        _acquisition_storage_pointer(a),
-        _acquisition_storage_pointer(b),
-    )
-end
-
-"""
-    acquisition_time_difference(a, b)
-
-Return `(difference_nanoseconds, combined_uncertainty_nanoseconds)` for `a - b`,
-or `nothing` unless both exposure timestamps carry the same valid PTP
-grandmaster identity and PTP domain. The uncertainty sum saturates at
-`typemax(UInt64)`.
-"""
-function acquisition_time_difference(a::_AcquisitionMetadata, b::_AcquisitionMetadata)
-    acquisition_valid(a) && acquisition_valid(b) || return nothing
-    difference = Ref{Int64}()
-    uncertainty = Ref{UInt64}()
-    comparable = LibPipeWire.spa_meta_acquisition_time_difference(
-        _acquisition_storage_pointer(a),
-        _acquisition_storage_pointer(b),
-        difference,
-        uncertainty,
-    )
-    return comparable ? (difference[], uncertainty[]) : nothing
-end
-
-"""
-    acquisition_times_match(a, b, tolerance_nanoseconds)
-
-Return whether two comparable PTP exposure timestamps overlap after adding the
-given tolerance to their combined inclusive uncertainty bounds.
-"""
-function acquisition_times_match(
-    a::_AcquisitionMetadata,
-    b::_AcquisitionMetadata,
-    tolerance_nanoseconds::Integer,
-)
-    tolerance = _checked_acquisition_uint64(tolerance_nanoseconds, "timestamp tolerance")
-    acquisition_valid(a) && acquisition_valid(b) || return false
-    return LibPipeWire.spa_meta_acquisition_times_match(
-        _acquisition_storage_pointer(a),
-        _acquisition_storage_pointer(b),
-        tolerance,
-    )
-end
 
 "Return a borrowed byte view of a metadata payload."
 function metadata_bytes(metadata::BufferMetadata)

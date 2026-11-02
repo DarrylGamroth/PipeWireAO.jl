@@ -271,7 +271,6 @@ const DATA_FLAG_HUGE_1GB = UInt32(1 << 6)
     META_BUSY = LibPipeWire.SPA_META_Busy
     META_VIDEO_TRANSFORM = LibPipeWire.SPA_META_VideoTransform
     META_SYNC_TIMELINE = LibPipeWire.SPA_META_SyncTimeline
-    META_ACQUISITION = LibPipeWire.SPA_META_Acquisition
     META_PROPERTIES = LibPipeWire.SPA_META_Properties
 end
 
