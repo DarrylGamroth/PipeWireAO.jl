@@ -413,11 +413,11 @@ Data access masks are public as `SPA.DATA_FLAG_READABLE`,
 `SPA.DATA_FLAG_READWRITE`, and `SPA.DATA_FLAG_MAPPABLE`.
 Use `set_buffer_header!(buffer, BufferHeader(...))` to replace an existing
 complete `SPA_META_Header` payload without crossing into native bindings.
-Independent records carry acquisition identity, exposure timing, absolute event
-time, optical chopping and electrical trigger alongside standard Header.
+Independent records carry acquisition identity, exposure timing, reference
+timestamp, optical chopping and electrical trigger alongside standard Header.
 Header sequence and PTS describe publication, and never imply acquisition time.
 Retained exposures preserve full UInt64 identity while publications advance.
-Clock domains are explicit; REALTIME/TAI labels alone do not assert synchronization.
+Clock references are explicit; REALTIME/TAI labels alone do not assert synchronization.
 
 With `STREAM_ALLOC_BUFFERS`, call `allocate_buffer!` from `on_buffer_added` to
 install Julia-owned `MemPtr` planes. The stream roots those allocations until
@@ -548,7 +548,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 3.0.0 cohort.
+Source validation requires the native 4.0.0 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -573,7 +573,7 @@ declarations, independently required or optional:
 ```julia
 records = (MetadataRequirement(SPA.META_ACQUISITION_IDENTITY; required=true),
            MetadataRequirement(SPA.META_EXPOSURE_TIMING; required=true),
-           MetadataRequirement(SPA.META_ABSOLUTE_TIME))
+           MetadataRequirement(SPA.META_REFERENCE_TIMESTAMP))
 port = NdArrayFilterPort("pixels", DIRECTION_INPUT, format; metadata=records)
 ```
 
@@ -584,10 +584,10 @@ aligned payload bytes, including Header. Changing layouts requires cold pool
 replacement. Retired IDs 11–13 and old acquisition Properties APIs are unsupported.
 
 Initialize exclusively owned outputs with `initialize_metadata!`, then populate
-`set_acquisition_identity!`, `set_exposure_timing!`, `set_absolute_times!`,
+`set_acquisition_identity!`, `set_exposure_timing!`, `set_reference_timestamp!`,
 `set_optical_classification!` and `set_trigger_classification!` as applicable.
 Allocated invalid records, missing slots and explicit ABSENT classifications are
-distinct. `exposure_timing`, `absolute_times` and `acquisition_identity` return
+distinct. `exposure_timing`, `reference_timestamp` and `acquisition_identity` return
 owned semantic values; `metadata_records` exposes borrowed records only for the
 callback or lease. Read access is read-only, including raw stream buffers.
 Only an exclusively owned output may acquire `writable_metadata_records`;
@@ -604,14 +604,16 @@ read-only. `MetadataSnapshot(requirements)` and `writable_metadata_records` are
 available for cold owned construction. Native metadata bytes are not a network
 codec.
 
-`AbsoluteClock()` defaults to REALTIME; explicit TAI requires its configured
-TAI−UTC offset. `absolute_time_now` uses integer clock reads and labels the event
-and producer origin. The cold-cached Linux boot identity identifies local host
-clocks across processes. No synchronization or accuracy bound is inferred.
-Passing a previous event detects backward jumps; arbitrary forward jumps require
-a qualified clock provider. Deadlines continue to use monotonic time.
+`ReferenceTimestamp(timestamp; clock=METADATA_CLOCK_REALTIME, duration_nanoseconds=nothing)`
+keeps an exact UInt64 nanosecond value. `reference_timestamp_now(clock)` reads
+MONOTONIC, REALTIME or TAI without floating-point conversion; MODEL readings are
+supplied explicitly. Clock labels do not claim synchronization or accuracy.
+Unspecified reference duration uses UINT64_MAX; that value is not a timestamp.
+`ExposureTiming(start; clock, duration_nanoseconds=nothing)` keeps stream/model
+start separate from reference time. Duration-only exposure remains supported.
+The former absolute event history, clock mappings and uncertainty APIs are removed.
 
-Native 3.0.0, JLL 3.0.0 and regenerated bindings are required together. Private-core
+Native 4.0.0, JLL 4.0.0 and regenerated bindings are required together. Private-core
 checks are `test/ndarray_exchange_private_core.jl` and
 `test/metadata_records_private_core.jl`; both create and close their own cores.
 The blocking-filter fixture requires `--threads=2,1` or more: the interactive

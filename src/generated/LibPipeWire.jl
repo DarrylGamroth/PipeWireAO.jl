@@ -3920,9 +3920,9 @@ const SPA_META_START_custom = 512 % UInt32
 const SPA_META_START_PipeWireAO = 768 % UInt32
 const SPA_META_AcquisitionIdentity = 768 % UInt32
 const SPA_META_ExposureTiming = 769 % UInt32
-const SPA_META_AbsoluteTime = 770 % UInt32
 const SPA_META_OpticalChopping = 771 % UInt32
 const SPA_META_ElectricalTrigger = 772 % UInt32
+const SPA_META_ReferenceTimestamp = 773 % UInt32
 const SPA_META_START_features = 65536 % UInt32
 
 """
@@ -4112,27 +4112,16 @@ end
 
 const spa_meta_record_flag = UInt32
 const SPA_META_RECORD_VALID = 1 % UInt32
-const SPA_META_RECORD_UNCERTAINTY = 2 % UInt32
-const SPA_META_RECORD_MAPPED = 4 % UInt32
-const SPA_META_RECORD_CLOCK_STEP = 8 % UInt32
 
 const spa_meta_exposure_flag = UInt32
 const SPA_META_EXPOSURE_START_VALID = 1 % UInt32
 const SPA_META_EXPOSURE_DURATION_VALID = 2 % UInt32
-const SPA_META_EXPOSURE_UNCERTAINTY = 4 % UInt32
-const SPA_META_EXPOSURE_MAPPED = 8 % UInt32
 
 const spa_meta_clock = UInt32
 const SPA_META_CLOCK_MONOTONIC = 1 % UInt32
 const SPA_META_CLOCK_REALTIME = 2 % UInt32
 const SPA_META_CLOCK_TAI = 3 % UInt32
 const SPA_META_CLOCK_MODEL = 4 % UInt32
-
-const spa_meta_time_event = UInt32
-const SPA_META_TIME_EVENT_ACQUISITION = 1 % UInt32
-const SPA_META_TIME_EVENT_PRODUCTION = 2 % UInt32
-const SPA_META_TIME_EVENT_RECEIPT = 3 % UInt32
-const SPA_META_TIME_EVENT_FILE_WRITE = 4 % UInt32
 
 const spa_meta_optical_classification = UInt32
 const SPA_META_OPTICAL_ABSENT = 0 % UInt32
@@ -4162,34 +4151,20 @@ start\\_nsec denotes the start of [start, start + duration), in clock units ns.
 struct spa_meta_exposure_timing
     flags::UInt32
     clock::UInt32
-    clock_domain::NTuple{16, UInt8}
-    mapping::NTuple{16, UInt8}
     start_nsec::Int64
     duration_nsec::UInt64
-    uncertainty_nsec::UInt64
 end
 
 """
-    spa_meta_absolute_time_event
+    spa_meta_reference_timestamp
 
-Epoch seconds and normalized nanoseconds; labels do not assert synchronization.
+One sample-associated timestamp; clock labels do not assert synchronization. UINT64\\_MAX denotes unspecified duration and is not a valid timestamp.
 """
-struct spa_meta_absolute_time_event
-    seconds::Int64
-    nanoseconds::UInt32
+struct spa_meta_reference_timestamp
     clock::UInt32
-    event::UInt32
-    flags::UInt32
-    origin::NTuple{16, UInt8}
-    clock_domain::NTuple{16, UInt8}
-    mapping::NTuple{16, UInt8}
-    uncertainty_nsec::UInt64
-end
-
-struct spa_meta_absolute_time
-    count::UInt32
-    reserved::NTuple{3, UInt32}
-    events::NTuple{4, spa_meta_absolute_time_event}
+    reserved::UInt32
+    timestamp_nsec::UInt64
+    duration_nsec::UInt64
 end
 
 struct spa_meta_optical_chopping

@@ -2,13 +2,12 @@ module PipeWireAO
 
 using UnsafeArrays: UnsafeArray
 
-export metadata_is_transport_owned, validate_absolute_clock, MetadataRecord, metadata_record, set_metadata_bytes!, writable_metadata_records, MetadataSnapshot, capture_metadata!, clear_metadata!, copy_metadata!, metadata_fits,
-    AbsoluteClock, absolute_time_now, host_clock_domain,
+export metadata_is_transport_owned, MetadataRecord, metadata_record, set_metadata_bytes!, writable_metadata_records, MetadataSnapshot, capture_metadata!, clear_metadata!, copy_metadata!, metadata_fits,
+    reference_timestamp_now,
     MetadataClock, METADATA_CLOCK_MONOTONIC, METADATA_CLOCK_REALTIME, METADATA_CLOCK_TAI, METADATA_CLOCK_MODEL,
-    TimeEvent, TIME_EVENT_ACQUISITION, TIME_EVENT_PRODUCTION, TIME_EVENT_RECEIPT, TIME_EVENT_FILE_WRITE,
-    ExposureTiming, AbsoluteTime, AbsoluteTimes, validate_metadata_requirements, MetadataRequirement, MetadataRecords,
-    metadata_records, metadata_records_valid, initialize_metadata!, exposure_timing, absolute_times,
-    set_exposure_timing!, set_absolute_times!,
+    ExposureTiming, ReferenceTimestamp, validate_metadata_requirements, MetadataRequirement, MetadataRecords,
+    metadata_records, metadata_records_valid, initialize_metadata!, exposure_timing, reference_timestamp,
+    set_exposure_timing!, set_reference_timestamp!,
     CoreConnection,
     ContextModule,
     AcquisitionDomain,
@@ -343,18 +342,17 @@ include("filter.jl")
 include("listeners.jl")
 include("ndarray_exchange.jl")
 
-const _MINIMUM_JLL_VERSION = v"3.0.0+0"
+const _MINIMUM_JLL_VERSION = v"4.0.0+0"
 
 function __init__()
-    _initialize_host_clock_domain!()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)
     version >= _MINIMUM_JLL_VERSION || error(
         "PipeWireAO requires PipeWireAO_jll $_MINIMUM_JLL_VERSION or newer; " *
         "found $version. Update PipeWireAO_jll and restart Julia.",
     )
     native_version = VersionNumber(unsafe_string(LibPipeWire.pw_get_library_version()))
-    native_version >= v"3.0.0" || error(
-        "PipeWireAO's independent metadata ABI requires native 3.0.0 or newer; found $native_version.",
+    v"4.0.0" <= native_version < v"5.0.0" || error(
+        "PipeWireAO's independent metadata ABI requires native 4.x; found $native_version.",
     )
 end
 

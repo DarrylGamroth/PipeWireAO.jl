@@ -3,10 +3,11 @@
 using PipeWireAO
 function fixture(bytes,count)
     required=(MetadataRequirement(SPA.META_HEADER),MetadataRequirement(SPA.META_ACQUISITION_IDENTITY),MetadataRequirement(SPA.META_EXPOSURE_TIMING))
+    base_bytes=sum(r -> Int(r.size),required)
     opaque=count-3
     entries=[r.type=>zeros(UInt8,Int(r.size)) for r in required]
     for i in 1:opaque
-        size=i==opaque ? bytes-136-8*(opaque-1) : 8
+        size=i==opaque ? bytes-base_bytes-8*(opaque-1) : 8
         push!(entries,UInt32(0x900+i)=>zeros(UInt8,size))
     end
     return MetadataSnapshot(entries)
@@ -30,7 +31,7 @@ function run(metadata,identity,timing)
         bytes=@allocated(update!(metadata,identity,timing)))
 end
 identity=AcquisitionIdentity(AcquisitionDomain(ntuple(UInt8,16)),7,typemax(UInt64))
-timing=ExposureTiming(123456;clock=METADATA_CLOCK_MONOTONIC,clock_domain=host_clock_domain(),duration_nanoseconds=5000,uncertainty_nanoseconds=9)
+timing=ExposureTiming(123456;clock=METADATA_CLOCK_MONOTONIC,duration_nanoseconds=5000)
 for (bytes,count) in ((512,4),(4096,64))
     snapshot=fixture(bytes,count)
     records=writable_metadata_records(snapshot)

@@ -43,11 +43,11 @@ end
         pending = Threads.Atomic{Bool}(false)
         sequence = Ref(UInt64(0))
         expected = Ref{Union{Nothing,OpticalClassification}}(nothing)
-        received = Tuple{UInt64,Union{Nothing,OpticalClassification},AcquisitionTriggerState,Int64}[]
+        received = Tuple{UInt64,Union{Nothing,OpticalClassification},AcquisitionTriggerState,Int64,Union{Nothing,ReferenceTimestamp}}[]
         source_buffer, sink_buffer = StreamBuffer(), StreamBuffer()
         callback_allocations = Threads.Atomic{Int}(-1)
         format = NdArrayFormat(NdArray.U8, (4,); layout=NdArray.ROW_MAJOR)
-        layouts=(MetadataRequirement(SPA.META_OPTICAL_CHOPPING),MetadataRequirement(SPA.META_ELECTRICAL_TRIGGER;required=true),MetadataRequirement(0x900,8;required=true))
+        layouts=(MetadataRequirement(SPA.META_REFERENCE_TIMESTAMP),MetadataRequirement(SPA.META_OPTICAL_CHOPPING),MetadataRequirement(SPA.META_ELECTRICAL_TRIGGER;required=true),MetadataRequirement(0x900,8;required=true))
         buffer_parameters = (Pod(buffers_param(buffers=2, blocks=1, size=4)),
             Pod(header_metadata_param()),
             (Pod(metadata_param(r)) for r in layouts)...)
@@ -68,6 +68,7 @@ end
                 set_buffer_header!(source_buffer, BufferHeader(0, 0, Int64(sequence[]), 0, sequence[]))
                 properties = writable_metadata_records(source_buffer)
                 expected[] === nothing || set_optical_classification!(properties, expected[])
+                isodd(sequence[]) && set_reference_timestamp!(properties,ReferenceTimestamp(typemax(UInt64)-sequence[];clock=METADATA_CLOCK_MODEL,duration_nanoseconds=0))
                 set_trigger_classification!(properties, ACQUISITION_TRIGGER_LOW)
                 set_metadata_bytes!(properties,UInt32(0x900),ntuple(i -> UInt8(((sequence[]+100) >> (8*(i-1))) & 0xff),8))
                 queue_buffer!(source_buffer, stream)
@@ -84,10 +85,12 @@ end
                 properties = metadata_records(sink_buffer)
                 properties === nothing && error("negotiated properties are missing")
                 metadata_records_valid(properties) || error("received malformed properties")
+                opaque = metadata_bytes(something(metadata_record(properties,UInt32(0x900))))
+                opaque_value = sum(UInt64(byte) << (8*(i-1)) for (i,byte) in enumerate(opaque))
                 push!(received, (buffer_header(sink_buffer).sequence,
                     optical_classification(properties),
                     something(trigger_classification(properties)),
-                    Int64(sum(UInt64(byte) << (8*(i-1)) for (i,byte) in enumerate(metadata_bytes(something(metadata_record(properties,UInt32(0x900)))))))))
+                    Int64(opaque_value),reference_timestamp(properties)))
             finally
                 queue_buffer!(sink_buffer, stream)
             end
@@ -170,7 +173,8 @@ end
                 completed == :ok || error("properties deadline: pending=$(pending[]), source=$(stream_state(source)), sink=$(stream_state(sink)), filter=$(filter_state(filter)), failure=$(last_error(filter)), callback=$(filter.callback_error[]), task_done=$(istaskdone(filter_task)), allocations=$(callback_allocations[])")
                 @test completed == :ok
                 with_thread_loop_lock(loop) do _
-                    @test received[index] == (UInt64(index), classification, ACQUISITION_TRIGGER_LOW, Int64(index + 100))
+                    @test received[index] == (UInt64(index), classification, ACQUISITION_TRIGGER_LOW, Int64(index + 100),
+                        isodd(index) ? ReferenceTimestamp(typemax(UInt64)-UInt64(index);clock=METADATA_CLOCK_MODEL,duration_nanoseconds=0) : nothing)
                 end
             end
             @test callback_allocations[] == 0

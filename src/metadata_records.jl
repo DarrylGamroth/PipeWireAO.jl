@@ -14,91 +14,45 @@ end
     METADATA_CLOCK_TAI = 3
     METADATA_CLOCK_MODEL = 4
 end
-"The event described by an absolute timestamp."
-@enum TimeEvent::UInt32 begin
-    TIME_EVENT_ACQUISITION = 1
-    TIME_EVENT_PRODUCTION = 2
-    TIME_EVENT_RECEIPT = 3
-    TIME_EVENT_FILE_WRITE = 4
-end
-const _EMPTY_METADATA_ID = ntuple(_ -> UInt8(0), 16)
-_metadata_id(id::NTuple{16,UInt8}, name) = all(iszero,id) ? throw(ArgumentError("$name must be nonzero")) : id
-_metadata_mapping(::Nothing) = _EMPTY_METADATA_ID
-_metadata_mapping(id::NTuple{16,UInt8}) = _metadata_id(id,"clock mapping")
 _metadata_int64(value::Integer) = typemin(Int64) <= value <= typemax(Int64) ? Int64(value) : throw(ArgumentError("timestamp must fit Int64"))
 _metadata_uint64(value::Integer) = 0 <= value <= typemax(UInt64) ? UInt64(value) : throw(ArgumentError("value must fit UInt64"))
 
-"An owned exposure interval; independently optional start, duration and uncertainty are explicit."
+"An owned exposure interval with independently optional start and duration."
 struct ExposureTiming
     has_start::Bool
     start_nanoseconds::Int64
     clock::MetadataClock
-    clock_domain::NTuple{16,UInt8}
-    mapping::NTuple{16,UInt8}
     has_duration::Bool
     duration_nanoseconds::UInt64
-    has_uncertainty::Bool
-    uncertainty_nanoseconds::UInt64
 end
-function ExposureTiming(start::Integer; clock::MetadataClock,clock_domain::NTuple{16,UInt8},
-        mapping::Union{Nothing,NTuple{16,UInt8}}=nothing,duration_nanoseconds::Union{Nothing,Integer}=nothing,
-        uncertainty_nanoseconds::Union{Nothing,Integer}=nothing)
+function ExposureTiming(start::Integer; clock::MetadataClock,
+        duration_nanoseconds::Union{Nothing,Integer}=nothing)
     clock == _METADATA_CLOCK_UNAVAILABLE && throw(ArgumentError("exposure clock is unavailable"))
     duration = isnothing(duration_nanoseconds) ? UInt64(0) : _metadata_uint64(duration_nanoseconds)
     isnothing(duration_nanoseconds) || duration > 0 || throw(ArgumentError("exposure duration must be positive"))
-    return ExposureTiming(true,_metadata_int64(start),clock,_metadata_id(clock_domain,"exposure clock domain"),
-        _metadata_mapping(mapping),!isnothing(duration_nanoseconds),duration,!isnothing(uncertainty_nanoseconds),
-        isnothing(uncertainty_nanoseconds) ? UInt64(0) : _metadata_uint64(uncertainty_nanoseconds))
+    return ExposureTiming(true,_metadata_int64(start),clock,!isnothing(duration_nanoseconds),duration)
 end
 function ExposureTiming(;duration_nanoseconds::Integer)
     duration = _metadata_uint64(duration_nanoseconds)
     duration > 0 || throw(ArgumentError("exposure duration must be positive"))
-    return ExposureTiming(false,0,_METADATA_CLOCK_UNAVAILABLE,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,true,duration,false,0)
+    return ExposureTiming(false,0,_METADATA_CLOCK_UNAVAILABLE,true,duration)
 end
 
-"An owned absolute event time in integer epoch seconds and normalized nanoseconds."
-struct AbsoluteTime
-    seconds::Int64
-    nanoseconds::UInt32
+"One sample-associated unsigned nanosecond timestamp and optional duration."
+struct ReferenceTimestamp
+    timestamp_nanoseconds::UInt64
     clock::MetadataClock
-    event::TimeEvent
-    origin::NTuple{16,UInt8}
-    clock_domain::NTuple{16,UInt8}
-    mapping::NTuple{16,UInt8}
-    has_uncertainty::Bool
-    uncertainty_nanoseconds::UInt64
-    clock_step::Bool
+    has_duration::Bool
+    duration_nanoseconds::UInt64
 end
-function AbsoluteTime(seconds::Integer,nanoseconds::Integer;clock::MetadataClock=METADATA_CLOCK_REALTIME,
-        event::TimeEvent,origin::NTuple{16,UInt8},clock_domain::NTuple{16,UInt8},
-        mapping::Union{Nothing,NTuple{16,UInt8}}=nothing,uncertainty_nanoseconds::Union{Nothing,Integer}=nothing,
-        clock_step::Bool=false)
-    clock in (METADATA_CLOCK_REALTIME,METADATA_CLOCK_TAI) || throw(ArgumentError("absolute time requires REALTIME or TAI"))
-    0 <= nanoseconds < 1_000_000_000 || throw(ArgumentError("absolute nanoseconds must be in 0:999999999"))
-    return AbsoluteTime(_metadata_int64(seconds),UInt32(nanoseconds),clock,event,_metadata_id(origin,"event origin"),
-        _metadata_id(clock_domain,"absolute clock domain"),_metadata_mapping(mapping),!isnothing(uncertainty_nanoseconds),
-        isnothing(uncertainty_nanoseconds) ? UInt64(0) : _metadata_uint64(uncertainty_nanoseconds),clock_step)
-end
-const _EMPTY_ABSOLUTE_TIME = AbsoluteTime(0,0,METADATA_CLOCK_REALTIME,TIME_EVENT_PRODUCTION,
-    _EMPTY_METADATA_ID,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,false,0,false)
-"At most four owned absolute event times, preserving each event and origin independently."
-struct AbsoluteTimes <: AbstractVector{AbsoluteTime}
-    count::UInt8
-    values::NTuple{4,AbsoluteTime}
-end
-Base.size(times::AbsoluteTimes) = (Int(times.count),)
-Base.length(times::AbsoluteTimes) = Int(times.count)
-Base.IndexStyle(::Type{AbsoluteTimes}) = IndexLinear()
-@inline function Base.getindex(times::AbsoluteTimes,index::Int)
-    @boundscheck checkbounds(times,index)
-    return times.values[index]
-end
-function AbsoluteTimes(times::Union{Tuple,AbstractVector{AbsoluteTime}}=())
-    length(times) <= 4 || throw(ArgumentError("at most four absolute events are supported"))
-    for i in eachindex(times), j in 1:i-1
-        (times[i].event == times[j].event && times[i].origin == times[j].origin) && throw(ArgumentError("duplicate absolute event/origin"))
-    end
-    return AbsoluteTimes(UInt8(length(times)),ntuple(i -> i <= length(times) ? times[i] : _EMPTY_ABSOLUTE_TIME,4))
+function ReferenceTimestamp(timestamp::Integer;clock::MetadataClock=METADATA_CLOCK_REALTIME,
+        duration_nanoseconds::Union{Nothing,Integer}=nothing)
+    clock == _METADATA_CLOCK_UNAVAILABLE && throw(ArgumentError("reference clock is unavailable"))
+    stamp = _metadata_uint64(timestamp)
+    stamp != typemax(UInt64) || throw(ArgumentError("UINT64_MAX is not a valid reference timestamp"))
+    duration = isnothing(duration_nanoseconds) ? typemax(UInt64) : _metadata_uint64(duration_nanoseconds)
+    isnothing(duration_nanoseconds) || duration != typemax(UInt64) || throw(ArgumentError("UINT64_MAX denotes an unspecified duration"))
+    return ReferenceTimestamp(stamp,clock,!isnothing(duration_nanoseconds),duration)
 end
 
 "One exact, cold metadata layout declaration; required records need valid per-buffer facts."
@@ -216,18 +170,17 @@ function exposure_timing(records::MetadataRecords)
         m=_record(records,UInt32(LibPipeWire.SPA_META_ExposureTiming);required=true)
         m===nothing && return nothing
         x=unsafe_load(Ptr{LibPipeWire.spa_meta_exposure_timing}(m.data))
-        return ExposureTiming(!iszero(x.flags&1),x.start_nsec,MetadataClock(x.clock),x.clock_domain,x.mapping,
-            !iszero(x.flags&2),x.duration_nsec,!iszero(x.flags&4),x.uncertainty_nsec)
+        return ExposureTiming(!iszero(x.flags&1),x.start_nsec,MetadataClock(x.clock),
+            !iszero(x.flags&2),x.duration_nsec)
     end
 end
 exposure_timing(buffer)=GC.@preserve buffer exposure_timing(metadata_records(buffer))
 function set_exposure_timing!(records::MetadataRecords{true},value::ExposureTiming)
     GC.@preserve records begin
         m=unsafe_load(_writable_record(records,UInt32(LibPipeWire.SPA_META_ExposureTiming)))
-        flags=UInt32(value.has_start)+UInt32(value.has_duration)*2+UInt32(value.has_uncertainty)*4+
-            UInt32(!all(iszero,value.mapping))*8
-        native=LibPipeWire.spa_meta_exposure_timing(flags,UInt32(value.clock),value.clock_domain,value.mapping,
-            value.start_nanoseconds,value.duration_nanoseconds,value.uncertainty_nanoseconds)
+        flags=UInt32(value.has_start)+UInt32(value.has_duration)*2
+        native=LibPipeWire.spa_meta_exposure_timing(flags,UInt32(value.clock),
+            value.start_nanoseconds,value.duration_nanoseconds)
         probe=Ref(native)
         check=LibPipeWire.spa_meta(m.type,m.size,Base.unsafe_convert(Ptr{Cvoid},probe))
         GC.@preserve probe LibPipeWire.spa_meta_record_validate(Ref(check),true) || throw(ArgumentError("invalid exposure timing"))
@@ -236,38 +189,30 @@ function set_exposure_timing!(records::MetadataRecords{true},value::ExposureTimi
     end
 end
 set_exposure_timing!(buffer::Union{AbstractPipeWireBuffer,NdArrayFilterBuffer{true}},value::ExposureTiming)=(set_exposure_timing!(writable_metadata_records(buffer),value);buffer)
-_native_absolute(t::AbsoluteTime)=LibPipeWire.spa_meta_absolute_time_event(t.seconds,t.nanoseconds,UInt32(t.clock),UInt32(t.event),
-    UInt32(1)+UInt32(t.has_uncertainty)*2+UInt32(!all(iszero,t.mapping))*4+UInt32(t.clock_step)*8,
-    t.origin,t.clock_domain,t.mapping,t.uncertainty_nanoseconds)
-function _absolute_value(t::LibPipeWire.spa_meta_absolute_time_event)
-    return AbsoluteTime(t.seconds,t.nanoseconds,MetadataClock(t.clock),TimeEvent(t.event),t.origin,t.clock_domain,t.mapping,
-        !iszero(t.flags&2),t.uncertainty_nsec,!iszero(t.flags&8))
-end
-function absolute_times(records::MetadataRecords)
+function reference_timestamp(records::MetadataRecords)
     GC.@preserve records begin
-        m=_record(records,UInt32(LibPipeWire.SPA_META_AbsoluteTime);required=true)
-        m===nothing && return AbsoluteTimes()
-        x=unsafe_load(Ptr{LibPipeWire.spa_meta_absolute_time}(m.data))
-        return AbsoluteTimes(UInt8(x.count),ntuple(i -> i<=x.count ? _absolute_value(x.events[i]) : _EMPTY_ABSOLUTE_TIME,4))
+        m=_record(records,UInt32(LibPipeWire.SPA_META_ReferenceTimestamp);required=true)
+        m===nothing && return nothing
+        x=unsafe_load(Ptr{LibPipeWire.spa_meta_reference_timestamp}(m.data))
+        return ReferenceTimestamp(x.timestamp_nsec,MetadataClock(x.clock),
+            x.duration_nsec != typemax(UInt64),x.duration_nsec)
     end
 end
-absolute_times(buffer)=GC.@preserve buffer absolute_times(metadata_records(buffer))
-function set_absolute_times!(records::MetadataRecords{true},values::Union{Tuple,AbstractVector{AbsoluteTime}})
+reference_timestamp(buffer)=GC.@preserve buffer reference_timestamp(metadata_records(buffer))
+function set_reference_timestamp!(records::MetadataRecords{true},value::ReferenceTimestamp)
     GC.@preserve records begin
-        times=AbsoluteTimes(values)
-        m=unsafe_load(_writable_record(records,UInt32(LibPipeWire.SPA_META_AbsoluteTime)))
-        zero_event=LibPipeWire.spa_meta_absolute_time_event(0,0,0,0,0,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,_EMPTY_METADATA_ID,0)
-        native=LibPipeWire.spa_meta_absolute_time(UInt32(length(times)),(UInt32(0),UInt32(0),UInt32(0)),
-            ntuple(i -> i<=length(times) ? _native_absolute(times[i]) : zero_event,4))
+        m=unsafe_load(_writable_record(records,UInt32(LibPipeWire.SPA_META_ReferenceTimestamp)))
+        value.has_duration == (value.duration_nanoseconds != typemax(UInt64)) || throw(ArgumentError("inconsistent reference duration"))
+        native=LibPipeWire.spa_meta_reference_timestamp(UInt32(value.clock),0,
+            value.timestamp_nanoseconds,value.duration_nanoseconds)
         probe=Ref(native)
         check=LibPipeWire.spa_meta(m.type,m.size,Base.unsafe_convert(Ptr{Cvoid},probe))
-        GC.@preserve probe LibPipeWire.spa_meta_record_validate(Ref(check),!isempty(times)) ||
-            throw(ArgumentError("invalid absolute event time"))
+        GC.@preserve probe LibPipeWire.spa_meta_record_validate(Ref(check),true) || throw(ArgumentError("invalid reference timestamp"))
         unsafe_store!(Ptr{typeof(native)}(m.data),native)
         return records
     end
 end
-set_absolute_times!(buffer::Union{AbstractPipeWireBuffer,NdArrayFilterBuffer{true}},values::Union{Tuple,AbstractVector{AbsoluteTime}})=(set_absolute_times!(writable_metadata_records(buffer),values);buffer)
+set_reference_timestamp!(buffer::Union{AbstractPipeWireBuffer,NdArrayFilterBuffer{true}},value::ReferenceTimestamp)=(set_reference_timestamp!(writable_metadata_records(buffer),value);buffer)
 function optical_classification(records::MetadataRecords)
     GC.@preserve records begin
         m=_record(records,UInt32(LibPipeWire.SPA_META_OpticalChopping);required=true)
@@ -307,62 +252,29 @@ metadata_param(requirement::MetadataRequirement) = metadata_param(requirement.ty
 "Invalidate all records of a recycled callback output without changing its skeleton."
 clear_buffer_metadata!(buffer::NdArrayFilterBuffer{true}) = (initialize_metadata!(buffer);buffer)
 
-const _HOST_CLOCK_DOMAIN = Ref(_EMPTY_METADATA_ID)
-"The cold-cached Linux boot identity shared by local clock readers."
-host_clock_domain() = _HOST_CLOCK_DOMAIN[]
-function _initialize_host_clock_domain!()
-    raw = hex2bytes(replace(strip(read("/proc/sys/kernel/random/boot_id",String)),"-"=>""))
-    length(raw)==16 || error("invalid Linux boot clock domain")
-    _HOST_CLOCK_DOMAIN[] = _metadata_id(ntuple(i -> raw[i],16),"host clock domain")
-    return nothing
-end
 struct _MetadataTimespec
     seconds::Clong
     nanoseconds::Clong
 end
 function _metadata_clock_read(clock::MetadataClock)
-    clock in (METADATA_CLOCK_REALTIME,METADATA_CLOCK_TAI) || throw(ArgumentError("absolute clock must be REALTIME or TAI"))
+    id = clock == METADATA_CLOCK_REALTIME ? 0 : clock == METADATA_CLOCK_MONOTONIC ? 1 :
+        clock == METADATA_CLOCK_TAI ? 11 : throw(ArgumentError("host reference clock must be MONOTONIC, REALTIME or TAI"))
     result = Ref(_MetadataTimespec(0,0))
-    code=ccall(:clock_gettime,Cint,(Cint,Ref{_MetadataTimespec}),clock==METADATA_CLOCK_REALTIME ? 0 : 11,result)
+    code=ccall(:clock_gettime,Cint,(Cint,Ref{_MetadataTimespec}),id,result)
     code==0 || throw(SystemError("clock_gettime",Libc.errno()))
     return result[]
 end
-"An explicit absolute clock selection; TAI requires the configured positive TAI−UTC offset."
-struct AbsoluteClock
-    clock::MetadataClock
-    tai_utc_offset::Int64
-    function AbsoluteClock(clock::MetadataClock=METADATA_CLOCK_REALTIME;tai_utc_offset::Union{Nothing,Integer}=nothing)
-        clock in (METADATA_CLOCK_REALTIME,METADATA_CLOCK_TAI) || throw(ArgumentError("absolute clock must be REALTIME or TAI"))
-        if clock==METADATA_CLOCK_TAI
-            tai_utc_offset === nothing && throw(ArgumentError("TAI requires an explicit configured TAI−UTC offset"))
-            0 < tai_utc_offset <= 128 || throw(ArgumentError("configured TAI−UTC offset is outside 1:128 seconds"))
-        elseif tai_utc_offset !== nothing
-            throw(ArgumentError("REALTIME does not accept a TAI−UTC offset"))
-        end
-        value=new(clock,isnothing(tai_utc_offset) ? 0 : Int64(tai_utc_offset))
-        _checked_absolute_clock(value)
-        return value
-    end
+function _metadata_clock_nanoseconds(seconds::Integer,nanoseconds::Integer)
+    0 <= nanoseconds < 1_000_000_000 || throw(ArgumentError("clock nanoseconds are not normalized"))
+    # Wide arithmetic rejects both pre-epoch readings and unsigned 64-bit overflow.
+    value = Int128(seconds)*1_000_000_000 + nanoseconds
+    0 <= value < typemax(UInt64) || throw(ArgumentError("clock reading does not fit a reference timestamp"))
+    return UInt64(value)
 end
-function _checked_absolute_clock(clock::AbsoluteClock)
-    if clock.clock==METADATA_CLOCK_TAI
-        before=_metadata_clock_read(METADATA_CLOCK_REALTIME)
-        value=_metadata_clock_read(METADATA_CLOCK_TAI)
-        after=_metadata_clock_read(METADATA_CLOCK_REALTIME)
-        delta_before=(Int128(value.seconds)-before.seconds-clock.tai_utc_offset)*1_000_000_000+value.nanoseconds-before.nanoseconds
-        delta_after=(Int128(value.seconds)-after.seconds-clock.tai_utc_offset)*1_000_000_000+value.nanoseconds-after.nanoseconds
-        delta_before >= 0 && delta_after <= 0 || throw(InvalidStateException("TAI clock offset is unconfigured, changed or stepped",:clock))
-        return value
-    end
-    return _metadata_clock_read(METADATA_CLOCK_REALTIME)
-end
-"Read integer absolute event time without inferring acquisition time from callback arrival."
-function absolute_time_now(clock::AbsoluteClock;event::TimeEvent,origin::NTuple{16,UInt8},previous::Union{Nothing,AbsoluteTime}=nothing)
-    value=_checked_absolute_clock(clock)
-    stepped = previous !== nothing && previous.clock==clock.clock && previous.clock_domain==host_clock_domain() &&
-        (value.seconds < previous.seconds || (value.seconds==previous.seconds && value.nanoseconds < previous.nanoseconds))
-    return AbsoluteTime(Int64(value.seconds),UInt32(value.nanoseconds),clock.clock,event,origin,
-        host_clock_domain(),_EMPTY_METADATA_ID,false,0,stepped)
+"Read one host clock value associated with a produced sample, without inferring exposure start."
+function reference_timestamp_now(clock::MetadataClock=METADATA_CLOCK_REALTIME)
+    value=_metadata_clock_read(clock)
+    return ReferenceTimestamp(_metadata_clock_nanoseconds(value.seconds,value.nanoseconds);clock)
 end
 
 "Bounded owned metadata storage for held samples, capture and replay; no borrowed pointers are retained."
@@ -433,7 +345,7 @@ function MetadataSnapshot(entries)
     used=0
     for entry in entries
         type,payload=entry
-        LibPipeWire.spa_meta_type_is_transport_owned(UInt32(type)) && throw(ArgumentError("transport-owned metadata cannot be retained as event facts"))
+        LibPipeWire.spa_meta_type_is_transport_owned(UInt32(type)) && throw(ArgumentError("transport-owned metadata cannot be retained as sample facts"))
         snapshot.count < 64 || throw(ArgumentError("too many metadata records"))
         size=length(payload)
         aligned=(size+7)&~7
@@ -565,8 +477,6 @@ function writable_metadata_records(buffer::AbstractPipeWireBuffer)
 end
 writable_metadata_records(buffer::NdArrayFilterBuffer{true})=metadata_records(buffer)
 writable_metadata_records(records::MetadataRecords{true})=records
-"Check an absolute clock policy before execution without claiming an event happened at that reading."
-validate_absolute_clock(clock::AbsoluteClock)=(_checked_absolute_clock(clock);clock)
 
 function metadata_records_valid(records::MetadataRecords,requirements::Vector{MetadataRequirement})
     length(requirements)<=64 || return false

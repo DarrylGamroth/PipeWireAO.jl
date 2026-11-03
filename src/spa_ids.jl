@@ -273,7 +273,7 @@ const DATA_FLAG_HUGE_1GB = UInt32(1 << 6)
     META_SYNC_TIMELINE = LibPipeWire.SPA_META_SyncTimeline
     META_ACQUISITION_IDENTITY = LibPipeWire.SPA_META_AcquisitionIdentity
     META_EXPOSURE_TIMING = LibPipeWire.SPA_META_ExposureTiming
-    META_ABSOLUTE_TIME = LibPipeWire.SPA_META_AbsoluteTime
+    META_REFERENCE_TIMESTAMP = LibPipeWire.SPA_META_ReferenceTimestamp
     META_OPTICAL_CHOPPING = LibPipeWire.SPA_META_OpticalChopping
     META_ELECTRICAL_TRIGGER = LibPipeWire.SPA_META_ElectricalTrigger
 end
