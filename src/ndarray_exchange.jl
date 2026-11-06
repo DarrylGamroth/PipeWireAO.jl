@@ -218,7 +218,8 @@ function _array_write!(state::_ArrayExchangeState{T}, buffer) where {T}
     metadata = initialize_metadata!(buffer)
     set_buffer_header!(buffer,something(state.header))
     state.identity === nothing || set_acquisition_identity!(metadata, state.identity)
-    state.duration === nothing || set_exposure_timing!(metadata, ExposureTiming(;duration_nanoseconds=state.duration))
+    duration = state.duration
+    duration === nothing || set_exposure_timing!(metadata, ExposureTiming(;duration_nanoseconds=duration))
     return nothing
 end
 

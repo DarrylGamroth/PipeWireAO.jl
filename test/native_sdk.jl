@@ -1,7 +1,7 @@
 using PipeWireAO, Libdl, Test
 
-# New callback layouts must never be interpreted by the retired native ABI.
-@test library_version() == v"4.0.0"
+# Prepared metadata requirements need the released native host extension.
+@test v"4.0.1" <= library_version() < v"5.0.0"
 let actual = realpath(Libdl.dlpath(PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)),
     expected = get(ENV, "PIPEWIREAO_TEST_LIBRARY", PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)
     @test actual == realpath(expected)
@@ -40,7 +40,7 @@ let retired_prefix=get(ENV,"PIPEWIREAO_TEST_RETIRED_PREFIX","")
                 end
                 wait(process)
                 @test !success(process)
-                @test occursin("requires native 4.x; found 3.",String(take!(output)))
+                @test occursin("requires native 4.0.1 or newer within 4.x; found ",String(take!(output)))
             end
         end
     end

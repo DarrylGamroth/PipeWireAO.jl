@@ -548,7 +548,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 4.0.0 cohort.
+Source validation requires the native 4.0.1 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -613,7 +613,7 @@ Unspecified reference duration uses UINT64_MAX; that value is not a timestamp.
 start separate from reference time. Duration-only exposure remains supported.
 The former absolute event history, clock mappings and uncertainty APIs are removed.
 
-Native 4.0.0, JLL 4.0.0 and regenerated bindings are required together. Private-core
+Native 4.0.1, JLL 4.0.1 and regenerated bindings are required together. Private-core
 checks are `test/ndarray_exchange_private_core.jl` and
 `test/metadata_records_private_core.jl`; both create and close their own cores.
 The blocking-filter fixture requires `--threads=2,1` or more: the interactive
@@ -752,3 +752,18 @@ julia --project=gen gen/generator.jl
 
 The generator environment is separate from the runtime package, so Clang.jl
 is not a dependency of PipeWireAO.jl users.
+
+## Prepared metadata host release
+
+PipeWireAO 0.9.1 requires PipeWireAO_jll 4.0.1+0 or newer within native major 4.
+Native 4.0.1 includes the FGN prepared Port metadata query in the released host.
+Configured strict acquisition requirements are advertised and checked during
+graph construction; static Port metadata and processing callbacks are unchanged.
+No manual host patch is needed. Update both packages and restart existing Julia
+processes or host services so they load the new libraries and modules.
+
+Validation selects the published JLL without local product preferences, records
+the loaded client library and daemon/module paths, and uses the released Rust
+0.2.0 plugin unchanged. The old 4.0.0 artifact fails the strict requiredness
+check; 4.0.1 is required to pass it. See the [0.9.1 validation record](docs/releases/v0.9.1.md) for the
+completed checks and platform boundaries.
