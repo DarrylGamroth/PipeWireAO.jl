@@ -19,6 +19,7 @@ mutable struct _ArrayExchangeState{T,N}
     header::Union{Nothing,BufferHeader}
     identity::Union{Nothing,AcquisitionIdentity}
     duration::Union{Nothing,UInt64}
+    reference_timestamp::Union{Nothing,ReferenceTimestamp}
     expected::Union{UInt64,AcquisitionIdentity}
     expected_duration::Union{Nothing,UInt64}
 end
@@ -40,7 +41,7 @@ function _ArrayExchangeState(storage::Vector{T}, format::NdArrayFormat{N}, schem
     return _ArrayExchangeState{T,N}(
         copy(storage), format, semantic_schema, StreamBuffer(), Threads.Atomic{UInt8}(_ARRAY_IDLE),
         Threads.Condition(), Threads.Atomic{Bool}(false), nothing, false, false,
-        UInt64(0), nothing, nothing, nothing, UInt64(0), nothing,
+        UInt64(0), nothing, nothing, nothing, nothing, UInt64(0), nothing,
     )
 end
 
@@ -167,6 +168,7 @@ function _array_buffer_parameters(state::_ArrayExchangeState)
         Pod(header_metadata_param()),
         Pod(metadata_param(MetadataRequirement(SPA.META_ACQUISITION_IDENTITY))),
         Pod(metadata_param(MetadataRequirement(SPA.META_EXPOSURE_TIMING))),
+        Pod(metadata_param(MetadataRequirement(SPA.META_REFERENCE_TIMESTAMP))),
     )
 end
 
@@ -220,6 +222,7 @@ function _array_write!(state::_ArrayExchangeState{T}, buffer) where {T}
     state.identity === nothing || set_acquisition_identity!(metadata, state.identity)
     duration = state.duration
     duration === nothing || set_exposure_timing!(metadata, ExposureTiming(;duration_nanoseconds=duration))
+    state.reference_timestamp === nothing || set_reference_timestamp!(metadata, state.reference_timestamp)
     return nothing
 end
 
@@ -382,15 +385,18 @@ end
 
 """
     submit_array!(source, values::AbstractVector{T}, header;
-                  identity=nothing, exposure_duration_ns=nothing) -> UInt64
+                  identity=nothing, exposure_duration_ns=nothing, reference_timestamp=nothing) -> UInt64
 
 Stage a private payload copy and request native processing promptly. One submit
 may be outstanding; acknowledge publication with `wait_array_source!` before
 submitting again. The positive lifetime token is independent of Header sequence,
 so a new acquisition generation may restart its Header sequence at one.
+An optional `ReferenceTimestamp` is published exactly as supplied; omitting it
+leaves that sample's reference timestamp absent, including on reused buffers.
 """
 function submit_array!(source::NdArraySource{T}, values::AbstractVector{T}, header::BufferHeader;
-    identity::Union{Nothing,AcquisitionIdentity}=nothing, exposure_duration_ns=nothing) where {T}
+    identity::Union{Nothing,AcquisitionIdentity}=nothing, exposure_duration_ns=nothing,
+    reference_timestamp::Union{Nothing,ReferenceTimestamp}=nothing) where {T}
     length(values) == length(source.state.values) || throw(DimensionMismatch("submitted payload length differs from the wire shape"))
     header.sequence > 0 || throw(ArgumentError("Header sequence must be positive"))
     duration = _array_duration(exposure_duration_ns)
@@ -406,6 +412,7 @@ function submit_array!(source::NdArraySource{T}, values::AbstractVector{T}, head
         state.header = header
         state.identity = identity
         state.duration = duration
+        state.reference_timestamp = reference_timestamp
         state.token += 1
         state.phase[] = _ARRAY_PENDING
         try

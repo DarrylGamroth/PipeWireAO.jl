@@ -55,6 +55,16 @@ export metadata_is_transport_owned, MetadataRecord, metadata_record, set_metadat
     LinkInfo,
     LinkState,
     LoopChannel,
+    CommandReceiver,
+    CommandSender,
+    CommandSendStatus,
+    COMMAND_ACCEPTED,
+    COMMAND_FULL,
+    COMMAND_CLOSED,
+    command_endpoint,
+    commands,
+    try_send!,
+    check_command_error,
     EventSource,
     IdleSource,
     IOSource,
@@ -219,6 +229,7 @@ export metadata_is_transport_owned, MetadataRecord, metadata_record, set_metadat
     is_lazy,
     is_mapped,
     isrunning,
+    iterate!,
     io_param,
     enable!,
     bound_id,
@@ -336,6 +347,7 @@ include("run_control.jl")
 include("props_buffer.jl")
 include("objects.jl")
 include("ndarray_filter.jl")
+include("command_endpoint.jl")
 include("stream.jl")
 include("metadata_records.jl")
 include("filter.jl")

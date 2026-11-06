@@ -230,6 +230,8 @@ function propagate_metadata!(
     return output
 end
 
+abstract type AbstractCommandReceiver end
+
 """
     NdArrayFilter(name, ports; remote=nothing, on_prepare=nothing,
                   on_process, on_parameter=nothing, on_deactivate=nothing,
@@ -318,6 +320,7 @@ mutable struct NdArrayFilter{Callbacks}
     input_port_indices::Vector{UInt32}
     output_port_indices::Vector{UInt32}
     metadata_enabled::Bool
+    command_receivers::IdDict{AbstractCommandReceiver,Nothing}
 end
 
 function _record_ndarray_filter_callback_error(filter::NdArrayFilter, error)
@@ -639,6 +642,7 @@ function NdArrayFilter(
         UInt32[index - 1 for (index, port) in enumerate(p for p in ports if p.direction == DIRECTION_INPUT) if !port.parameter],
         UInt32[index - 1 for (index, port) in enumerate(p for p in ports if p.direction == DIRECTION_OUTPUT)],
         any(port -> !isempty(port.metadata), ports),
+        IdDict{AbstractCommandReceiver,Nothing}(),
     )
     storage = _native_ndarray_filter_ports(ports)
     events = [_ndarray_filter_events(filter)]
@@ -760,7 +764,7 @@ function run!(filter::NdArrayFilter)
     result = try
         # The native main loop blocks while other threads may enter Julia
         # through process and parameter callbacks. It must permit GC then.
-        @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_ndarray_filter_run(
+        GC.@preserve filter @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_ndarray_filter_run(
             handle::Ptr{LibPipeWire.pw_ndarray_filter}
         )::Cint
     finally
@@ -837,6 +841,12 @@ function Base.close(filter::NdArrayFilter)
             InvalidStateException(
                 "cannot close a running ndarray filter; call quit! and wait for run!",
                 :running,
+            ),
+        )
+        isempty(filter.command_receivers) || throw(
+            InvalidStateException(
+                "close command receivers before closing their ndarray filter",
+                :open_command_receivers,
             ),
         )
         handle = Ptr{LibPipeWire.pw_ndarray_filter}(filter.handle)

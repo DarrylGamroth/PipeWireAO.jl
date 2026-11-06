@@ -8061,6 +8061,24 @@ function pw_ndarray_filter_new(config, filter)
 end
 
 """
+    pw_ndarray_filter_get_loop(filter)
+
+Return the borrowed owner main loop, or NULL for a NULL filter.
+
+Call this on the constructing thread before run() or after it returns. Register and remove application sources on that thread. Their callbacks run on the thread calling run(), independently of RT\\_PROCESS callbacks. Other threads may signal an event source as permitted by the loop API.
+
+Destroy application sources before destroying the filter. The loop remains owned by the filter and is valid only until [`pw_ndarray_filter_destroy`](@ref)(); do not destroy it or run it concurrently with run().
+
+### Prototype
+```c
+struct pw_loop *pw_ndarray_filter_get_loop(struct pw_ndarray_filter *filter);
+```
+"""
+function pw_ndarray_filter_get_loop(filter)
+    @ccall libpipewire_ao.pw_ndarray_filter_get_loop(filter::Ptr{pw_ndarray_filter})::Ptr{pw_loop}
+end
+
+"""
     pw_ndarray_filter_connect(filter)
 
 Add the configured node and ports to the selected PipeWire remote.

@@ -1475,28 +1475,37 @@ function _enum_params(function_name::Symbol, call, object, object_type, id, sequ
         )
     end
     _check_result(function_name, result)
-    return nothing
+    return result
 end
 
 """
-    enum_params!(object, id; sequence=0, start=0, count=typemax(UInt32), filter=nothing)
+    enum_params!(object, id; sequence=0, start=0, count=typemax(UInt32),
+                 filter=nothing, sequence_out=nothing)
 
 Request parameter enumeration on a node, port, or device. Results arrive
-through the object's `on_param` callback. Return `object`.
+through the object's `on_param` callback. Return `object`. When `sequence_out`
+is a `Ref{Cint}`, store the actual native asynchronous sequence there after a
+successful request. The native protocol can replace the requested `sequence`;
+use this returned value to correlate parameter callbacks. Failure leaves the
+reference unchanged. A core synchronization barrier can fence the collected
+results; this function does not wait for them or aggregate them.
 """
-function enum_params!(object::Node, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing)
-    _enum_params(:pw_node_enum_params, LibPipeWire.pw_node_enum_params, object, LibPipeWire.pw_node, id, sequence, start, count, filter)
+function enum_params!(object::Node, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing, sequence_out::Union{Nothing,Base.RefValue{Cint}}=nothing)
+    result = _enum_params(:pw_node_enum_params, LibPipeWire.pw_node_enum_params, object, LibPipeWire.pw_node, id, sequence, start, count, filter)
+    sequence_out === nothing || (sequence_out[] = result)
     return object
 end
 
 
-function enum_params!(object::Port, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing)
-    _enum_params(:pw_port_enum_params, LibPipeWire.pw_port_enum_params, object, LibPipeWire.pw_port, id, sequence, start, count, filter)
+function enum_params!(object::Port, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing, sequence_out::Union{Nothing,Base.RefValue{Cint}}=nothing)
+    result = _enum_params(:pw_port_enum_params, LibPipeWire.pw_port_enum_params, object, LibPipeWire.pw_port, id, sequence, start, count, filter)
+    sequence_out === nothing || (sequence_out[] = result)
     return object
 end
 
-function enum_params!(object::Device, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing)
-    _enum_params(:pw_device_enum_params, LibPipeWire.pw_device_enum_params, object, LibPipeWire.pw_device, id, sequence, start, count, filter)
+function enum_params!(object::Device, id::Integer; sequence::Integer=0, start::Integer=0, count::Integer=typemax(UInt32), filter::Union{Nothing,Pod}=nothing, sequence_out::Union{Nothing,Base.RefValue{Cint}}=nothing)
+    result = _enum_params(:pw_device_enum_params, LibPipeWire.pw_device_enum_params, object, LibPipeWire.pw_device, id, sequence, start, count, filter)
+    sequence_out === nothing || (sequence_out[] = result)
     return object
 end
 

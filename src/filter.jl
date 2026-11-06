@@ -85,13 +85,23 @@ filter type. Julia callbacks are not hard-real-time safe, so
 `FILTER_RT_PROCESS` is deliberately unavailable.
 
 The callback keywords are `on_state_changed`, `on_io_changed`,
-`on_param_changed`, `on_buffer_added`, `on_buffer_removed`, `on_process`,
+`on_param_changed`, `on_param_rejected`, `on_buffer_added`, `on_buffer_removed`, `on_process`,
 `on_drained`, and `on_command`. The process callback receives
 `(filter, position)`, where `position` is either a borrowed
 [`FilterPosition`](@ref) or `nothing`. A warmed process callback whose callable
 does not allocate has a zero-byte steady-state allocation contract. Callback
 errors, copied parameter/command PODs, and an explicitly copied position
 snapshot are excluded.
+
+Set `max_param_bytes` to bound each owned parameter copy, including its eight-byte
+SPA header. The limit must be between 8 and 1,048,583 bytes, the largest encoded
+POD accepted by the existing copy routine. Its default, `nothing`, preserves the
+existing copy behavior. With a limit, an oversized parameter calls
+`on_param_rejected(filter, port, id, total_size::UInt64)` before any body is read
+or copied; without that callback it is dropped. The declared size is diagnostic,
+not a validated request identity. Rejection alone does not record a callback
+error or stop the loop. Callback exceptions retain the ordinary error behavior.
+A null parameter still calls `on_param_changed(filter, port, id, nothing)`.
 """
 mutable struct Filter{CoreType<:CoreConnection,Callbacks}
     handle::Ptr{LibPipeWire.pw_filter}
@@ -101,6 +111,7 @@ mutable struct Filter{CoreType<:CoreConnection,Callbacks}
     listener::Base.RefValue{LibPipeWire.spa_hook}
     events::Base.RefValue{LibPipeWire.pw_filter_events}
     callbacks::Callbacks
+    max_param_bytes::UInt64 # Zero preserves the existing unbounded copy path.
     callback_error::Base.RefValue{Any}
     ports::Vector{FilterPort}
     buffer_owners::Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}
@@ -240,6 +251,21 @@ function _filter_param_changed(
     param::Ptr{LibPipeWire.spa_pod},
 )::Cvoid
     try
+        if param != C_NULL && filter.max_param_bytes != 0
+            # The native API supplies a readable header. Do not touch its body
+            # until its unsigned extent is admitted, even for a malformed POD.
+            total_size = UInt64(sizeof(LibPipeWire.spa_pod)) + UInt64(unsafe_load(param).size)
+            if total_size > filter.max_param_bytes
+                _invoke_filter_callback(
+                    filter,
+                    Val(:on_param_rejected),
+                    _filter_port(filter, port_data),
+                    id,
+                    total_size,
+                )
+                return nothing
+            end
+        end
         _invoke_filter_callback(
             filter,
             Val(:on_param_changed),
@@ -381,12 +407,18 @@ function Filter(
     on_state_changed=nothing,
     on_io_changed=nothing,
     on_param_changed=nothing,
+    max_param_bytes::Union{Nothing,Integer}=nothing,
+    on_param_rejected=nothing,
     on_buffer_added=nothing,
     on_buffer_removed=nothing,
     on_process=nothing,
     on_drained=nothing,
     on_command=nothing,
 )
+    if max_param_bytes !== nothing
+        sizeof(LibPipeWire.spa_pod) <= max_param_bytes < (1 << 20) + sizeof(LibPipeWire.spa_pod) ||
+            throw(ArgumentError("filter parameter limit must be between 8 and 1048583 bytes"))
+    end
     name_string = _validate_c_string(String(name), "filter name")
     core_handle = _retain_filter(core)
     native_properties = try
@@ -409,6 +441,7 @@ function Filter(
         on_state_changed=on_state_changed,
         on_io_changed=on_io_changed,
         on_param_changed=on_param_changed,
+        on_param_rejected=on_param_rejected,
         on_buffer_added=on_buffer_added,
         on_buffer_removed=on_buffer_removed,
         on_process=on_process,
@@ -425,6 +458,7 @@ function Filter(
         listener,
         events,
         callbacks,
+        max_param_bytes === nothing ? UInt64(0) : UInt64(max_param_bytes),
         Ref{Any}(nothing),
         FilterPort[],
         Dict{Ptr{LibPipeWire.pw_buffer},Vector{Vector{UInt8}}}(),

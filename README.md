@@ -6,8 +6,12 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
-PipeWireAO 0.6.20 requires `PipeWireAO_jll` 1.7.2+0 or newer. The resolver
-and import-time check enforce the native scalar-property adoption callback ABI.
+PipeWireAO 0.9.2 requires `PipeWireAO_jll` 4.0.1+0 or newer within native major 4
+and Julia 1.13 or newer. Command endpoints additionally require a matching native
+SDK exporting `pw_ndarray_filter_get_loop`; the released 4.0.1 artifact predates
+this accessor.
+Select the matching SDK through the `PipeWireAO_jll` library preferences when
+using an unreleased source cohort.
 
 The package is being built in layers:
 
@@ -26,6 +30,53 @@ standalone ndarray filters, owned SPA PODs for raw-audio and raw-video formats,
 and mapped buffers.
 Native resources follow Julia's `close`/`isopen` conventions and enforce
 PipeWire's parent-before-child lifetime rules.
+
+`command_endpoint` adds owner-thread control to standalone ndarray filters.
+Construct the receiver on the filter's Julia thread before `run!`, and publish
+only its `CommandSender{T}` to other threads. The sender holds a bounded typed
+channel and synchronized native wake transport; the filter retains the receiver
+and callback. A native event invokes the callback on the owner thread while
+`run!` blocks. No polling Julia task is needed on that blocked thread.
+Keep Julia's interactive thread available for its event loop when controllers
+need timers or asynchronous I/O; use a dedicated default-pool thread for the
+filter owner in that case.
+
+```julia
+struct StopGraph end
+
+# Construct, connect, run, and close on the same Julia thread.
+receiver = command_endpoint(filter, _ -> quit!(filter), StopGraph; capacity=1)
+sender = commands(receiver) # Share this handle with the controller.
+try
+    connect!(filter)
+    # On a different Julia thread, call try_send!(sender, StopGraph()).
+    run!(filter)
+finally
+    close(receiver)
+    close(filter)
+end
+```
+
+`try_send!` returns `COMMAND_ACCEPTED`, `COMMAND_FULL`, or `COMMAND_CLOSED`
+without waiting for queue space or callback completion. Accepted messages sent
+before `run!` wake its initial poll. Each event drains at most the declared
+capacity, checking readiness before every channel read. An accepted result is
+an enqueue receipt; applications supply their own completion messages when
+needed. The caller retains responsibility for the ownership of message payloads.
+
+Close the receiver on its owner thread after `run!` returns. Close seals every
+sender before destroying its native source and discards pending commands. A
+filter rejects close while receivers remain open. Callback exceptions seal the
+sender, request native loop termination, and are rethrown by `run!`; the owner
+can also call `check_command_error(receiver)`. Always close receivers explicitly.
+
+When migrating a controller, replace shared filter/callback references with the
+sender and handle all three submission results. Keep construction, application
+state, execution, and teardown on the owner thread. This endpoint is a bounded
+control path; its functional tests do not establish deadline or latency bounds.
+
+The [0.9.2 source-validation record](docs/releases/v0.9.2.md) records the
+reconciled source cohort and its private-core checks.
 
 Context-side modules can be loaded without a command-line helper. The returned
 `ContextModule` owns the module and unloads it on `close`; it is distinct from

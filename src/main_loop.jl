@@ -44,6 +44,7 @@ mutable struct MainLoop <: AbstractPipeWireLoop
     context_count::Int
     source_count::Int
     source_roots::IdDict{Any,Nothing}
+    owner_thread::UInt
 
     function MainLoop()
         LibPipeWire.pw_init(C_NULL, C_NULL)
@@ -54,7 +55,8 @@ mutable struct MainLoop <: AbstractPipeWireLoop
             throw(PipeWireError(:pw_main_loop_new, -errno))
         end
 
-        loop = new(handle, ReentrantLock(), false, 0, 0, IdDict{Any,Nothing}())
+        loop = new(handle, ReentrantLock(), false, 0, 0, IdDict{Any,Nothing}(),
+            ccall(:uv_thread_self, UInt, ()))
         finalizer(close, loop)
         return loop
     end
@@ -209,6 +211,54 @@ function run!(loop::MainLoop)
 
     _check_result(:pw_main_loop_run, result)
     return nothing
+end
+
+"""
+    iterate!(loop::MainLoop; max_dispatches::Integer=1) -> Int
+
+Dispatch ready native work without waiting, on the OS thread that created
+`loop`. Perform at most `max_dispatches` native iterations with a zero poll
+timeout, stopping when an iteration reports no ready sources. Return the number
+of iterations that reported ready sources. One iteration can dispatch multiple
+callbacks; this bound is not a callback count or an execution-time guarantee.
+
+The loop must be open and stopped. Calling from another thread, recursively
+from a callback, or while [`run!`](@ref) owns the loop throws
+`InvalidStateException`. Native callbacks run on the calling thread; callers
+should enqueue observations and apply application policy after this call returns.
+"""
+function iterate!(loop::MainLoop; max_dispatches::Integer=1)
+    0 <= max_dispatches <= typemax(Int) ||
+        throw(ArgumentError("max_dispatches is outside the nonnegative Int range"))
+    handle = lock(loop.state_lock) do
+        handle = _require_open(loop)
+        ccall(:uv_thread_self, UInt, ()) == loop.owner_thread || throw(
+            InvalidStateException("iterate! requires the MainLoop's creating OS thread", :wrong_thread))
+        loop.running && throw(
+            InvalidStateException("the PipeWire main loop is already running", :running))
+        loop.running = true
+        return LibPipeWire.pw_main_loop_get_loop(handle)
+    end
+    dispatches = 0
+    try
+        max_dispatches == 0 && return 0
+        LibPipeWire.pw_loop_enter(handle)
+        try
+            for _ in 1:Int(max_dispatches)
+                result = LibPipeWire.pw_loop_iterate(handle, Cint(0))
+                _check_result(:pw_loop_iterate, result)
+                result == 0 && break
+                dispatches += 1
+            end
+        finally
+            LibPipeWire.pw_loop_leave(handle)
+        end
+    finally
+        lock(loop.state_lock) do
+            loop.running = false
+        end
+    end
+    return dispatches
 end
 
 """

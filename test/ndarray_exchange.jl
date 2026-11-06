@@ -7,11 +7,11 @@ function array_exchange_fixture(::Type{T}, count=4) where {T}
     memory = zeros(UInt8, count * sizeof(T))
     chunk = Ref(native.spa_chunk(UInt32(0), UInt32(length(memory)), Int32(sizeof(T)), Int32(0)))
     header = Ref(native.spa_meta_header(UInt32(0), UInt32(0), Int64(0), Int64(0), UInt64(1)))
-    records=MetadataSnapshot((MetadataRequirement(SPA.META_HEADER),MetadataRequirement(SPA.META_ACQUISITION_IDENTITY),MetadataRequirement(SPA.META_EXPOSURE_TIMING)))
+    records=MetadataSnapshot((MetadataRequirement(SPA.META_HEADER),MetadataRequirement(SPA.META_ACQUISITION_IDENTITY),MetadataRequirement(SPA.META_EXPOSURE_TIMING),MetadataRequirement(SPA.META_REFERENCE_TIMESTAMP)))
     metadata=records.descriptors
     properties=records.storage
     data = Ref(native.spa_data(native.SPA_DATA_MemPtr, SPA.DATA_FLAG_READWRITE, Int64(-1), UInt32(0), UInt32(length(memory)), pointer(memory), Base.unsafe_convert(Ptr{native.spa_chunk}, chunk)))
-    spa_buffer = Ref(native.spa_buffer(UInt32(3), UInt32(1), pointer(metadata), Base.unsafe_convert(Ptr{native.spa_data}, data)))
+    spa_buffer = Ref(native.spa_buffer(UInt32(PipeWireAO.metadata_count(records)), UInt32(1), pointer(metadata), Base.unsafe_convert(Ptr{native.spa_data}, data)))
     native_buffer = Ref(native.pw_buffer(Base.unsafe_convert(Ptr{native.spa_buffer}, spa_buffer), C_NULL, UInt64(0), UInt64(0), UInt64(0)))
     buffer = StreamBuffer(Base.unsafe_convert(Ptr{native.pw_buffer}, native_buffer))
     return (; memory, chunk, header, properties, records, metadata, data, spa_buffer, native_buffer, buffer)
@@ -250,7 +250,9 @@ end
         start!(source)
         start!(sink)
         @test_throws InvalidStateException close(core)
-        token = submit_array!(source, ones(Float32, 4), header)
+        timestamp = ReferenceTimestamp(1_730_000_000_000_000_123; clock=METADATA_CLOCK_TAI, duration_nanoseconds=17)
+        token = submit_array!(source, ones(Float32, 4), header; reference_timestamp=timestamp)
+        @test source.state.reference_timestamp === timestamp
         @test token == 1
         @test_throws InvalidStateException submit_array!(source, ones(Float32, 4), header)
         @test_throws InvalidStateException start!(source)
@@ -258,6 +260,7 @@ end
         source.state.phase[] = PipeWireAO._ARRAY_COMPLETE
         @test wait_array_source!(source, token; timeout_ns=1_000_000_000) == token
         @test submit_array!(source, ones(Float32, 4), header) == 2
+        @test source.state.reference_timestamp === nothing
         source_waiter = @async wait_array_source!(source, UInt64(2); timeout_ns=1_000_000_000)
         @test timedwait(() -> source.state.waiting[], 1; pollint=0.001) == :ok
         @test_throws InvalidStateException wait_array_source!(source, UInt64(2); timeout_ns=1_000_000_000)
@@ -323,6 +326,34 @@ end
             close(sink)
             close(core)
             close(context)
+        end
+    end
+end
+
+
+@testset "prepared ndarray optional reference timestamps" begin
+    format = NdArrayFormat(NdArray.F32_LE, (4,); layout=NdArray.ROW_MAJOR)
+    writer = PipeWireAO._ArrayExchangeState(Float32[1, 2, 3, 4], format, nothing)
+    reader = PipeWireAO._ArrayExchangeState(zeros(Float32, 4), format, nothing)
+    writer.header = BufferHeader(UInt32(0), UInt32(0), Int64(-17), Int64(0), UInt64(1))
+    reader.expected = UInt64(1)
+    @test isbitstype(ReferenceTimestamp)
+    declaration = last(PipeWireAO._array_buffer_parameters(writer))
+    object = pod_value(SPA.Parameter, declaration).object
+    @test pod_value(SPA.Id, object[PipeWireAO.LibPipeWire.SPA_PARAM_META_type].value).value == SPA.META_REFERENCE_TIMESTAMP
+    @test !haskey(object, PipeWireAO.LibPipeWire.SPA_PARAM_META_required)
+    fixture = array_exchange_fixture(Float32)
+    GC.@preserve fixture begin
+        # Omission following a supplied fact must clear the reused native record.
+        for timestamp in (nothing,
+                ReferenceTimestamp(1_730_000_000_000_000_123),
+                ReferenceTimestamp(typemax(UInt64) - 1; clock=METADATA_CLOCK_TAI,
+                    duration_nanoseconds=17), nothing)
+            writer.reference_timestamp = timestamp
+            @test @inferred(PipeWireAO._array_write!(writer, fixture.buffer)) === nothing
+            @test reference_timestamp(fixture.buffer) === timestamp
+            @test metadata_records_valid(metadata_records(fixture.buffer))
+            @test array_exchange_copy_allocations(writer, reader, fixture.buffer) == 0
         end
     end
 end
