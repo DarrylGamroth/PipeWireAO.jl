@@ -345,7 +345,7 @@ end
 end
 
 @testset "PipeWire" begin
-    @test library_version() >= v"4.0.1"
+    @test library_version() >= v"4.0.2"
 
     loop = MainLoop()
     @test isopen(loop)

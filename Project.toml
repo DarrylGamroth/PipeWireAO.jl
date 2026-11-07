@@ -10,7 +10,7 @@ UnsafeArrays = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
 [compat]
 Aqua = "0.8"
 Libdl = "1"
-PipeWireAO_jll = "4.0.1"
+PipeWireAO_jll = "4.0.2"
 Test = "1"
 UnsafeArrays = "1"
 julia = "1.13"

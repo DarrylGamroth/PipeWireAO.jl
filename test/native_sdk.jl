@@ -1,7 +1,8 @@
 using PipeWireAO, Libdl, Test
 
-# Prepared metadata requirements need the released native host extension.
-@test v"4.0.1" <= library_version() < v"5.0.0"
+# Command endpoints require the native owner-loop accessor introduced in 4.0.2.
+@test pkgversion(PipeWireAO.LibPipeWire.PipeWireAO_jll) >= v"4.0.2+0"
+@test v"4.0.2" <= library_version() < v"5.0.0"
 let actual = realpath(Libdl.dlpath(PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)),
     expected = get(ENV, "PIPEWIREAO_TEST_LIBRARY", PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)
     @test actual == realpath(expected)
@@ -40,7 +41,7 @@ let retired_prefix=get(ENV,"PIPEWIREAO_TEST_RETIRED_PREFIX","")
                 end
                 wait(process)
                 @test !success(process)
-                @test occursin("requires native 4.0.1 or newer within 4.x; found ",String(take!(output)))
+                @test occursin("require native 4.0.2 or newer within 4.x; found ",String(take!(output)))
             end
         end
     end
