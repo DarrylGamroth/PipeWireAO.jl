@@ -6,10 +6,10 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
-PipeWireAO 0.9.2 requires `PipeWireAO_jll` 4.0.2+0 or newer within native major 4
-and Julia 1.13 or newer. Native 4.0.2 supplies the command-endpoint owner-loop
-accessor `pw_ndarray_filter_get_loop`; the released 4.0.1 artifact predates it.
-Both the JLL package and loaded native library are checked during import.
+PipeWireAO 0.9.3 requires `PipeWireAO_jll` 4.0.3+0 or newer within native major 4
+and Julia 1.13 or newer. Native 4.0.3 drains queued stream triggers before
+destroying their node. Both the JLL package and loaded native library are
+checked during import.
 
 The package is being built in layers:
 
@@ -597,7 +597,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 4.0.2 cohort.
+Source validation requires the native 4.0.3 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.

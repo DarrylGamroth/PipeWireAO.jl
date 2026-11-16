@@ -490,7 +490,10 @@ function Base.close(stream::Stream)
     lock(stream.callback_lock) do
         stream.callbacks_active = false
     end
-    LibPipeWire.pw_stream_destroy(handle)
+    # The data loop may enter Julia while native teardown drains its queue.
+    @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_stream_destroy(
+        handle::Ptr{LibPipeWire.pw_stream},
+    )::Cvoid
     empty!(stream.buffer_owners)
     _release_stream(stream.core)
     return nothing
@@ -841,7 +844,9 @@ function disconnect!(stream::Stream)
     result = lock(stream.state_lock) do
         handle = _require_open(stream)
         stream.connected || return Cint(0)
-        result = LibPipeWire.pw_stream_disconnect(handle)
+        result = @ccall gc_safe=true LibPipeWire.libpipewire_ao.pw_stream_disconnect(
+            handle::Ptr{LibPipeWire.pw_stream},
+        )::Cint
         result >= 0 && (stream.connected = false)
         result
     end
