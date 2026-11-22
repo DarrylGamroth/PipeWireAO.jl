@@ -6,6 +6,104 @@ function pod_value_allocations(::Type{T}, pod) where {T}
     return @allocated pod_value(T, pod)
 end
 
+@testset "native fixed ndarray formats" begin
+    format = NdArrayFormat(NdArray.U8, (2, 3); layout=NdArray.ROW_MAJOR, rate=SPA.Fraction(100, 1))
+    schema = "test.ndarray/1"
+    offer = NdArrayEnumFormat(
+        format;
+        element_type_alternatives=[NdArray.I8],
+        layout_alternatives=[NdArray.COLUMN_MAJOR],
+        rate_choice=NdArrayRateChoice(SPA.CHOICE_ENUM, [SPA.Fraction(50, 1)]),
+    )
+    offered = ndarray_format(offer; schema)
+    @test_throws ArgumentError NdArrayFormat(offered)
+    @test ndarray_schema(offered) == schema
+    negotiated = Pod(offered.data)
+    data = negotiated.data
+    GC.@preserve data begin
+        @test ccall((:spa_pod_fixate, PipeWireAO.LibPipeWire.PipeWireAO_jll.libspa_ao),
+            Cint, (Ptr{PipeWireAO.LibPipeWire.spa_pod},), pointer(data)) == 0
+    end
+    @test NdArrayFormat(negotiated) == format
+    parameter = pod_value(SPA.Parameter, negotiated)
+    @test NdArrayFormat(parameter; require_fixed=true, expected_rank=2) == format
+    @test_throws ArgumentError NdArrayFormat(parameter; expected_rank=1)
+    @test ndarray_schema(negotiated) == schema
+
+    object = pod_value(SPA.Object, ndarray_format(format; schema))
+    replace_property(key, value; id=SPA.PARAM_FORMAT, type=object.type) = Pod(
+        SPA.Object(type, id, [p.key == key ? SPA.Property(key, value) : p for p in object.properties]),
+    )
+    function fixed_choice(value, trailing=UInt8[]; flags=0, kind=SPA.CHOICE_NONE)
+        body = collect(reinterpret(UInt8, UInt32[UInt32(kind), UInt32(flags)]))
+        append!(body, value.data, trailing)
+        return PipeWireAO._pod_from_body(SPA.POD_CHOICE, body)
+    end
+    shape = Pod(SPA.Array(Int32[2, 3]))
+    other_shape = Pod(SPA.Array(Int32[1, 1]))
+    fixed_shape = fixed_choice(shape, other_shape.data[9:end])
+    @test NdArrayFormat(replace_property(SPA.FORMAT_NDARRAY_SHAPE, fixed_shape)) == format
+    schema_value = Pod(schema)
+    fixed_schema = fixed_choice(schema_value, Pod("test.ndarray/2").data[9:end])
+    @test ndarray_schema(replace_property(SPA.FORMAT_NDARRAY_SCHEMA, fixed_schema)) == schema
+    @test ndarray_schema(ndarray_format(format)) === nothing
+
+    high_rank = NdArrayFormat(NdArray.U8, ntuple(_ -> 1, 80); layout=NdArray.ROW_MAJOR)
+    high_rank_pod = ndarray_format(high_rank)
+    @test NdArrayFormat(high_rank_pod) == high_rank
+    @test NdArrayFormat(high_rank_pod; expected_rank=80) == high_rank
+    @test_throws ArgumentError NdArrayFormat(high_rank_pod; expected_rank=2)
+    # A 64-bit size_t can express this payload, but a Julia Int cannot.
+    overflowing_shape = Pod(SPA.Array(Int32[1 << 21, 1 << 21, 1 << 21]))
+    @test_throws ArgumentError NdArrayFormat(replace_property(SPA.FORMAT_NDARRAY_SHAPE, overflowing_shape))
+
+    id = SPA.FORMAT_NDARRAY_ELEMENT_TYPE
+    element = Pod(SPA.Id(UInt32(NdArray.U8)))
+    bad_format_properties = (
+        id => fixed_choice(element, UInt8[0]),
+        id => fixed_choice(element; flags=1),
+        id => PipeWireAO._pod_from_body(SPA.POD_ID, vcat(element.data[9:end], zeros(UInt8, 4))),
+        SPA.FORMAT_NDARRAY_RATE => Pod(SPA.Fraction(0, 0)),
+        SPA.FORMAT_NDARRAY_RATE => Pod(SPA.Array(Int32[100, 1])),
+        SPA.FORMAT_NDARRAY_SHAPE => Pod(SPA.Array(Int64[2, 3])),
+        SPA.FORMAT_NDARRAY_SHAPE => PipeWireAO._pod_from_body(SPA.POD_ARRAY, vcat(shape.data[9:end], UInt8[0])),
+    )
+    for (key, value) in bad_format_properties
+        @test_throws ArgumentError NdArrayFormat(replace_property(key, value))
+    end
+    @test_throws ArgumentError NdArrayFormat(replace_property(id, element; id=SPA.PARAM_PROPS))
+    @test_throws ArgumentError NdArrayFormat(replace_property(id, element; type=SPA.OBJECT_PROPS))
+    malformed_object = ndarray_format(format)
+    malformed_object.data[1:4] .= 0xff
+    @test_throws ArgumentError NdArrayFormat(malformed_object)
+    pop!(malformed_object.data)
+    @test_throws ArgumentError NdArrayFormat(malformed_object)
+
+    for value in (
+        fixed_choice(schema_value, UInt8[0]),
+        fixed_choice(schema_value; kind=SPA.CHOICE_ENUM),
+        fixed_choice(schema_value; flags=1),
+        PipeWireAO._pod_from_body(SPA.POD_STRING, UInt8['a', 0, 'b', 0]),
+        PipeWireAO._pod_from_body(SPA.POD_STRING, UInt8['a']),
+        Pod(nothing),
+    )
+        @test_throws ArgumentError ndarray_schema(replace_property(SPA.FORMAT_NDARRAY_SCHEMA, value))
+    end
+    duplicate(key) = Pod(SPA.Object(object.type, object.id, [object.properties; object[key]]))
+    @test_throws ArgumentError NdArrayFormat(duplicate(id))
+    @test_throws ArgumentError ndarray_schema(duplicate(SPA.FORMAT_MEDIA_TYPE))
+    @test_throws ArgumentError ndarray_schema(duplicate(SPA.FORMAT_NDARRAY_SCHEMA))
+
+    unknown = 0x00ff_fffe
+    with_application_property(value) = Pod(SPA.Object(
+        object.type, object.id, [object.properties; SPA.Property(unknown, value)],
+    ))
+    @test NdArrayFormat(with_application_property(fixed_choice(element)); require_fixed=true) == format
+    application_choice = with_application_property(fixed_choice(element; kind=SPA.CHOICE_ENUM))
+    @test NdArrayFormat(application_choice) == format
+    @test_throws ArgumentError NdArrayFormat(application_choice; require_fixed=true)
+end
+
 @testset "public SPA identifiers" begin
     identifiers = (
         SPA.POD_OBJECT,

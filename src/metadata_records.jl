@@ -71,6 +71,8 @@ end
 MetadataRequirement(type::Integer;required::Bool=false) = MetadataRequirement(type,Int(LibPipeWire.spa_meta_record_size(UInt32(type)));required)
 _native_requirement(r::MetadataRequirement) = LibPipeWire.spa_meta_requirement(r.type,r.size,
     r.required ? UInt32(LibPipeWire.SPA_META_REQUIREMENT_REQUIRED) : UInt32(0),UInt32(0))
+const _METADATA_MAX_RECORDS = 64 # SPA_META_MAX_RECORDS
+
 function _metadata_requirements(requirements;header::Bool=false)
     result = LibPipeWire.spa_meta_requirement[]
     header && push!(result,_native_requirement(MetadataRequirement(LibPipeWire.SPA_META_Header;required=true)))
@@ -79,7 +81,7 @@ function _metadata_requirements(requirements;header::Bool=false)
         any(x -> x.type == r.type,result) && throw(ArgumentError("duplicate metadata declaration"))
         push!(result,_native_requirement(r))
     end
-    length(result) <= 64 && sum(r -> (Int(r.size)+7)&~7,result;init=0) <= 4096 || throw(ArgumentError("metadata layout exceeds profile bounds"))
+    length(result) <= _METADATA_MAX_RECORDS && sum(r -> (Int(r.size)+7)&~7,result;init=0) <= 4096 || throw(ArgumentError("metadata layout exceeds profile bounds"))
     return result
 end
 
@@ -110,14 +112,39 @@ function metadata_records(buffer::NdArrayFilterBuffer{Writable}) where {Writable
         unsafe_load(_ndarray_buffer_field(native,Val(:n_metas))))
 end
 metadata_records(records::MetadataRecords) = records
+
+"""
+    metadata_records_valid(records_or_buffer, requirements=())
+
+Check the native record layout and per-buffer facts against a tuple or vector of
+metadata requirements. Return false for duplicate requirement types or a list
+above the native record limit.
+"""
 function metadata_records_valid(records::MetadataRecords,requirements::Tuple=())
+    length(requirements) <= _METADATA_MAX_RECORDS || return false
     native = ntuple(i -> _native_requirement(requirements[i]),length(requirements))
     storage = Ref(native)
     return GC.@preserve records storage LibPipeWire.spa_meta_records_validate(records.data,records.count,
         isempty(requirements) ? Ptr{LibPipeWire.spa_meta_requirement}(C_NULL) :
         Ptr{LibPipeWire.spa_meta_requirement}(Base.unsafe_convert(Ptr{typeof(native)},storage)),UInt32(length(requirements)))
 end
-metadata_records_valid(buffer,requirements::Tuple=()) = GC.@preserve buffer metadata_records_valid(metadata_records(buffer),requirements)
+function metadata_records_valid(records::MetadataRecords, requirements::Vector{MetadataRequirement})
+    count = length(requirements)
+    count <= _METADATA_MAX_RECORDS || return false
+    count == 0 && return metadata_records_valid(records)
+
+    # The native validator reads only count entries from this storage.
+    storage = Ref{NTuple{_METADATA_MAX_RECORDS,LibPipeWire.spa_meta_requirement}}()
+    GC.@preserve records storage begin
+        native = Ptr{LibPipeWire.spa_meta_requirement}(Base.unsafe_convert(Ptr{Cvoid}, storage))
+        for i in eachindex(requirements)
+            unsafe_store!(native, _native_requirement(requirements[i]), i)
+        end
+        return LibPipeWire.spa_meta_records_validate(records.data, records.count, native, UInt32(count))
+    end
+end
+metadata_records_valid(buffer,requirements::Union{Tuple,Vector{MetadataRequirement}}=()) =
+    GC.@preserve buffer metadata_records_valid(metadata_records(buffer),requirements)
 function _record(records::MetadataRecords,type::UInt32;required::Bool=false)
     GC.@preserve records begin
         metadata_records_valid(records) || throw(InvalidStateException("malformed metadata records",:malformed))
@@ -477,16 +504,6 @@ function writable_metadata_records(buffer::AbstractPipeWireBuffer)
 end
 writable_metadata_records(buffer::NdArrayFilterBuffer{true})=metadata_records(buffer)
 writable_metadata_records(records::MetadataRecords{true})=records
-
-function metadata_records_valid(records::MetadataRecords,requirements::Vector{MetadataRequirement})
-    length(requirements)<=64 || return false
-    metadata_records_valid(records) || return false
-    for requirement in requirements
-        native=Ref(_native_requirement(requirement))
-        GC.@preserve records native LibPipeWire.spa_meta_records_validate(records.data,records.count,native,UInt32(1)) || return false
-    end
-    return true
-end
 
 "Whether a metadata type describes mutable pool/transport state rather than scientific facts."
 metadata_is_transport_owned(type::Integer)=LibPipeWire.spa_meta_type_is_transport_owned(UInt32(type))

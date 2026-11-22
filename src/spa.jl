@@ -1540,45 +1540,120 @@ element_count(format::Union{VectorFormat,MatrixFormat}) = element_count(NdArrayF
 payload_size(format::NdArrayFormat) = last(_checked_ndarray_size(format.element_type, format.shape))
 payload_size(format::Union{VectorFormat,MatrixFormat}) = payload_size(NdArrayFormat(format))
 
-function _ndarray_property(object::SPA.Object, key::UInt32; required::Bool=true)
+function _ndarray_property(object::SPA.Object, key::UInt32)
     matching = filter(property -> property.key == key, object.properties)
     length(matching) <= 1 || throw(ArgumentError("duplicate ndarray property $key"))
-    isempty(matching) && required && throw(ArgumentError("missing ndarray property $key"))
-    return isempty(matching) ? nothing : only(matching)
+    isempty(matching) && throw(ArgumentError("missing ndarray property $key"))
+    return only(matching)
 end
 
-function _require_ndarray_format_object(parameter::SPA.Parameter)
-    object = parameter.object
-    object.type == LibPipeWire.SPA_TYPE_OBJECT_Format ||
-        throw(ArgumentError("the SPA parameter is not a format object"))
-    media_type = pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_MEDIA_TYPE).value)
-    media_type.value == SPA.MEDIA_TYPE_APPLICATION ||
-        throw(ArgumentError("the format media type is not application"))
-    media_subtype = pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_MEDIA_SUBTYPE).value)
-    media_subtype.value == SPA.MEDIA_SUBTYPE_NDARRAY ||
-        throw(ArgumentError("the format media subtype is not ndarray"))
+function _ndarray_format_object(pod::Pod)
+    data = pod.data
+    header_size = sizeof(LibPipeWire.spa_pod)
+    sizeof(LibPipeWire.spa_pod_object) <= length(data) < header_size + (1 << 20) ||
+        throw(ArgumentError("invalid SPA format size"))
+    header = GC.@preserve data unsafe_load(_pod_pointer(pod))
+    header.size == length(data) - header_size ||
+        throw(ArgumentError("invalid SPA format body extent"))
+    object = pod_value(SPA.Object, pod)
+    object.type == LibPipeWire.SPA_TYPE_OBJECT_Format &&
+        object.id in (SPA.PARAM_FORMAT, SPA.PARAM_ENUM_FORMAT) ||
+        throw(ArgumentError("expected a native SPA Format or EnumFormat"))
     return object
 end
 
-"Parse a fixed native ndarray format parameter. Application properties are ignored."
-function NdArrayFormat(parameter::SPA.Parameter)
-    object = _require_ndarray_format_object(parameter)
-    element_type = NdArray.ElementType(
-        pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_NDARRAY_ELEMENT_TYPE).value).value,
-    )
-    shape = pod_value(
-        SPA.Array{Int32},
-        _ndarray_property(object, SPA.FORMAT_NDARRAY_SHAPE).value,
-    ).values
-    layout = NdArray.Layout(
-        pod_value(SPA.Id, _ndarray_property(object, SPA.FORMAT_NDARRAY_LAYOUT).value).value,
-    )
-    rate_property = _ndarray_property(object, SPA.FORMAT_NDARRAY_RATE; required=false)
-    rate = rate_property === nothing ? nothing : pod_value(SPA.Fraction, rate_property.value)
+function _fixed_format_body(value::Pod)
+    if pod_type(value) == SPA.POD_CHOICE
+        kind, flags, child, extent = _pod_choice_header(value)
+        width = Int(child.size)
+        kind == SPA.CHOICE_NONE && flags == 0 && 0 < width <= extent && extent % width == 0 ||
+            throw(ArgumentError("expected a fixed SPA format Choice with complete children"))
+        return child, sizeof(LibPipeWire.spa_pod_choice)
+    end
+    data = value.data
+    header = GC.@preserve data unsafe_load(_pod_pointer(value))
+    return header, sizeof(LibPipeWire.spa_pod)
+end
+
+function _fixed_format_body(value::Pod, type::UInt32, width=nothing)
+    child, offset = _fixed_format_body(value)
+    child.type == type && (width === nothing || child.size == width) ||
+        throw(ArgumentError("invalid SPA format type or width (expected type $type)"))
+    return Int(child.size), offset
+end
+
+function _ndarray_format_rank(value::Pod)
+    width, offset = _fixed_format_body(value, SPA.POD_ARRAY)
+    extent = width - sizeof(LibPipeWire.spa_pod_array_body)
+    extent > 0 && extent % sizeof(Int32) == 0 ||
+        throw(ArgumentError("invalid ndarray shape array extent"))
+    data = value.data
+    child = GC.@preserve data unsafe_load(Ptr{LibPipeWire.spa_pod}(pointer(data) + offset))
+    child.type == SPA.POD_INT && child.size == sizeof(Int32) ||
+        throw(ArgumentError("expected an ndarray shape array of Int32 values"))
+    return extent ÷ sizeof(Int32)
+end
+
+"""
+    NdArrayFormat(parameter; require_fixed=false, expected_rank=nothing)
+
+Parse the selected array representation from a native SPA `Format` or
+`EnumFormat` POD or parameter. Accept direct values and fixed Choices with
+retained alternatives. With `require_fixed=true`, require every top-level
+Choice to be fixed with zero flags and complete children, including Choices
+in application properties. Set `expected_rank` to check the number of axes
+before allocating native result storage. Invalid formats throw `ArgumentError`.
+"""
+function NdArrayFormat(
+    pod::Pod;
+    require_fixed::Bool=false,
+    expected_rank::Union{Nothing,Int}=nothing,
+)
+    object = _ndarray_format_object(pod)
+    rank = 0
+    rate_present = false
+    for property in object.properties
+        key, value = property.key, property.value
+        if key in (SPA.FORMAT_MEDIA_TYPE, SPA.FORMAT_MEDIA_SUBTYPE,
+            SPA.FORMAT_NDARRAY_ELEMENT_TYPE, SPA.FORMAT_NDARRAY_LAYOUT)
+            _fixed_format_body(value, SPA.POD_ID, sizeof(UInt32))
+        elseif key == SPA.FORMAT_NDARRAY_RATE
+            _fixed_format_body(value, SPA.POD_FRACTION, sizeof(LibPipeWire.spa_fraction))
+            rate_present = true
+        elseif key == SPA.FORMAT_NDARRAY_SHAPE
+            rank = _ndarray_format_rank(value)
+        elseif require_fixed && pod_type(value) == SPA.POD_CHOICE
+            _fixed_format_body(value)
+        end
+    end
+    expected_rank === nothing || rank == expected_rank ||
+        throw(ArgumentError("ndarray rank $rank differs from expected rank $expected_rank"))
+
+    # The sized native API places any additional dimensions after the inline
+    # shape array. Keep enough storage to load the fixed struct as well.
+    info_type = LibPipeWire.spa_ndarray_info
+    shape_field = Base.fieldindex(info_type, :shape)
+    shape_word = Int(fieldoffset(info_type, shape_field)) ÷ sizeof(UInt32)
+    storage = zeros(UInt32, max(sizeof(info_type) ÷ sizeof(UInt32), shape_word + rank))
+    data = pod.data
+    info = GC.@preserve data storage begin
+        ptr = Ptr{LibPipeWire.spa_ndarray_info}(pointer(storage))
+        result = LibPipeWire.spa_format_ndarray_ext_parse(_pod_pointer(pod), ptr, sizeof(storage))
+        result >= 0 || throw(ArgumentError("invalid fixed ndarray format (SPA error $result)"))
+        unsafe_load(ptr)
+    end
+    element_type = NdArray.ElementType(info.element_type)
+    layout = NdArray.Layout(info.layout)
+    shape = ntuple(axis -> Int32(storage[shape_word + axis]), Int(info.n_dimensions))
+    rate = rate_present ? SPA.Fraction(info.rate.num, info.rate.denom) : nothing
     return NdArrayFormat(element_type, shape; layout, rate)
 end
 
-NdArrayFormat(pod::Pod) = NdArrayFormat(pod_value(SPA.Parameter, pod))
+NdArrayFormat(
+    parameter::SPA.Parameter;
+    require_fixed::Bool=false,
+    expected_rank::Union{Nothing,Int}=nothing,
+) = NdArrayFormat(Pod(parameter); require_fixed, expected_rank)
 
 function VectorFormat(format::NdArrayFormat{1})
     format.layout == NdArray.ROW_MAJOR || throw(
@@ -1679,45 +1754,45 @@ function ndarray_format(
     return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
 end
 
-function _choice_none_value(::Type{T}, pod::Pod) where {T}
-    kind, _, child, values_size = _pod_choice_header(pod)
-    kind == SPA.CHOICE_NONE || throw(
-        ArgumentError("expected a fixed SPA choice, received $kind"),
-    )
-    Int(child.size) == values_size || throw(
-        ArgumentError("a fixed SPA choice must contain exactly one complete value"),
-    )
-    body_offset = 3 * sizeof(LibPipeWire.spa_pod)
-    body = @view pod.data[(body_offset + 1):end]
-    return pod_value(T, _pod_from_body(UInt32(child.type), body))
-end
-
 """
     ndarray_schema(parameter) -> Union{Nothing,String}
 
-Return the semantic schema from a native ndarray format parameter. Accept the
-direct string used in an offered format and the fixed `SPA_CHOICE_None` string
-used by negotiated formats. Return `nothing` when no schema is present.
+Return an owned copy of the semantic schema from a native ndarray format.
+Accept a direct string or a fixed Choice with retained alternatives. Return
+`nothing` when no schema is present. Invalid schema values throw `ArgumentError`.
 """
-function ndarray_schema(parameter::SPA.Parameter)
-    object = _require_ndarray_format_object(parameter)
-    property = _ndarray_property(
-        object,
-        SPA.FORMAT_NDARRAY_SCHEMA;
-        required=false,
-    )
-    property === nothing && return nothing
-    value = property.value
-    type = pod_type(value)
-    if type == LibPipeWire.SPA_TYPE_String
-        return pod_value(String, value)
-    elseif type == LibPipeWire.SPA_TYPE_Choice
-        return _choice_none_value(String, value)
+function ndarray_schema(pod::Pod)
+    object = _ndarray_format_object(pod)
+    for key in (SPA.FORMAT_MEDIA_TYPE, SPA.FORMAT_MEDIA_SUBTYPE)
+        _fixed_format_body(_ndarray_property(object, key).value, SPA.POD_ID, sizeof(UInt32))
     end
-    throw(ArgumentError("an ndarray schema must be a string or fixed string choice"))
+    data = pod.data
+    media_type, media_subtype = Ref{UInt32}(), Ref{UInt32}()
+    result = GC.@preserve data LibPipeWire.spa_format_parse(
+        _pod_pointer(pod), media_type, media_subtype,
+    )
+    result >= 0 && media_type[] == SPA.MEDIA_TYPE_APPLICATION &&
+        media_subtype[] == SPA.MEDIA_SUBTYPE_NDARRAY ||
+        throw(ArgumentError("expected a native ndarray format"))
+
+    property = get(object, SPA.FORMAT_NDARRAY_SCHEMA, nothing)
+    property === nothing && return nothing
+    width, offset = _fixed_format_body(property.value, SPA.POD_STRING)
+    body = @view property.value.data[(offset + 1):(offset + width)]
+    width > 0 && findfirst(iszero, body) == width ||
+        throw(ArgumentError("invalid NUL termination in ndarray schema"))
+    schema = Ref{Cstring}()
+    return GC.@preserve data begin
+        result = LibPipeWire.spa_format_ndarray_parse_string(
+            _pod_pointer(pod), SPA.FORMAT_NDARRAY_SCHEMA, schema,
+        )
+        result >= 0 && schema[] != C_NULL ||
+            throw(ArgumentError("invalid ndarray schema (SPA error $result)"))
+        unsafe_string(Ptr{UInt8}(schema[]), width - 1)
+    end
 end
 
-ndarray_schema(pod::Pod) = ndarray_schema(pod_value(SPA.Parameter, pod))
+ndarray_schema(parameter::SPA.Parameter) = ndarray_schema(Pod(parameter))
 
 ndarray_format(format::Union{VectorEnumFormat,MatrixEnumFormat}; kwargs...) =
     ndarray_format(format.format; kwargs...)

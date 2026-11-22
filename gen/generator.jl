@@ -2,7 +2,9 @@ using Clang.Generators
 using PipeWireAO_jll
 
 const EXPORTED_INLINE_APIS = [
+    "SPA_API_FORMAT_UTILS",
     "SPA_API_META",
+    "SPA_API_NDARRAY_UTILS",
     "PW_API_CLIENT_IMPL",
     "PW_API_CORE_IMPL",
     "PW_API_DEVICE_IMPL",
@@ -41,6 +43,7 @@ cd(@__DIR__) do
         joinpath(spa_include, "spa", "param", "audio", "raw.h"),
         joinpath(spa_include, "spa", "param", "video", "format.h"),
         joinpath(spa_include, "spa", "param", "video", "raw.h"),
+        joinpath(spa_include, "spa", "param", "ndarray-utils.h"),
     ]
 
     all(isfile, headers) || error("one or more PipeWire headers were not found")
@@ -49,10 +52,9 @@ cd(@__DIR__) do
     args = get_default_args()
     append!(args, ["-I$pipewire_include", "-I$spa_include"])
 
-    # PipeWire declares interface calls as static inline functions for normal C
-    # consumers, while libpipewire also exports these implementations. Present
-    # the exported subsets as ordinary functions to Clang.jl so their wrappers
-    # call the JLL instead of trying to reproduce C vtable macros in Julia.
+    # The client and SPA headers declare these functions as static inline for
+    # normal C consumers. Present the exported subsets as ordinary functions
+    # to Clang.jl so their wrappers call the corresponding JLL library.
     append!(args, ["-D$name=" for name in EXPORTED_INLINE_APIS])
 
     output_path = normpath(@__DIR__, options["general"]["output_file_path"])

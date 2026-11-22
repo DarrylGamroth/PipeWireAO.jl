@@ -10302,11 +10302,11 @@ struct spa_audio_info_mpegh
     rate::UInt32
 end
 
-struct __JL_Ctag_166
+struct __JL_Ctag_178
     data::NTuple{276, UInt8}
 end
 
-function Base.getproperty(x::Ptr{__JL_Ctag_166}, f::Symbol)
+function Base.getproperty(x::Ptr{__JL_Ctag_178}, f::Symbol)
     f === :raw && return Ptr{spa_audio_info_raw}(x + 0)
     f === :dsp && return Ptr{spa_audio_info_dsp}(x + 0)
     f === :iec958 && return Ptr{spa_audio_info_iec958}(x + 0)
@@ -10329,18 +10329,18 @@ function Base.getproperty(x::Ptr{__JL_Ctag_166}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::__JL_Ctag_166, f::Symbol)
-    r = Ref{__JL_Ctag_166}(x)
-    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_166}, r)
+function Base.getproperty(x::__JL_Ctag_178, f::Symbol)
+    r = Ref{__JL_Ctag_178}(x)
+    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_178}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{__JL_Ctag_166}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{__JL_Ctag_178}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::__JL_Ctag_166, private::Bool = false)
+function Base.propertynames(x::__JL_Ctag_178, private::Bool = false)
     (:raw, :dsp, :iec958, :dsd, :mp3, :aac, :vorbis, :wma, :ra, :amr, :alac, :flac, :ape, :opus, :ac3, :eac3, :truehd, :dts, :mpegh, if private
             fieldnames(typeof(x))
         else
@@ -10362,7 +10362,7 @@ end
 function Base.getproperty(x::Ptr{spa_audio_info}, f::Symbol)
     f === :media_type && return Ptr{UInt32}(x + 0)
     f === :media_subtype && return Ptr{UInt32}(x + 4)
-    f === :info && return Ptr{__JL_Ctag_166}(x + 8)
+    f === :info && return Ptr{__JL_Ctag_178}(x + 8)
     return getfield(x, f)
 end
 
@@ -10944,11 +10944,11 @@ struct spa_video_info_mjpg
     max_framerate::spa_fraction
 end
 
-struct __JL_Ctag_167
+struct __JL_Ctag_179
     data::NTuple{88, UInt8}
 end
 
-function Base.getproperty(x::Ptr{__JL_Ctag_167}, f::Symbol)
+function Base.getproperty(x::Ptr{__JL_Ctag_179}, f::Symbol)
     f === :raw && return Ptr{spa_video_info_raw}(x + 0)
     f === :dsp && return Ptr{spa_video_info_dsp}(x + 0)
     f === :h264 && return Ptr{spa_video_info_h264}(x + 0)
@@ -10956,18 +10956,18 @@ function Base.getproperty(x::Ptr{__JL_Ctag_167}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::__JL_Ctag_167, f::Symbol)
-    r = Ref{__JL_Ctag_167}(x)
-    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_167}, r)
+function Base.getproperty(x::__JL_Ctag_179, f::Symbol)
+    r = Ref{__JL_Ctag_179}(x)
+    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_179}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{__JL_Ctag_167}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{__JL_Ctag_179}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::__JL_Ctag_167, private::Bool = false)
+function Base.propertynames(x::__JL_Ctag_179, private::Bool = false)
     (:raw, :dsp, :h264, :mjpg, if private
             fieldnames(typeof(x))
         else
@@ -10989,7 +10989,7 @@ end
 function Base.getproperty(x::Ptr{spa_video_info}, f::Symbol)
     f === :media_type && return Ptr{UInt32}(x + 0)
     f === :media_subtype && return Ptr{UInt32}(x + 4)
-    f === :info && return Ptr{__JL_Ctag_167}(x + 8)
+    f === :info && return Ptr{__JL_Ctag_179}(x + 8)
     return getfield(x, f)
 end
 
@@ -11089,6 +11089,61 @@ struct spa_video_info_raw
     color_matrix::spa_video_color_matrix
     transfer_function::spa_video_transfer_function
     color_primaries::spa_video_color_primaries
+end
+
+"""
+    spa_format_parse(format, media_type, media_subtype)
+
+### Prototype
+```c
+int spa_format_parse(const struct spa_pod *format, uint32_t *media_type, uint32_t *media_subtype);
+```
+"""
+function spa_format_parse(format, media_type, media_subtype)
+    @ccall libspa_ao.spa_format_parse(format::Ptr{spa_pod}, media_type::Ptr{UInt32}, media_subtype::Ptr{UInt32})::Cint
+end
+
+"""
+    spa_ndarray_info
+
+Description of one fixed, packed ndarray format.
+
+Callers that need more than SPA_NDARRAY_MAX_DIMENSIONS may allocate a larger object and use the sized helper functions. Padding after `shape` contains the additional dimensions, as with `[`spa_audio_info_raw`](@ref).position`. A rate with a zero denominator is absent; a present rate is strictly positive.
+"""
+struct spa_ndarray_info
+    element_type::spa_element_type
+    layout::spa_ndarray_layout
+    rate::spa_fraction
+    n_dimensions::UInt32
+    shape::NTuple{64, UInt32}
+end
+
+"""
+    spa_format_ndarray_parse_string(format, key, value)
+
+Parse one optional fixed string property from an ndarray format.
+
+Fixed formats produced by SPA negotiation may represent a value either as its direct pod type or as a SPA_CHOICE_None containing that type. An absent property produces a NULL value. Duplicate properties and non-fixed choices are rejected.
+
+### Prototype
+```c
+int spa_format_ndarray_parse_string(const struct spa_pod *format, uint32_t key, const char **value);
+```
+"""
+function spa_format_ndarray_parse_string(format, key, value)
+    @ccall libspa_ao.spa_format_ndarray_parse_string(format::Ptr{spa_pod}, key::UInt32, value::Ptr{Cstring})::Cint
+end
+
+"""
+    spa_format_ndarray_ext_parse(format, info, size)
+
+### Prototype
+```c
+int spa_format_ndarray_ext_parse(const struct spa_pod *format, struct spa_ndarray_info *info, size_t size);
+```
+"""
+function spa_format_ndarray_ext_parse(format, info, size)
+    @ccall libspa_ao.spa_format_ndarray_ext_parse(format::Ptr{spa_pod}, info::Ptr{spa_ndarray_info}, size::Csize_t)::Cint
 end
 
 end # module

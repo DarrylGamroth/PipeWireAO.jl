@@ -130,6 +130,34 @@ end
     end
 end
 
+function metadata_validation_allocations(records, requirements)
+    metadata_records_valid(records, requirements)
+    return @allocated metadata_records_valid(records, requirements)
+end
+
+@testset "metadata requirement list validation" begin
+    fixture = records_fixture()
+    records = metadata_records(fixture.snapshot)
+    present = MetadataRequirement(0x900, 8; required = true)
+    absent = MetadataRequirement(0x901, 8)
+    @testset "$case" for (case, requirements, valid) in (
+        ("empty", (), true),
+        ("optional and required", (MetadataRequirement(SPA.META_ACQUISITION_IDENTITY), present, absent), true),
+        ("duplicate type", (present, MetadataRequirement(0x900, 8)), false),
+        ("missing required", (present, MetadataRequirement(0x901, 8; required = true)), false),
+        ("size mismatch", (MetadataRequirement(0x900, 16), absent), false),
+        ("at record limit", ntuple(i -> MetadataRequirement(0x900 + i, 0), 64), true),
+        ("above record limit", ntuple(i -> MetadataRequirement(0x900 + i, 0), 65), false),
+    )
+        @test metadata_records_valid(records, requirements) === valid
+        @test metadata_records_valid(records, collect(MetadataRequirement, requirements)) === valid
+    end
+    requirements = (present, absent)
+    @test metadata_records_valid(fixture.snapshot, collect(requirements))
+    @test metadata_validation_allocations(records, requirements) == 0
+    @test metadata_validation_allocations(records, collect(requirements)) == 0
+end
+
 @testset "owned snapshots exclude transport state and retain their byte views" begin
     native=PipeWireAO.LibPipeWire
     fixture=records_fixture()

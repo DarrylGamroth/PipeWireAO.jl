@@ -118,40 +118,16 @@ struct _ArrayIOChanged{S}
 end
 (callback::_ArrayIOChanged)(stream, io) = _array_notify!(callback.state)
 
-function _array_fixed_value(::Type{T}, value::Pod) where {T}
-    pod_type(value) == LibPipeWire.SPA_TYPE_Choice || return value
-    return Pod(_choice_none_value(T, value))
-end
-
-function _array_fixed_format(parameter::Pod)
-    object = pod_value(SPA.Parameter, parameter).object
-    properties = SPA.Property[]
-    for property in object.properties
-        value = property.value
-        if property.key in (SPA.FORMAT_MEDIA_TYPE, SPA.FORMAT_MEDIA_SUBTYPE,
-            SPA.FORMAT_NDARRAY_ELEMENT_TYPE, SPA.FORMAT_NDARRAY_LAYOUT)
-            value = _array_fixed_value(SPA.Id, value)
-        elseif property.key == SPA.FORMAT_NDARRAY_SHAPE
-            value = _array_fixed_value(SPA.Array{Int32}, value)
-        elseif property.key == SPA.FORMAT_NDARRAY_RATE
-            value = _array_fixed_value(SPA.Fraction, value)
-        end
-        push!(properties, SPA.Property(property.key, value; flags=property.flags))
-    end
-    return SPA.Parameter(SPA.Object(object.type, object.id, properties))
-end
-
 function (callback::_ArrayParamChanged)(stream, id, parameter)
     id == SPA.PARAM_FORMAT || return nothing
     parameter === nothing && return nothing
     state = callback.state
     try
-        fixed = _array_fixed_format(parameter)
-        negotiated = NdArrayFormat(fixed)
         requested = state.format
+        negotiated = NdArrayFormat(parameter; expected_rank=length(requested.shape))
         negotiated.element_type == requested.element_type && negotiated.shape == requested.shape &&
             negotiated.layout == requested.layout && negotiated.rate == requested.rate &&
-            ndarray_schema(fixed) == state.schema || throw(ArgumentError("negotiated ndarray format differs from the declaration"))
+            ndarray_schema(parameter) == state.schema || throw(ArgumentError("negotiated ndarray format differs from the declaration"))
         update_params!(stream, _array_buffer_parameters(state))
     catch error
         _array_fail!(state, error)

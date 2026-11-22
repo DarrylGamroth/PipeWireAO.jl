@@ -6,7 +6,7 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
-PipeWireAO 0.9.3 requires `PipeWireAO_jll` 4.0.3+0 or newer within native major 4
+PipeWireAO 0.9.4 requires `PipeWireAO_jll` 4.0.3+0 or newer within native major 4
 and Julia 1.13 or newer. Native 4.0.3 drains queued stream triggers before
 destroying their node. Both the JLL package and loaded native library are
 checked during import.
@@ -536,6 +536,15 @@ the legacy element stride, or zero when a native graph leaves chunk stride
 unspecified. The fixed packed Format, exact payload size, and zero offset still
 apply; padded and negative strides are rejected.
 
+`NdArrayFormat(pod)` uses the native sized parser for the negotiated element
+type, shape, layout and rate. A fixed SPA Choice selects its default even when
+the record retains alternatives. Pass `require_fixed=true` when every
+top-level Choice, including those in extension properties, must be fixed.
+Pass `expected_rank=N` to reject a mismatched rank before constructing the
+Julia shape tuple.
+`ndarray_schema(pod)` reads the optional schema independently, including
+from an EnumFormat offer.
+
 ```julia
 format = NdArrayFormat(NdArray.F32_LE, (2, 2);
     layout=NdArray.ROW_MAJOR, rate=SPA.Fraction(1000, 1))
@@ -644,6 +653,8 @@ Only an exclusively owned output may acquire `writable_metadata_records`;
 SyncTimeline and feature state is never retained or propagated between pools.
 `validate_metadata_requirements(requirements; header=true)` checks a complete
 cold profile without allocating payloads or claiming that facts are valid.
+`metadata_records_valid(buffer, requirements)` checks the complete tuple or
+vector in one native call. Duplicate requirement types fail validation.
 
 `MetadataSnapshot()` owns prepared, bounded storage. `capture_metadata!` retains
 all accepted records before releasing an input, including opaque optional bytes.

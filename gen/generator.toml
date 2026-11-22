@@ -6,7 +6,13 @@ jll_pkg_name = "PipeWireAO_jll"
 export_symbol_prefixes = []
 prologue_file_path = "prologue.jl"
 epilogue_file_path = ""
-output_ignorelist = []
+output_ignorelist = [
+    "^spa_pod_parser(_state)?$",
+    "^spa_ndarray_choices(_validate)?$",
+    "^spa_ndarray_info(_ext)?_(validate|get_n_elements|get_size)$",
+    "^spa_format_ndarray(_ext)?_build(_choices)?$",
+    "^spa_format_ndarray_parse$",
+]
 use_julia_native_enum_type = false
 print_using_CEnum = false
 print_enum_as_integer = true
@@ -21,6 +27,10 @@ fold_single_line_comment = true
 struct_field_comment_style = "outofline"
 enumerator_comment_style = "outofline"
 show_c_function_prototype = true
+
+[general.library_names]
+"/spa/param/format-utils\\.h" = "libspa_ao"
+"/spa/param/ndarray-utils\\.h" = "libspa_ao"
 
 [codegen]
 use_julia_bool = true
