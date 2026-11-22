@@ -3789,7 +3789,7 @@ Device methods
 | subscribe\\_params | Subscribe to parameter changes  Automatically emit param events for the given ids when they are changed.  This requires X permissions on the device.  # Arguments * `ids`: an array of param ids * `n_ids`: the number of ids in *ids*                                                                                                                                                                                                 |
 | enum\\_params      | Enumerate device parameters  Start enumeration of device parameters. For each param, a param event will be emitted.  This requires X permissions on the device.  # Arguments * `seq`: a sequence number to place in the reply * `id`: the parameter id to enum or [`PW_ID_ANY`](@ref) for all * `start`: the start index or 0 for the first param * `num`: the maximum number of params to retrieve * `filter`: a param filter or NULL |
 | set\\_param        | Set a parameter on the device  This requires W and X permissions on the device.  # Arguments * `id`: the parameter id to set * `flags`: extra parameter flags * `param`: the parameter to set                                                                                                                                                                                                                                          |
-| send\\_command     | Send a command to the device  This requires X and W permissions on the device.  # Arguments * `command`: the command to send                                                                                                                                                                                                                                                                                                           |
+| send\\_command     | Send a command to the device  This requires X and W permissions on the device.  Since 4:1  # Arguments * `command`: the command to send                                                                                                                                                                                                                                                                                                |
 """
 struct pw_device_methods
     version::UInt32
@@ -3930,13 +3930,13 @@ const SPA_META_START_features = 65536 % UInt32
 
 Describes essential buffer header metadata such as flags and timestamps.
 
-| Field        | Note                                                         |
-| :----------- | :----------------------------------------------------------- |
-| flags        | flags                                                        |
-| offset       | offset in current cycle                                      |
-| pts          | presentation timestamp in nanoseconds                        |
-| dts\\_offset | decoding timestamp as a difference with pts                  |
-| seq          | sequence number, increments with a media specific frequency  |
+| Field        | Note                                                                                   |
+| :----------- | :------------------------------------------------------------------------------------- |
+| flags        | flags                                                                                  |
+| offset       | offset in current cycle                                                                |
+| pts          | presentation timestamp in nanoseconds against the monotonic clock (CLOCK\\_MONOTONIC)  |
+| dts\\_offset | decoding timestamp as a difference with pts                                            |
+| seq          | sequence number, increments with a media specific frequency                            |
 """
 struct spa_meta_header
     flags::UInt32
@@ -6437,7 +6437,7 @@ A delay offset is sometimes added (by the user) to improve synchronization of th
 
 [`pw_time`](@ref).queued is the sum of all the [`pw_buffer`](@ref).size fields of the buffers that are currently queued in the stream but not yet processed. The application can choose the units of this value, for example, time, samples, frames or bytes (below expressed as app.rate).
 
-[`pw_time`](@ref).buffered is format dependent, for audio/raw it contains the number of frames that are buffered inside the resampler/converter.
+[`pw_time`](@ref).buffered is format dependent, for audio/raw it contains the number of frames that are buffered inside the resampler/converter. Since 1.8.0 this value is only reported when PW_STREAM_FLAG_DELAY_REPORT is set. The delay caused by the resampler is otherwise added to the [`pw_time`](@ref).delay value.
 
 The total delay of data in a stream is the sum of the queued and buffered data (not yet processed data) and the delay to the edge of the graph, usually a playback or capture device.
 
@@ -6470,21 +6470,21 @@ Below is an overview of the different timing values:
  dequeue   buffers                \\-------------------/\\--------/
                                      graph              internal
                                     latency             latency
-         \\--------/\\-------------/\\-----------------------------/
-           queued      buffered            delay
+         \\--------/\\--------/\\----------------------------------/
+           queued   buffered      delay
 ```
 
-| Field            | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| :--------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| now              | the time in nanoseconds. This is the time when this time report was updated. It is usually updated every graph cycle. You can use [`pw_stream_get_nsec`](@ref)() to calculate the elapsed time between this report and the current time and calculate updated ticks and delay values.                                                                                                                                                                                                                                                          |
-| rate             | the rate of *ticks* and delay. This is usually expressed in 1/<samplerate>.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ticks            | the ticks at *now*. This is the current time that the remote end is reading/writing. This is monotonicaly increasing.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| delay            | delay to device. This is the time it will take for the next output sample of the stream to be presented by the playback device or the time a sample traveled from the capture device. This delay includes the delay introduced by all filters on the path between the stream and the device and extra delay offsets. The delay is normally constant in a graph and can change when the topology of the graph or the quantum changes. This delay does not include the delay caused by queued buffers. The delay can be negative, see pw_time .  |
-| queued           | data queued in the stream, this is the sum of the size fields in the [`pw_buffer`](@ref) that are currently queued                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| buffered         | for audio/raw streams, this contains the extra number of frames buffered in the resampler. Since 0.3.50.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| queued\\_buffers | the number of buffers that are queued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| avail\\_buffers  | the number of buffers that can be dequeued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| size             | for audio/raw playback streams, this contains the number of samples requested by the resampler for the current quantum. for audio/raw capture streams this will be the number of samples available for the current quantum. Since 1.1.0                                                                                                                                                                                                                                                                                                        |
+| Field            | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| now              | the time in nanoseconds. This is the time when this time report was updated. It is usually updated every graph cycle. You can use [`pw_stream_get_nsec`](@ref)() to calculate the elapsed time between this report and the current time and calculate updated ticks and delay values.                                                                                                                                                                                                                                                                                                                                                                                      |
+| rate             | the rate of *ticks* and delay. This is usually expressed in 1/<samplerate>.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ticks            | the ticks at *now*. This is the current time that the remote end is reading/writing. This is monotonicaly increasing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| delay            | delay to device. This is the time it will take for the next output sample of the stream to be presented by the playback device or the time a sample traveled from the capture device. This delay includes the delay introduced by all filters on the path between the stream and the device and extra delay offsets. The delay is normally constant in a graph and can change when the topology of the graph or the quantum changes. This delay does not include the delay caused by queued buffers. When PW_STREAM_FLAG_REPORT_BUFFERED is set, the *buffered* field is non-zero and must be added to the delay manually. The total delay can be negative, see pw_time .  |
+| queued           | data queued in the stream, this is the sum of the size fields in the [`pw_buffer`](@ref) that are currently queued                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| buffered         | for audio/raw streams, this contains the extra number of frames buffered in the resampler. Since 0.3.50. Since 1.8.0 this value is only reported when PW_STREAM_FLAG_REPORT_BUFFERED is set and the amount is then not added to *delay*.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| queued\\_buffers | the number of buffers that are queued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| avail\\_buffers  | the number of buffers that can be dequeued. Since 0.3.50                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| size             | for audio/raw playback streams, this contains the number of samples requested by the resampler for the current quantum. for audio/raw capture streams this will be the number of samples available for the current quantum. Since 1.1.0                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 """
 struct pw_time
     now::Int64
@@ -6566,6 +6566,7 @@ end
 | PW\\_STREAM\\_FLAG\\_ASYNC               | Buffers will not be dequeued/queued from the realtime process() function. This is assumed when RT\\_PROCESS is unset but can also be the case when the process() function does a trigger\\_process() that will then dequeue/queue a buffer from another process() function. since 0.3.73  |
 | PW\\_STREAM\\_FLAG\\_EARLY\\_PROCESS     | Call process as soon as there is a buffer to dequeue. This is only relevant for playback and when not using RT\\_PROCESS. It can be used to keep the maximum number of buffers queued. Since 0.3.81                                                                                       |
 | PW\\_STREAM\\_FLAG\\_RT\\_TRIGGER\\_DONE | Call trigger\\_done from the realtime thread. You MUST use RT safe functions in the trigger\\_done callback. Since 1.1.0                                                                                                                                                                  |
+| PW\\_STREAM\\_FLAG\\_REPORT\\_BUFFERED   | Report the resampler delay in the [`pw_time`](@ref) buffered field. It will then not be reported in [`pw_time`](@ref) delay and you must add it yourself to get the complete delay. Since 1.8.0                                                                                           |
 """
 const pw_stream_flags = UInt32
 const PW_STREAM_FLAG_NONE = 0 % UInt32
@@ -6582,6 +6583,7 @@ const PW_STREAM_FLAG_TRIGGER = 512 % UInt32
 const PW_STREAM_FLAG_ASYNC = 1024 % UInt32
 const PW_STREAM_FLAG_EARLY_PROCESS = 2048 % UInt32
 const PW_STREAM_FLAG_RT_TRIGGER_DONE = 4096 % UInt32
+const PW_STREAM_FLAG_REPORT_BUFFERED = 8192 % UInt32
 
 """
     pw_stream_new(core, name, props)
@@ -8194,6 +8196,34 @@ function pw_ndarray_filter_destroy(filter)
     @ccall libpipewire_ao.pw_ndarray_filter_destroy(filter::Ptr{pw_ndarray_filter})::Cvoid
 end
 
+mutable struct spa_thread end
+
+struct spa_thread_utils
+    iface::spa_interface
+end
+
+"""
+    spa_thread_utils_methods
+
+thread utils
+
+| Field            | Note                                                                                                  |
+| :--------------- | :---------------------------------------------------------------------------------------------------- |
+| create           | create a new thread that runs *start* with *arg*                                                      |
+| join             | stop and join a thread                                                                                |
+| get\\_rt\\_range | get realtime priority range for threads created with *props*                                          |
+| acquire\\_rt     | acquire realtime priority, a priority of -1 refers to the priority configured in the realtime module  |
+| drop\\_rt        | drop realtime priority                                                                                |
+"""
+struct spa_thread_utils_methods
+    version::UInt32
+    create::Ptr{Cvoid}
+    join::Ptr{Cvoid}
+    get_rt_range::Ptr{Cvoid}
+    acquire_rt::Ptr{Cvoid}
+    drop_rt::Ptr{Cvoid}
+end
+
 """
 ` pw_thread_loop`
 
@@ -8439,32 +8469,18 @@ function pw_thread_loop_in_thread(loop)
     @ccall libpipewire_ao.pw_thread_loop_in_thread(loop::Ptr{pw_thread_loop})::Bool
 end
 
-mutable struct spa_thread end
-
-struct spa_thread_utils
-    iface::spa_interface
-end
-
 """
-    spa_thread_utils_methods
+    pw_thread_loop_set_thread_utils(loop, impl)
 
-thread utils
+Set a custom [`spa_thread_utils`](@ref) for this loop. Setting NULL restores the system default implementation. Since 1.7.0
 
-| Field            | Note                                                                                                  |
-| :--------------- | :---------------------------------------------------------------------------------------------------- |
-| create           | create a new thread that runs *start* with *arg*                                                      |
-| join             | stop and join a thread                                                                                |
-| get\\_rt\\_range | get realtime priority range for threads created with *props*                                          |
-| acquire\\_rt     | acquire realtime priority, a priority of -1 refers to the priority configured in the realtime module  |
-| drop\\_rt        | drop realtime priority                                                                                |
+### Prototype
+```c
+void pw_thread_loop_set_thread_utils(struct pw_thread_loop *loop, struct spa_thread_utils *impl);
+```
 """
-struct spa_thread_utils_methods
-    version::UInt32
-    create::Ptr{Cvoid}
-    join::Ptr{Cvoid}
-    get_rt_range::Ptr{Cvoid}
-    acquire_rt::Ptr{Cvoid}
-    drop_rt::Ptr{Cvoid}
+function pw_thread_loop_set_thread_utils(loop, impl)
+    @ccall libpipewire_ao.pw_thread_loop_set_thread_utils(loop::Ptr{pw_thread_loop}, impl::Ptr{spa_thread_utils})::Cvoid
 end
 
 """
