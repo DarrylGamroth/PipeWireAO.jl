@@ -252,6 +252,16 @@ end
     @test isbitstype(PipeWireAO.LibPipeWire.spa_hook)
     @test isbitstype(PipeWireAO.LibPipeWire.pw_core_events)
     @test isbitstype(PipeWireAO.LibPipeWire.pw_registry_events)
+
+    loop = ThreadLoop()
+    try
+        @test PipeWireAO.LibPipeWire.pw_thread_loop_set_thread_utils(
+            PipeWireAO._require_open(loop),
+            C_NULL,
+        ) === nothing
+    finally
+        close(loop)
+    end
 end
 
 @testset "unused native notifications" begin
@@ -345,7 +355,7 @@ end
 end
 
 @testset "PipeWire" begin
-    @test library_version() >= v"4.0.2"
+    @test library_version() >= v"4.0.8"
 
     loop = MainLoop()
     @test isopen(loop)

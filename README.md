@@ -6,9 +6,10 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
-PipeWireAO 0.9.5 requires Julia 1.13 or newer and `PipeWireAO_jll` 4.0.7+0
-or newer within native major 4. The SDK supplies the schema-aware NDArray
-format builder. Both the JLL and loaded native library are checked during import.
+PipeWireAO 0.9.6 requires Julia 1.13 or newer and `PipeWireAO_jll` 4.0.8+0
+or newer within native major 4. The regenerated bindings include
+`pw_thread_loop_set_thread_utils`, which the 4.0.8 SDK exports.
+Both the JLL and loaded native library are checked during import.
 
 The package is being built in layers:
 
@@ -610,7 +611,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 4.0.7 cohort.
+Source validation requires native 4.0.8 or newer within major 4.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -812,6 +813,10 @@ regenerate it with:
 julia --project=gen -e 'using Pkg; Pkg.instantiate()'
 julia --project=gen gen/generator.jl
 ```
+
+Set `PIPEWIREAO_INCLUDE_ROOT` to the `include` directory of a local native
+installation to generate from that installation. Use native 4.0.8 headers
+or newer within major 4.
 
 The generator environment is separate from the runtime package, so Clang.jl
 is not a dependency of PipeWireAO.jl users.
