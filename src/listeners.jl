@@ -23,6 +23,14 @@ mutable struct _CurrentInfoState{Info}
     lock::ReentrantLock
     value::Base.RefValue{Info}
     available::Bool
+    native::Ptr{Cvoid}
+    closed::Bool
+end
+
+function _CurrentInfoState(::Type{Info}) where {Info}
+    state = _CurrentInfoState{Info}(ReentrantLock(), Ref{Info}(), false, C_NULL, false)
+    finalizer(_close_current_info!, state)
+    return state
 end
 
 struct _CurrentInfoCallback{Object,Info}
@@ -85,17 +93,25 @@ function Base.isopen(listener::ManagedListener)
     return active && isopen(listener.owner)
 end
 
+_close_listener_callback!(callback) = nothing
+_close_listener_callback!(callback::_CurrentInfoCallback) = _close_current_info!(callback.state)
+
 function Base.close(listener::ManagedListener)
     remove = lock(listener.state_lock) do
         listener.active || return false
         listener.active = false
         return isopen(listener.owner)
     end
-    if remove
-        hook = listener.hook
-        GC.@preserve listener hook _remove_spa_hook!(hook)
-    else
-        listener.hook[] = _zero_hook()
+    try
+        if remove
+            hook = listener.hook
+            GC.@preserve listener hook _remove_spa_hook!(hook)
+        else
+            listener.hook[] = _zero_hook()
+        end
+    finally
+        # Internal callback owners can have native storage beyond the hook.
+        foreach(_close_listener_callback!, listener.callbacks)
     end
     return nothing
 end
@@ -682,7 +698,7 @@ for (name, native_info, copy_info) in (
         info::Ptr{$native_info},
     )::Cvoid
         try
-            _invoke_listener(listener, Val(:on_info), $copy_info(info))
+            _invoke_info_listener(listener, info, $copy_info)
         catch error
             _record_listener_error(listener.owner, error)
         end
@@ -959,30 +975,82 @@ for (name, event_type, events_function, native_type, add_function, operation) in
 end
 
 
-function (callback::_CurrentInfoCallback{Object,Info})(
-    ::Object,
-    update::Info,
-) where {Object,Info}
-    state = callback.state
-    lock(state.lock)
-    try
-        if state.available
-            state.value[] = _merge_info(state.value[], update)
-        else
-            state.value[] = _merge_info(nothing, update)
-        end
+function _invoke_info_listener(listener::ManagedListener, info, copy_info)
+    if listener.callbacks.on_info isa _CurrentInfoCallback
+        _invoke_listener(listener, Val(:on_info), info)
+    else
+        _invoke_listener(listener, Val(:on_info), copy_info(info))
+    end
+    return nothing
+end
+
+
+for (info_type, native_type, merge_info, free_info, copy_info) in (
+    (:NodeInfo, :pw_node_info, :pw_node_info_merge, :pw_node_info_free, :_copy_node_info),
+    (:PortInfo, :pw_port_info, :pw_port_info_merge, :pw_port_info_free, :_copy_port_info),
+    (:DeviceInfo, :pw_device_info, :pw_device_info_merge, :pw_device_info_free, :_copy_device_info),
+    (:LinkInfo, :pw_link_info, :pw_link_info_merge, :pw_link_info_free, :_copy_link_info),
+)
+    @eval function _merge_current_info!(
+        state::_CurrentInfoState{$info_type},
+        update::Ptr{LibPipeWire.$native_type},
+    )
+        update == C_NULL && throw(ArgumentError("the PipeWire info pointer is null"))
+        # Reject conversion errors before mutating the native accumulator, so
+        # later disjoint updates can still copy the last valid fields. Use the
+        # same ingress codec as raw callbacks, including bounded format PODs.
+        $copy_info(update)
+        # Keep the accumulated mask and native parameter user counters.
+        native = LibPipeWire.$merge_info(state.native, update, false)
+        native == C_NULL && throw(OutOfMemoryError())
+        # Retain ownership even if copying the public snapshot throws.
+        state.native = native
+        state.value[] = $copy_info(native)
         state.available = true
-    finally
-        unlock(state.lock)
+        return nothing
+    end
+
+    @eval function _free_current_info!(state::_CurrentInfoState{$info_type})
+        native = state.native
+        state.native = C_NULL
+        native == C_NULL || LibPipeWire.$free_info(native)
+        return nothing
+    end
+end
+
+
+function _close_current_info!(state::_CurrentInfoState)
+    lock(state.lock) do
+        state.closed = true
+        _free_current_info!(state)
+    end
+    return nothing
+end
+
+
+function (callback::_CurrentInfoCallback{Object})(object::Object, update::Ptr) where {Object}
+    state = callback.state
+    lock(state.lock) do
+        state.closed && return nothing
+        if !isopen(object)
+            _close_current_info!(state)
+            return nothing
+        end
+        _merge_current_info!(state, update)
     end
     return nothing
 end
 
 
 function _track_info!(object::Object, ::Type{Info}) where {Object,Info}
-    state = _CurrentInfoState{Info}(ReentrantLock(), Ref{Info}(), false)
-    listener = add_listener!(object; on_info=_CurrentInfoCallback{Object,Info}(state))
-    return InfoTracker(state, listener)
+    state = _CurrentInfoState(Info)
+    try
+        listener = add_listener!(object; on_info=_CurrentInfoCallback{Object,Info}(state))
+        return InfoTracker(state, listener)
+    catch
+        _close_current_info!(state)
+        rethrow()
+    end
 end
 
 
@@ -993,7 +1061,8 @@ Attach an independent listener that maintains current copied object info for a
 managed `Node`, `Port`, `Device`, or `Link`. Raw `on_info` callbacks are
 unchanged and continue to receive protocol deltas.
 
-The tracker merges fields according to each event's PipeWire change mask.
+The tracker uses native PipeWire info merging with `reset=false` to merge
+fields according to each event's PipeWire change mask.
 Its accumulated `change_mask` records all fields observed so far. Keep the
 tracker alive while updates are wanted and call `close(tracker)` to detach it.
 """

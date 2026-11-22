@@ -37,7 +37,7 @@ function _ArrayExchangeState(storage::Vector{T}, format::NdArrayFormat{N}, schem
     length(storage) == element_count(format) || throw(DimensionMismatch("storage length differs from the wire shape"))
     payload_size(format) <= typemax(Int32) || throw(ArgumentError("payload exceeds the SPA buffer-size range"))
     semantic_schema = schema === nothing ? nothing : String(schema)
-    _ndarray_schema_property(semantic_schema)
+    _ndarray_schema_string(semantic_schema)
     return _ArrayExchangeState{T,N}(
         copy(storage), format, semantic_schema, StreamBuffer(), Threads.Atomic{UInt8}(_ARRAY_IDLE),
         Threads.Condition(), Threads.Atomic{Bool}(false), nothing, false, false,

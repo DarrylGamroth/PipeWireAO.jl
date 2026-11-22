@@ -354,7 +354,7 @@ include("filter.jl")
 include("listeners.jl")
 include("ndarray_exchange.jl")
 
-const _MINIMUM_JLL_VERSION = v"4.0.3+0"
+const _MINIMUM_JLL_VERSION = v"4.0.7+0"
 
 function __init__()
     version = pkgversion(LibPipeWire.PipeWireAO_jll)
@@ -363,8 +363,8 @@ function __init__()
         "found $version. Update PipeWireAO_jll and restart Julia.",
     )
     native_version = VersionNumber(unsafe_string(LibPipeWire.pw_get_library_version()))
-    v"4.0.3" <= native_version < v"5.0.0" || error(
-        "PipeWireAO stream teardown requires native 4.0.3 or newer within 4.x; found $native_version.",
+    v"4.0.7" <= native_version < v"5.0.0" || error(
+        "PipeWireAO requires native 4.0.7 or newer within 4.x; found $native_version.",
     )
 end
 

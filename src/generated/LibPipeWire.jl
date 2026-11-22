@@ -11119,6 +11119,23 @@ struct spa_ndarray_info
 end
 
 """
+    spa_ndarray_choices
+
+Optional alternatives for an enumerated ndarray format.
+
+The fixed values in [`spa_ndarray_info`](@ref) are the defaults. Element-type and layout arrays contain additional values for an ordinary SPA Enum Choice; the builder repeats the default in the admissible list as SPA requires. Rate values follow the default and are interpreted according to `rate_choice`: Enum values are additional alternatives (the builder repeats the default), Range values are `[min,max]`, and Step values are `[min,max,step]`. SPA\\_CHOICE\\_None requires no values. Shape is deliberately not a choice; offer a separate format POD for each supported exact shape.
+"""
+struct spa_ndarray_choices
+    n_element_types::UInt32
+    element_types::Ptr{spa_element_type}
+    n_layouts::UInt32
+    layouts::Ptr{spa_ndarray_layout}
+    rate_choice::UInt32
+    n_rate_values::UInt32
+    rate_values::Ptr{spa_fraction}
+end
+
+"""
     spa_format_ndarray_parse_string(format, key, value)
 
 Parse one optional fixed string property from an ndarray format.
@@ -11144,6 +11161,24 @@ int spa_format_ndarray_ext_parse(const struct spa_pod *format, struct spa_ndarra
 """
 function spa_format_ndarray_ext_parse(format, info, size)
     @ccall libspa_ao.spa_format_ndarray_ext_parse(format::Ptr{spa_pod}, info::Ptr{spa_ndarray_info}, size::Csize_t)::Cint
+end
+
+"""
+    spa_format_ndarray_ext_build_choices_schema(builder, id, info, size, choices, schema)
+
+Build an ndarray Format or EnumFormat with optional choices and schema.
+
+The size bounds access to info, including any additional shape dimensions. A NULL schema omits the property; otherwise its exact string is copied into the POD. A rate of 0/0 omits the rate property. NULL choices selects fixed values, and shape and schema are always fixed, even for EnumFormat.
+
+Return NULL with errno set to EINVAL for invalid input, EOVERFLOW for an overflowing payload extent or an encoding whose body reaches [`SPA_POD_MAX_SIZE`](@ref), or ENOSPC when the builder cannot fit the POD. Component sizes are bounded before traversing shapes or choices. Schema scanning is bounded by [`SPA_POD_MAX_SIZE`](@ref); it must be terminated within that bound. The builder may have advanced on ENOSPC or EOVERFLOW; callers may reset its saved state.
+
+### Prototype
+```c
+struct spa_pod * spa_format_ndarray_ext_build_choices_schema(struct spa_pod_builder *builder, uint32_t id, const struct spa_ndarray_info *info, size_t size, const struct spa_ndarray_choices *choices, const char *schema);
+```
+"""
+function spa_format_ndarray_ext_build_choices_schema(builder, id, info, size, choices, schema)
+    @ccall libspa_ao.spa_format_ndarray_ext_build_choices_schema(builder::Ptr{spa_pod_builder}, id::UInt32, info::Ptr{spa_ndarray_info}, size::Csize_t, choices::Ptr{spa_ndarray_choices}, schema::Cstring)::Ptr{spa_pod}
 end
 
 """

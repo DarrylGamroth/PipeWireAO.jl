@@ -1,8 +1,8 @@
 using PipeWireAO, Libdl, Test
 
-# Stream teardown requires the data-loop drain introduced in 4.0.3.
-@test pkgversion(PipeWireAO.LibPipeWire.PipeWireAO_jll) >= v"4.0.3+0"
-@test v"4.0.3" <= library_version() < v"5.0.0"
+# Schema-aware NDArray offers require the SPA builder introduced in 4.0.7.
+@test pkgversion(PipeWireAO.LibPipeWire.PipeWireAO_jll) >= v"4.0.7+0"
+@test v"4.0.7" <= library_version() < v"5.0.0"
 let actual = realpath(Libdl.dlpath(PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)),
     expected = get(ENV, "PIPEWIREAO_TEST_LIBRARY", PipeWireAO.LibPipeWire.PipeWireAO_jll.libpipewire_ao)
     @test actual == realpath(expected)
@@ -41,7 +41,7 @@ let retired_prefix=get(ENV,"PIPEWIREAO_TEST_RETIRED_PREFIX","")
                 end
                 wait(process)
                 @test !success(process)
-                @test occursin("requires native 4.0.3 or newer within 4.x; found ",String(take!(output)))
+                @test occursin("requires native 4.0.7 or newer within 4.x; found ",String(take!(output)))
             end
         end
     end

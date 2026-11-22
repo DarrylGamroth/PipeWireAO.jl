@@ -1674,51 +1674,88 @@ MatrixFormat(format::NdArrayFormat{2}) = MatrixFormat(
 MatrixFormat(parameter::SPA.Parameter) = MatrixFormat(NdArrayFormat(parameter))
 MatrixFormat(pod::Pod) = MatrixFormat(NdArrayFormat(pod))
 
-function _ndarray_schema_property(schema::Union{Nothing,AbstractString})
+function _ndarray_schema_string(schema::Union{Nothing,AbstractString})
     schema === nothing && return nothing
     value = _validate_c_string(String(schema), "ndarray schema")
     isempty(value) && throw(ArgumentError("an ndarray schema cannot be empty"))
-    return SPA.Property(SPA.FORMAT_NDARRAY_SCHEMA, value)
+    return value
+end
+
+function _native_ndarray_format(
+    format::NdArrayFormat,
+    offer::Union{Nothing,NdArrayEnumFormat};
+    id::Integer,
+    schema::Union{Nothing,AbstractString},
+)
+    schema = _ndarray_schema_string(schema)
+    0 <= id <= typemax(UInt32) || throw(ArgumentError("SPA object ID is outside UInt32 range"))
+    parameter_id = UInt32(id)
+    info_type = LibPipeWire.spa_ndarray_info
+    shape_word = Int(fieldoffset(info_type, Base.fieldindex(info_type, :shape))) ÷ sizeof(UInt32)
+    storage = zeros(UInt32, max(
+        sizeof(info_type) ÷ sizeof(UInt32), shape_word + length(format.shape),
+    ))
+    rate = format.rate === nothing ? LibPipeWire.spa_fraction(0, 0) :
+           LibPipeWire.spa_fraction(format.rate.num, format.rate.denom)
+    info = info_type(
+        UInt32(format.element_type), UInt32(format.layout), rate, UInt32(length(format.shape)),
+        ntuple(_ -> UInt32(0), fieldcount(fieldtype(info_type, :shape))),
+    )
+    elements = offer === nothing ? UInt32[] : UInt32.(offer.element_type_alternatives)
+    layouts = offer === nothing ? UInt32[] : UInt32.(offer.layout_alternatives)
+    rate_choice = offer === nothing ? nothing : offer.rate_choice
+    rates = rate_choice === nothing ? LibPipeWire.spa_fraction[] :
+            [LibPipeWire.spa_fraction(value.num, value.denom) for value in rate_choice.values]
+    choices = Ref(LibPipeWire.spa_ndarray_choices(
+        UInt32(length(elements)), isempty(elements) ? C_NULL : pointer(elements),
+        UInt32(length(layouts)), isempty(layouts) ? C_NULL : pointer(layouts),
+        rate_choice === nothing ? UInt32(SPA.CHOICE_NONE) : UInt32(rate_choice.kind),
+        UInt32(length(rates)), isempty(rates) ? C_NULL : pointer(rates),
+    ))
+    # Allow all formats accepted by Pod, including extended ranks and large
+    # offers. The fixed allowance covers object, property, Choice and padding
+    # overhead; the remaining terms bound their variable-width contents.
+    capacity = min(
+        8 + (1 << 20),
+        256 + 4 * length(format.shape) + 4 * length(elements) + 4 * length(layouts) +
+        8 * length(rates) + (schema === nothing ? 0 : sizeof(schema)),
+    )
+    data = zeros(UInt8, capacity)
+    return GC.@preserve storage elements layouts rates choices schema data begin
+        info_pointer = Ptr{info_type}(pointer(storage))
+        unsafe_store!(info_pointer, info)
+        for axis in eachindex(format.shape)
+            storage[shape_word + axis] = UInt32(format.shape[axis])
+        end
+        builder = Ref(LibPipeWire.spa_pod_builder(
+            pointer(data), UInt32(capacity), 0,
+            LibPipeWire.spa_pod_builder_state(0, 0, C_NULL),
+            LibPipeWire.spa_callbacks(C_NULL, C_NULL),
+        ))
+        native = LibPipeWire.spa_format_ndarray_ext_build_choices_schema(
+            builder, parameter_id, info_pointer, sizeof(storage),
+            offer === nothing ? C_NULL : choices, schema === nothing ? C_NULL : schema,
+        )
+        native == C_NULL && throw(ArgumentError(
+            "invalid or oversized ndarray format (errno $(Base.Libc.errno()))",
+        ))
+        return Pod(data)
+    end
 end
 
 """
     ndarray_format(format; id=SPA.PARAM_ENUM_FORMAT, schema=nothing)
 
-Build a native ndarray format POD. `schema` optionally identifies the semantic
-meaning and ordering of the payload independently of its representation.
+Build an owned ndarray format POD with the native SPA serializer. `schema`
+optionally identifies the semantic meaning and ordering of the payload
+independently of its representation.
 """
 function ndarray_format(
     format::NdArrayFormat;
     id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
     schema::Union{Nothing,AbstractString}=nothing,
 )
-    properties = SPA.Property[
-        SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
-        SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
-        SPA.Property(SPA.FORMAT_NDARRAY_ELEMENT_TYPE, SPA.Id(UInt32(format.element_type))),
-        SPA.Property(SPA.FORMAT_NDARRAY_SHAPE, SPA.Array(collect(format.shape))),
-        SPA.Property(SPA.FORMAT_NDARRAY_LAYOUT, SPA.Id(UInt32(format.layout))),
-    ]
-    format.rate === nothing ||
-        push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, format.rate))
-    schema_property = _ndarray_schema_property(schema)
-    schema_property === nothing || push!(properties, schema_property)
-    return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
-end
-
-function _ndarray_enum_id(default::Integer, alternatives)
-    values = SPA.Id[SPA.Id(default), SPA.Id(default)]
-    append!(values, SPA.Id(UInt32(value)) for value in alternatives)
-    return SPA.Choice(SPA.CHOICE_ENUM, values)
-end
-
-function _ndarray_enum_rate(default::SPA.Fraction, choice::NdArrayRateChoice)
-    values = if choice.kind == SPA.CHOICE_ENUM
-        SPA.Fraction[default, default, choice.values...]
-    else
-        SPA.Fraction[default, choice.values...]
-    end
-    return SPA.Choice(choice.kind, values)
+    return _native_ndarray_format(format, nothing; id, schema)
 end
 
 function ndarray_format(
@@ -1726,32 +1763,7 @@ function ndarray_format(
     id::Integer=LibPipeWire.SPA_PARAM_EnumFormat,
     schema::Union{Nothing,AbstractString}=nothing,
 )
-    default = format.default
-    element_type = isempty(format.element_type_alternatives) ?
-                   SPA.Id(UInt32(default.element_type)) :
-                   _ndarray_enum_id(
-        UInt32(default.element_type),
-        format.element_type_alternatives,
-    )
-    layout = isempty(format.layout_alternatives) ?
-             SPA.Id(UInt32(default.layout)) :
-             _ndarray_enum_id(UInt32(default.layout), format.layout_alternatives)
-    properties = SPA.Property[
-        SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
-        SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
-        SPA.Property(SPA.FORMAT_NDARRAY_ELEMENT_TYPE, element_type),
-        SPA.Property(SPA.FORMAT_NDARRAY_SHAPE, SPA.Array(collect(default.shape))),
-        SPA.Property(SPA.FORMAT_NDARRAY_LAYOUT, layout),
-    ]
-    if default.rate !== nothing
-        rate = format.rate_choice === nothing ?
-               default.rate :
-               _ndarray_enum_rate(default.rate, format.rate_choice)
-        push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, rate))
-    end
-    schema_property = _ndarray_schema_property(schema)
-    schema_property === nothing || push!(properties, schema_property)
-    return Pod(SPA.Object(LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
+    return _native_ndarray_format(format.default, format; id, schema)
 end
 
 """

@@ -6,10 +6,9 @@
 Julia bindings for PipeWireAO, the adaptive-optics fork of the PipeWire client
 and buffer-negotiation infrastructure.
 
-PipeWireAO 0.9.4 requires `PipeWireAO_jll` 4.0.3+0 or newer within native major 4
-and Julia 1.13 or newer. Native 4.0.3 drains queued stream triggers before
-destroying their node. Both the JLL package and loaded native library are
-checked during import.
+PipeWireAO 0.9.5 requires Julia 1.13 or newer and `PipeWireAO_jll` 4.0.7+0
+or newer within native major 4. The SDK supplies the schema-aware NDArray
+format builder. Both the JLL and loaded native library are checked during import.
 
 The package is being built in layers:
 
@@ -129,12 +128,17 @@ end
 
 `track_info!` adds an opt-in `InfoTracker` for nodes, ports, devices, and
 links. Raw `on_info` callbacks still receive PipeWire protocol deltas; the
-tracker separately merges those deltas by their change masks. `current_info`
-returns the most recently known complete snapshot, whose `change_mask`
+tracker uses native `pw_*_info_merge` with `reset=false` to merge deltas into
+one owned native accumulator. `current_info` returns the most recently known
+complete snapshot, whose `change_mask`
 describes every field observed so far. The tracker state and listener types are
 concrete, and a warmed `current_info` read allocates zero bytes. The `params`
 field contains `ParamInfo` descriptors; parameter POD values continue to arrive
-through `on_param`. Closing the tracker detaches only its listener.
+through `on_param`. Each update copies the accumulated info into an owned Julia
+snapshot; previously returned snapshots remain valid after updates, tracker
+closure, and owner invalidation. Treat their containers as read-only. Closing
+the tracker detaches its listener and frees the native accumulator. The tracker
+retains its latest Julia snapshot and keeps no event history.
 
 ```julia
 with_registry() do registry
@@ -606,7 +610,7 @@ contract. Julia callbacks make no hard real-time execution claim.
 PipeWireAO 0.6.13 publishes the prepared source/sink exchange API. The private
 daemon integration test runs separately with
 `julia --project --threads=2,1 test/ndarray_exchange_private_core.jl`.
-Source validation requires the native 4.0.3 cohort.
+Source validation requires the native 4.0.7 cohort.
 `PIPEWIREAO_EXCHANGE_TEST_PREFIX` can select a native installation containing
 `bin/pipewire-ao`; the default is the active JLL artifact. The fixture uses an
 isolated runtime directory and daemon socket.
@@ -673,8 +677,7 @@ Unspecified reference duration uses UINT64_MAX; that value is not a timestamp.
 start separate from reference time. Duration-only exposure remains supported.
 The former absolute event history, clock mappings and uncertainty APIs are removed.
 
-Native 4.0.2, JLL 4.0.2 and regenerated bindings are required together. Private-core
-checks are `test/ndarray_exchange_private_core.jl` and
+The private-core checks are `test/ndarray_exchange_private_core.jl` and
 `test/metadata_records_private_core.jl`; both create and close their own cores.
 The blocking-filter fixture requires `--threads=2,1` or more: the interactive
 main thread controls a filter running on the separate default thread pool.

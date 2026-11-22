@@ -104,6 +104,95 @@ end
     @test_throws ArgumentError NdArrayFormat(application_choice; require_fixed=true)
 end
 
+# Keep the former public generic-codec representation as a wire-compatibility
+# oracle, independent of the native format builder used by ndarray_format.
+function generic_ndarray_format(format; id=SPA.PARAM_ENUM_FORMAT, schema=nothing)
+    offer = format isa NdArrayEnumFormat ? format : nothing
+    default = offer === nothing ? format : offer.default
+    enum_id(value, alternatives) = isempty(alternatives) ? SPA.Id(UInt32(value)) :
+        SPA.Choice(SPA.CHOICE_ENUM, SPA.Id[SPA.Id(UInt32(value)), SPA.Id(UInt32(value)),
+            [SPA.Id(UInt32(alternative)) for alternative in alternatives]...])
+    elements = offer === nothing ? NdArray.ElementType[] : offer.element_type_alternatives
+    layouts = offer === nothing ? NdArray.Layout[] : offer.layout_alternatives
+    properties = SPA.Property[
+        SPA.Property(SPA.FORMAT_MEDIA_TYPE, SPA.Id(SPA.MEDIA_TYPE_APPLICATION)),
+        SPA.Property(SPA.FORMAT_MEDIA_SUBTYPE, SPA.Id(SPA.MEDIA_SUBTYPE_NDARRAY)),
+        SPA.Property(SPA.FORMAT_NDARRAY_ELEMENT_TYPE, enum_id(default.element_type, elements)),
+        SPA.Property(SPA.FORMAT_NDARRAY_SHAPE, SPA.Array(collect(default.shape))),
+        SPA.Property(SPA.FORMAT_NDARRAY_LAYOUT, enum_id(default.layout, layouts)),
+    ]
+    if default.rate !== nothing
+        choice = offer === nothing ? nothing : offer.rate_choice
+        value = if choice === nothing
+            default.rate
+        else
+            values = choice.kind == SPA.CHOICE_ENUM ?
+                SPA.Fraction[default.rate, default.rate, choice.values...] :
+                SPA.Fraction[default.rate, choice.values...]
+            SPA.Choice(choice.kind, values)
+        end
+        push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_RATE, value))
+    end
+    schema === nothing || push!(properties, SPA.Property(SPA.FORMAT_NDARRAY_SCHEMA, schema))
+    return Pod(SPA.Object(PipeWireAO.LibPipeWire.SPA_TYPE_OBJECT_Format, id, properties))
+end
+
+@testset "native ndarray writer wire compatibility" begin
+    for rank in (1, 2, 64, 80), layout in (NdArray.ROW_MAJOR, NdArray.COLUMN_MAJOR),
+            rate in (nothing, SPA.Fraction(100, 3)), schema in (nothing, "test.λ-array/1"),
+            id in (SPA.PARAM_FORMAT, SPA.PARAM_ENUM_FORMAT)
+        format = NdArrayFormat(NdArray.F32_LE, ntuple(_ -> 1, rank); layout, rate)
+        fixed = ndarray_format(format; id, schema)
+        @test fixed == generic_ndarray_format(format; id, schema)
+        @test NdArrayFormat(fixed) == format
+        @test ndarray_schema(fixed) == schema
+        @test ndarray_format(NdArrayEnumFormat(format); id, schema) == fixed
+    end
+    default = NdArrayFormat(NdArray.F32_LE, (2, 3); layout=NdArray.COLUMN_MAJOR,
+        rate=SPA.Fraction(100, 1))
+    rate_choices = (
+        nothing,
+        NdArrayRateChoice(SPA.CHOICE_ENUM, [SPA.Fraction(50, 1), SPA.Fraction(25, 1)]),
+        NdArrayRateChoice(SPA.CHOICE_RANGE, [SPA.Fraction(50, 1), SPA.Fraction(200, 1)]),
+        NdArrayRateChoice(SPA.CHOICE_STEP,
+            [SPA.Fraction(50, 1), SPA.Fraction(200, 1), SPA.Fraction(5, 1)]),
+    )
+    for count in (0, 1, 7, 257), rate_choice in rate_choices, schema in (nothing, "test.array/1")
+        offer = NdArrayEnumFormat(default;
+            element_type_alternatives=fill(NdArray.F64_LE, count),
+            layout_alternatives=fill(NdArray.ROW_MAJOR, count), rate_choice)
+        elements, layouts = copy(offer.element_type_alternatives), copy(offer.layout_alternatives)
+        rates = rate_choice === nothing ? nothing : copy(rate_choice.values)
+        pod = ndarray_format(offer; schema)
+        @test pod == generic_ndarray_format(offer; schema)
+        @test offer.element_type_alternatives == elements
+        @test offer.layout_alternatives == layouts
+        @test rate_choice === nothing || rate_choice.values == rates
+        saved = copy(pod.data)
+        fill!(offer.element_type_alternatives, NdArray.U8)
+        fill!(offer.layout_alternatives, NdArray.COLUMN_MAJOR)
+        GC.gc()
+        ndarray_format(offer; schema)
+        @test pod.data == saved
+    end
+    large_schema = repeat("s", (1 << 20) - 300)
+    @test ndarray_format(default; schema=large_schema) == generic_ndarray_format(default; schema=large_schema)
+    @test_throws ArgumentError ndarray_format(default; schema=repeat("s", 1 << 20))
+    huge_offer = NdArrayEnumFormat(default; element_type_alternatives=fill(NdArray.F64_LE, 1 << 18))
+    @test_throws ArgumentError ndarray_format(huge_offer)
+    @test_throws ArgumentError ndarray_format(default; schema="")
+    @test_throws ArgumentError ndarray_format(default; schema="bad\0schema")
+    @test_throws ArgumentError ndarray_format(default; id=-1)
+    @test_throws ArgumentError ndarray_format(default; id=Int64(typemax(UInt32)) + 1)
+    invalid_offer = NdArrayEnumFormat(default; element_type_alternatives=[NdArray.F64_LE])
+    invalid_offer.element_type_alternatives[1] = NdArray.UNKNOWN
+    @test_throws ArgumentError ndarray_format(invalid_offer)
+    invalid_rate = NdArrayRateChoice(SPA.CHOICE_ENUM, [SPA.Fraction(50, 1)])
+    invalid_offer = NdArrayEnumFormat(default; rate_choice=invalid_rate)
+    invalid_rate.values[1] = SPA.Fraction(0, 1)
+    @test_throws ArgumentError ndarray_format(invalid_offer)
+end
+
 @testset "public SPA identifiers" begin
     identifiers = (
         SPA.POD_OBJECT,

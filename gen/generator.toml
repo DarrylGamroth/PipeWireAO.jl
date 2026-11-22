@@ -9,7 +9,7 @@ epilogue_file_path = ""
 output_ignorelist = [
     "^spa_hook_list_.*$",
     "^spa_pod_parser(_state)?$",
-    "^spa_ndarray_choices(_validate)?$",
+    "^spa_ndarray_choices_validate$",
     "^spa_ndarray_info(_ext)?_(validate|get_n_elements|get_size)$",
     "^spa_format_ndarray(_ext)?_build(_choices)?$",
     "^spa_format_ndarray_parse$",
