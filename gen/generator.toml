@@ -7,6 +7,7 @@ export_symbol_prefixes = []
 prologue_file_path = "prologue.jl"
 epilogue_file_path = ""
 output_ignorelist = [
+    "^spa_hook_list_.*$",
     "^spa_pod_parser(_state)?$",
     "^spa_ndarray_choices(_validate)?$",
     "^spa_ndarray_info(_ext)?_(validate|get_n_elements|get_size)$",
@@ -31,6 +32,7 @@ show_c_function_prototype = true
 [general.library_names]
 "/spa/param/format-utils\\.h" = "libspa_ao"
 "/spa/param/ndarray-utils\\.h" = "libspa_ao"
+"/spa/utils/hook\\.h" = "libspa_ao"
 
 [codegen]
 use_julia_bool = true

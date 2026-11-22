@@ -306,26 +306,6 @@ struct spa_error_location
 end
 
 """
-    spa_hook
-
-` spa_hook`
-
-A hook, contains the structure with functions and the data passed to the functions.
-
-A hook should be treated as opaque by the caller.
-
-| Field   | Note                                                                         |
-| :------ | :--------------------------------------------------------------------------- |
-| removed | callback and data for the hook list, private to the hook\\_list implementor  |
-"""
-struct spa_hook
-    link::spa_list
-    cb::spa_callbacks
-    removed::Ptr{Cvoid}
-    priv::Ptr{Cvoid}
-end
-
-"""
     spa_dict_item
 
 ` spa_dict`
@@ -1097,6 +1077,26 @@ struct pw_core_methods
 end
 
 mutable struct pw_core end
+
+"""
+    spa_hook
+
+` spa_hook`
+
+A hook, contains the structure with functions and the data passed to the functions.
+
+A hook should be treated as opaque by the caller.
+
+| Field   | Note                                                                         |
+| :------ | :--------------------------------------------------------------------------- |
+| removed | callback and data for the hook list, private to the hook\\_list implementor  |
+"""
+struct spa_hook
+    link::spa_list
+    cb::spa_callbacks
+    removed::Ptr{Cvoid}
+    priv::Ptr{Cvoid}
+end
 
 """
     pw_core_add_listener(object, listener, events, data)
@@ -10302,11 +10302,11 @@ struct spa_audio_info_mpegh
     rate::UInt32
 end
 
-struct __JL_Ctag_178
+struct __JL_Ctag_188
     data::NTuple{276, UInt8}
 end
 
-function Base.getproperty(x::Ptr{__JL_Ctag_178}, f::Symbol)
+function Base.getproperty(x::Ptr{__JL_Ctag_188}, f::Symbol)
     f === :raw && return Ptr{spa_audio_info_raw}(x + 0)
     f === :dsp && return Ptr{spa_audio_info_dsp}(x + 0)
     f === :iec958 && return Ptr{spa_audio_info_iec958}(x + 0)
@@ -10329,18 +10329,18 @@ function Base.getproperty(x::Ptr{__JL_Ctag_178}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::__JL_Ctag_178, f::Symbol)
-    r = Ref{__JL_Ctag_178}(x)
-    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_178}, r)
+function Base.getproperty(x::__JL_Ctag_188, f::Symbol)
+    r = Ref{__JL_Ctag_188}(x)
+    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_188}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{__JL_Ctag_178}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{__JL_Ctag_188}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::__JL_Ctag_178, private::Bool = false)
+function Base.propertynames(x::__JL_Ctag_188, private::Bool = false)
     (:raw, :dsp, :iec958, :dsd, :mp3, :aac, :vorbis, :wma, :ra, :amr, :alac, :flac, :ape, :opus, :ac3, :eac3, :truehd, :dts, :mpegh, if private
             fieldnames(typeof(x))
         else
@@ -10362,7 +10362,7 @@ end
 function Base.getproperty(x::Ptr{spa_audio_info}, f::Symbol)
     f === :media_type && return Ptr{UInt32}(x + 0)
     f === :media_subtype && return Ptr{UInt32}(x + 4)
-    f === :info && return Ptr{__JL_Ctag_178}(x + 8)
+    f === :info && return Ptr{__JL_Ctag_188}(x + 8)
     return getfield(x, f)
 end
 
@@ -10944,11 +10944,11 @@ struct spa_video_info_mjpg
     max_framerate::spa_fraction
 end
 
-struct __JL_Ctag_179
+struct __JL_Ctag_189
     data::NTuple{88, UInt8}
 end
 
-function Base.getproperty(x::Ptr{__JL_Ctag_179}, f::Symbol)
+function Base.getproperty(x::Ptr{__JL_Ctag_189}, f::Symbol)
     f === :raw && return Ptr{spa_video_info_raw}(x + 0)
     f === :dsp && return Ptr{spa_video_info_dsp}(x + 0)
     f === :h264 && return Ptr{spa_video_info_h264}(x + 0)
@@ -10956,18 +10956,18 @@ function Base.getproperty(x::Ptr{__JL_Ctag_179}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::__JL_Ctag_179, f::Symbol)
-    r = Ref{__JL_Ctag_179}(x)
-    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_179}, r)
+function Base.getproperty(x::__JL_Ctag_189, f::Symbol)
+    r = Ref{__JL_Ctag_189}(x)
+    ptr = Base.unsafe_convert(Ptr{__JL_Ctag_189}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{__JL_Ctag_179}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{__JL_Ctag_189}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::__JL_Ctag_179, private::Bool = false)
+function Base.propertynames(x::__JL_Ctag_189, private::Bool = false)
     (:raw, :dsp, :h264, :mjpg, if private
             fieldnames(typeof(x))
         else
@@ -10989,7 +10989,7 @@ end
 function Base.getproperty(x::Ptr{spa_video_info}, f::Symbol)
     f === :media_type && return Ptr{UInt32}(x + 0)
     f === :media_subtype && return Ptr{UInt32}(x + 4)
-    f === :info && return Ptr{__JL_Ctag_179}(x + 8)
+    f === :info && return Ptr{__JL_Ctag_189}(x + 8)
     return getfield(x, f)
 end
 
@@ -11144,6 +11144,20 @@ int spa_format_ndarray_ext_parse(const struct spa_pod *format, struct spa_ndarra
 """
 function spa_format_ndarray_ext_parse(format, info, size)
     @ccall libspa_ao.spa_format_ndarray_ext_parse(format::Ptr{spa_pod}, info::Ptr{spa_ndarray_info}, size::Csize_t)::Cint
+end
+
+"""
+    spa_hook_remove(hook)
+
+Remove a hook
+
+### Prototype
+```c
+void spa_hook_remove(struct spa_hook *hook);
+```
+"""
+function spa_hook_remove(hook)
+    @ccall libspa_ao.spa_hook_remove(hook::Ptr{spa_hook})::Cvoid
 end
 
 end # module

@@ -71,23 +71,9 @@ function _discard_listener!(listener::ManagedListener)
 end
 
 function _remove_spa_hook!(hook::Base.RefValue{LibPipeWire.spa_hook})
-    pointer = Base.unsafe_convert(Ptr{LibPipeWire.spa_hook}, hook)
-    native = unsafe_load(pointer)
-    link = native.link
-    link.prev == C_NULL && return nothing
-
-    previous = unsafe_load(link.prev)
-    unsafe_store!(link.prev, LibPipeWire.spa_list(link.next, previous.prev))
-    # A singleton's previous and following links are the same list head.
-    # Read after the first store so the second preserves the updated next.
-    following = unsafe_load(link.next)
-    unsafe_store!(link.next, LibPipeWire.spa_list(following.next, link.prev))
-    native.removed == C_NULL || ccall(
-        native.removed,
-        Cvoid,
-        (Ptr{LibPipeWire.spa_hook},),
-        pointer,
-    )
+    # SPA calls removed even for an unlinked hook. Only detach a linked hook.
+    hook[].link.prev == C_NULL && return nothing
+    LibPipeWire.spa_hook_remove(hook)
     hook[] = _zero_hook()
     return nothing
 end

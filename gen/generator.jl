@@ -3,6 +3,7 @@ using PipeWireAO_jll
 
 const EXPORTED_INLINE_APIS = [
     "SPA_API_FORMAT_UTILS",
+    "SPA_API_HOOK",
     "SPA_API_META",
     "SPA_API_NDARRAY_UTILS",
     "PW_API_CLIENT_IMPL",
@@ -44,6 +45,7 @@ cd(@__DIR__) do
         joinpath(spa_include, "spa", "param", "video", "format.h"),
         joinpath(spa_include, "spa", "param", "video", "raw.h"),
         joinpath(spa_include, "spa", "param", "ndarray-utils.h"),
+        joinpath(spa_include, "spa", "utils", "hook.h"),
     ]
 
     all(isfile, headers) || error("one or more PipeWire headers were not found")

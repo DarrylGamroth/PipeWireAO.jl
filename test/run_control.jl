@@ -133,11 +133,15 @@ end
         (reset_control_request!, reset_control_request, (43,)),
         (reset_control_status!, reset_control_status, (43, -7)),
     )
-        @test builder!(buffer, arguments...) == builder(arguments...)
+        owned = builder(arguments...)
+        borrowed = builder!(buffer, arguments...)
+        @test borrowed == owned
+        @test owned.data !== builder(arguments...).data
         @test control_build_bytes(builder!, buffer, arguments...) == 0
-        # Native parsing must still agree after an ordinary collection.
         GC.gc()
-        @test builder!(buffer, arguments...) == builder(arguments...)
+        @test builder!(buffer, arguments...) == owned
+        @test reset_control_request!(buffer, 1) === borrowed
+        @test borrowed != owned
     end
     @test_throws ArgumentError run_control_request!(buffer, true, :running)
     @test_throws ArgumentError run_control_status!(buffer, 1, false, :stopped)
