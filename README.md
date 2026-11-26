@@ -835,3 +835,8 @@ the loaded client library and daemon/module paths, and uses the released Rust
 0.2.0 plugin unchanged. The old 4.0.0 artifact fails the strict requiredness
 check; 4.0.1 is required to pass it. See the [0.9.1 validation record](docs/releases/v0.9.1.md) for the
 completed checks and platform boundaries.
+
+## License
+
+PipeWireAO.jl is available under the [MIT License](LICENSE). The generated
+bindings carry [upstream PipeWire and PipeWireAO notices](THIRD_PARTY_NOTICES.md).
